@@ -1,0 +1,13 @@
+nonebot2>=2.1.0
+nonebot-adapter-onebot>=2.3.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+httpx>=0.24.1
+websockets>=11.0.3
+openai>=1.0.0
+python-dotenv>=0.21.0
+# WebUI 依赖
+python-jose>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.1
+python-multipart>=0.0.5 

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QQ机器人管理系统</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .login-container {
+            width: 360px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h2 {
+            color: #409eff;
+            margin: 0;
+        }
+
+        .login-form {
+            margin-bottom: 20px;
+        }
+
+        .form-item {
+            margin-bottom: 20px;
+        }
+
+        .form-item label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #606266;
+        }
+
+        .form-item input {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-item input:focus {
+            outline: none;
+            border-color: #409eff;
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 12px 15px;
+            background-color: #409eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .login-button:hover {
+            background-color: #66b1ff;
+        }
+
+        .login-button:active {
+            background-color: #3a8ee6;
+        }
+
+        .login-error {
+            color: #f56c6c;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 20px;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h2>QQ机器人管理系统</h2>
+        </div>
+        <div id="loginError" class="login-error"></div>
+        <div class="login-form">
+            <div class="form-item">
+                <label for="username">用户名</label>
+                <input type="text" id="username" name="username" placeholder="请输入用户名" autocomplete="off">
+            </div>
+            <div class="form-item">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" placeholder="请输入密码">
+            </div>
+            <button id="loginBtn" class="login-button">登录</button>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const loginBtn = document.getElementById('loginBtn');
+            const loginError = document.getElementById('loginError');
+
+            // 自动聚焦到用户名输入框
+            usernameInput.focus();
+
+            // 绑定登录按钮点击事件
+            loginBtn.addEventListener('click', login);
+
+            // 绑定回车键事件
+            passwordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    login();
+                }
+            });
+
+            // 登录函数
+            async function login() {
+                // 清除之前的错误信息
+                loginError.textContent = '';
+
+                // 获取用户名和密码
+                const username = usernameInput.value.trim();
+                const password = passwordInput.value;
+
+                // 验证输入
+                if (!username) {
+                    loginError.textContent = '请输入用户名';
+                    usernameInput.focus();
+                    return;
+                }
+                if (!password) {
+                    loginError.textContent = '请输入密码';
+                    passwordInput.focus();
+                    return;
+                }
+
+                // 禁用登录按钮，防止重复点击
+                loginBtn.disabled = true;
+                loginBtn.textContent = '登录中...';
+
+                try {
+                    // 发送登录请求
+                    const response = await fetch('/api/webui/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            username: username,
+                            password: password
+                        })
+                    });
+
+                    const data = await response.json();
+                    console.log('登录响应:', data);
+
+                    if (response.ok && data.code === 200) {
+                        // 登录成功，保存token
+                        localStorage.setItem('token', data.data.token);
+                        
+                        // 跳转到后台管理页面
+                        window.location.href = '/webui/dashboard.html?token=' + data.data.token;
+                    } else {
+                        // 登录失败
+                        loginError.textContent = data.message || '登录失败，请检查用户名和密码';
+                        // 重置密码输入框
+                        passwordInput.value = '';
+                        passwordInput.focus();
+                    }
+                } catch (error) {
+                    console.error('登录请求错误:', error);
+                    loginError.textContent = '网络错误，请稍后再试';
+                } finally {
+                    // 恢复登录按钮
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '登录';
+                }
+            }
+
+            // 检查是否已登录
+            const token = localStorage.getItem('token');
+            if (token) {
+                // 验证token是否有效
+                fetch('/api/webui/users/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // token有效，直接跳转到后台
+                        window.location.href = '/webui/dashboard.html';
+                    } else {
+                        // token无效，清除
+                        localStorage.removeItem('token');
+                    }
+                })
+                .catch(error => {
+                    console.error('验证token错误:', error);
+                    localStorage.removeItem('token');
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

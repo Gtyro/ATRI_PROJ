@@ -1,0 +1,211 @@
+"""
+记忆系统AI处理模块 - 通过AI服务增强记忆处理能力
+
+该模块负责调用外部AI API处理消息，实现更高级的：
+1. 消息分类 - 识别消息类型
+2. 情感分析 - 检测情感极性和强度
+3. 标签提取 - 识别关键概念和实体
+"""
+
+import json
+import logging
+import httpx
+import asyncio
+from typing import Dict, List, Any, Optional, Union
+
+# 添加OpenAI客户端支持
+try:
+    from openai import AsyncOpenAI
+    OPENAI_CLIENT_AVAILABLE = True
+except ImportError:
+    OPENAI_CLIENT_AVAILABLE = False
+    logging.warning("未安装openai库，将使用httpx直接调用API。建议安装openai: pip install openai")
+
+# 配置
+DEFAULT_TIMEOUT = 40.0  # 超时时间（秒）
+MAX_RETRIES = 1  # 最大重试次数
+
+class AIProcessor:
+    """通过AI API增强记忆处理能力"""
+    
+    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat", api_base: str = "https://api.deepseek.com"):
+        """初始化AI处理器
+        
+        Args:
+            api_key: API密钥
+            model: 使用的模型名称
+            api_base: API基础URL
+        """
+        if not api_key:
+            raise ValueError("AI处理器需要API密钥才能运行")
+            
+        self.api_key = api_key
+        self.model = model
+        self.api_base = api_base
+        
+        # 初始化客户端
+        if OPENAI_CLIENT_AVAILABLE:
+            self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
+            logging.info(f"使用OpenAI客户端调用API: {self.api_base}")
+        else:
+            self.client = httpx.AsyncClient(timeout=DEFAULT_TIMEOUT)
+            # 确保API端点正确
+            if "/v1/chat/completions" not in self.api_base:
+                self.api_base = f"{self.api_base.rstrip('/')}/v1/chat/completions"
+            logging.info(f"使用httpx客户端调用API: {self.api_base}")
+        
+        logging.info(f"api_base: {self.api_base}")
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        # 记忆处理提示模板
+        self.memory_prompt = """
+        请分析以下消息，并以JSON格式返回以下信息：
+        1. memory_type: 消息类型，可选值为 ["question", "fact", "event", "preference", "greeting", "farewell", "general"]
+        2. emotion: 情感分析，包含两个字段：
+           - polarity: 情感极性，范围为 [-1.0, 1.0]，负值表示消极，正值表示积极
+           - intensity: 情感强度，范围为 [0.0, 1.0]
+        3. tags: 标签列表，提取消息中的关键概念、实体、主题，最多5个标签
+        4. summary: 一句话总结消息的核心内容
+        
+        只返回JSON格式，不要有其他文字。
+        
+        消息: {message}
+        """
+        
+        # 对话系统提示
+        self.chat_system_prompt = """
+任务 你需要扮演一个AI助手，进行线上的日常对话。
+        """
+    
+    async def process_memory(self, message: str) -> Dict:
+        """处理消息，返回结构化的记忆信息"""
+        prompt = self.memory_prompt.format(message=message)
+        
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = await self._call_api(prompt)
+                result = self._parse_response(response, message)
+                return result
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    logging.warning(f"AI处理失败，尝试重试 ({attempt+1}/{MAX_RETRIES}): {e}")
+                    await asyncio.sleep(1)  # 重试前短暂延迟
+                else:
+                    logging.error(f"AI处理最终失败: {e}")
+                    raise ValueError(f"无法处理消息: {e}")
+    
+    async def generate_response(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
+        """生成对话响应
+        
+        Args:
+            messages: 对话历史，格式为[{"role": "user", "content": "消息内容"}, ...]
+            temperature: 温度参数，控制创造性，0.0-1.0
+            
+        Returns:
+            生成的回复文本
+        """
+        # 添加系统提示
+        full_messages = [{"role": "system", "content": self.chat_system_prompt}]
+        full_messages.extend(messages)
+        
+        payload = {
+            "model": self.model,
+            "messages": full_messages,
+            "temperature": temperature,
+            "max_tokens": 800
+        }
+        
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = await self._call_api(payload)
+                content = response["choices"][0]["message"]["content"].strip()
+                return content
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    logging.warning(f"AI回复生成失败，尝试重试 ({attempt+1}/{MAX_RETRIES}): {e}")
+                    await asyncio.sleep(1)  # 重试前短暂延迟
+                else:
+                    logging.error(f"AI回复生成最终失败: {e}")
+                    raise ValueError(f"无法生成回复: {e}")
+    
+    async def _call_api(self, payload_or_prompt) -> Dict:
+        """调用AI API"""
+        if isinstance(payload_or_prompt, str):
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": payload_or_prompt}],
+                "temperature": 0.1,  # 低温度，提高可预测性
+                "max_tokens": 300
+            }
+        else:
+            payload = payload_or_prompt
+        
+        logging.debug(f"调用AI API: {payload}")
+        
+        if OPENAI_CLIENT_AVAILABLE:
+            try:
+                # 使用OpenAI客户端
+                response = await self.client.chat.completions.create(**payload)
+                logging.debug(f"API响应: {response}")
+                
+                # 将OpenAI响应对象转换为旧格式的字典
+                response_dict = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": response.choices[0].message.content,
+                                "role": response.choices[0].message.role
+                            },
+                            "index": response.choices[0].index
+                        }
+                    ],
+                    "id": response.id,
+                    "model": response.model,
+                    "created": response.created
+                }
+                
+                return response_dict
+            except Exception as e:
+                logging.error(f"OpenAI客户端API调用失败: {e}")
+                raise Exception(f"API调用失败: {e}")
+        else:
+            # 使用httpx直接调用
+            logging.debug(f"API基础URL: {self.api_base}")
+            response = await self.client.post(
+                self.api_base,
+                headers=self.headers,
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                logging.error(f"API调用失败: {response.status_code} {response.text}")
+                raise Exception(f"API调用失败: {response.status_code}")
+                
+            result = response.json()
+            logging.debug(f"API响应: {result}")
+            return result
+    
+    def _parse_response(self, response: Dict, original_message: str) -> Dict:
+        """解析API响应"""
+        try:
+            content = response["choices"][0]["message"]["content"].strip()
+            
+            # 去掉 Markdown 格式部分
+            if content.startswith("```json") and content.endswith("```"):
+                content = content[7:-3].strip()  # 去掉开头和结尾的 Markdown 标记
+            
+            # 尝试解析JSON
+            result = json.loads(content)
+            
+            # 验证必要字段
+            if not all(k in result for k in ["memory_type", "emotion", "tags"]):
+                raise ValueError("响应缺少必要字段")
+                
+            return result
+            
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logging.error(f"解析AI响应失败: {e}")
+            raise ValueError(f"无法解析AI响应: {e}") 

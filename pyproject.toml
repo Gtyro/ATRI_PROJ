@@ -1,0 +1,18 @@
+[project]
+name = "subarobot"
+version = "0.1.0"
+description = "subarobot"
+readme = "README.md"
+requires-python = ">=3.9, <4.0"
+
+[tool.nonebot]
+adapters = [
+    { name = "OneBot V12", module_name = "nonebot.adapters.onebot.v12" }
+]
+plugins = ["nonebot_plugin_apscheduler"]
+plugin_dirs = ["plugins"]
+builtin_plugins = ["echo", "single_session"]
+
+[tool.poetry.dependencies]
+nonebot2 = "^2.1.0"
+nonebot-adapter-onebot = "^2.3.0"
