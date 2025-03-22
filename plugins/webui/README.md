@@ -1,23 +1,38 @@
-# NoneBot2 QQ机器人 WebUI 管理面板
+# WebUI 管理面板
 
-这是一个基于NoneBot2框架的WebUI管理面板，提供了可视化的方式管理和监控您的QQ机器人。
+这是一个WebUI管理面板，提供了可视化的方式管理和监控您的数据库。
 
 ## 特性
 
 - 🔐 **用户认证**: 安全的登录系统，保护您的管理面板
-- 📊 **数据统计**: 查看机器人的消息量、命令使用情况等统计数据
-- 🤖 **机器人管理**: 监控机器人的在线状态和基本信息
-- 🧩 **插件管理**: 查看已加载的插件及其详细信息
-- 📝 **数据库查询**: 直接在网页上执行SQL查询，查看数据库结构
+- 📝 **数据库管理**: 直接在网页上执行SQL增删改查，查看数据库结构
 - 📱 **响应式设计**: 支持在各种设备上访问管理面板
+- 🔧 **模块化结构**: 使用FastAPI的路由系统组织代码，易于扩展和维护
 
-## 安装
+## 安装与启动
 
-此WebUI已随机器人一起安装，无需额外安装步骤。
+### 需求
+- Python 3.7+
+- 数据库文件位于 `~/ATRI_PROJ/data/memory.db`
+
+### 安装
+
+1. 克隆仓库
+2. 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+### 启动
+
+直接运行启动脚本：
+```bash
+python run.py
+```
 
 ## 使用方法
 
-1. 启动NoneBot2机器人
+1. 启动程序
 2. 在浏览器中访问 `http://your-host:port/webui`
    - 默认为 `http://127.0.0.1:8080/webui`
 3. 使用默认管理员账户登录:
@@ -28,50 +43,61 @@
 ## 安全提示
 
 - 请在首次登录后立即修改默认管理员密码
-- 生产环境中，请修改 `api.py` 中的 `SECRET_KEY` 为随机字符串
+- 生产环境中，请修改 `api/core/config.py` 中的 `SECRET_KEY` 为随机字符串
 - 如果将管理面板暴露在公网上，请考虑设置防火墙规则或使用反向代理添加额外的安全层
 
 ## 功能模块
-
-### 仪表盘
-
-展示机器人的基本统计信息和状态概览。
-
-### 机器人管理
-
-查看所有连接的机器人及其状态。
-
-### 插件管理
-
-查看已加载的插件列表及详细信息。
 
 ### 数据库
 
 - 执行只读SQL查询
 - 查看数据库表结构
 
-### 数据统计
-
-查看消息量、命令使用等统计数据的趋势图。
-
 ## 技术栈
 
 - **后端**: Python + FastAPI + SQLite
 - **前端**: Vue 3 + Element Plus + ECharts
-- **认证**: JWT
+- **认证**: JWT (使用python-jose)
 
-## 自定义和扩展
+## 项目结构
 
-如果您想扩展或自定义WebUI，可以编辑以下文件:
+```
+├── api/                  # 后端API代码
+│   ├── __init__.py       # 应用实例和根路由
+│   ├── main.py           # API启动入口
+│   ├── auth/             # 认证相关模块
+│   │   ├── __init__.py   # 导出路由
+│   │   ├── models.py     # 认证数据模型
+│   │   ├── router.py     # 认证路由
+│   │   └── utils.py      # 认证工具函数
+│   ├── db/               # 数据库操作相关模块
+│   │   ├── __init__.py   # 导出路由
+│   │   ├── models.py     # 数据库操作数据模型
+│   │   ├── router.py     # 数据库操作路由
+│   │   └── utils.py      # 数据库操作工具函数
+│   └── core/             # 核心功能模块
+│       ├── __init__.py   # 导出配置
+│       ├── config.py     # 配置
+│       └── database.py   # 数据库连接和基本操作
+├── static/               # 静态文件
+│   └── webui/            # 前端代码
+│       ├── css/          # 样式文件
+│       ├── js/           # JavaScript文件
+│       │   ├── components/   # Vue组件
+│       │   └── views/        # Vue视图
+│       └── index.html    # HTML入口
+├── requirements.txt      # Python依赖
+├── init_db.py            # 初始化数据库脚本
+├── run.py                # 启动脚本
+└── README.md             # 说明文档
+```
 
-- 后端API: `plugins/webui/backend/api.py`
-- 前端界面: `plugins/webui/templates/index.html`
-- 前端逻辑: `plugins/webui/static/js/main.js`
-- 样式: `plugins/webui/static/css/main.css`
-- 统计模块: `plugins/webui/backend/stats.py`
+## API 文档
+
+启动应用后，可以通过访问 `/docs` 或 `/redoc` 路径查看自动生成的API文档。
 
 ## 注意事项
 
 - 数据库查询功能仅支持SELECT语句，以保护数据安全
-- 统计数据存储在 `data/webui.db` 中
+- 统计数据存储在 `~/ATRI_PROJ/data/memory.db` 中
 - 默认仅允许管理员用户访问WebUI 
