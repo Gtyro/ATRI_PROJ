@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
-from api.auth.utils import get_current_active_user
-from api.auth.models import User
+from ..auth.utils import get_current_active_user
+from ..auth.models import User
 from .models import SQLQuery
 from .utils import execute_select_query, get_tables, get_table_structure
 

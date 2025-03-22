@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from api.core.config import settings
+from .api.core.config import settings
 
 def initialize_database():
     """初始化示例数据库"""

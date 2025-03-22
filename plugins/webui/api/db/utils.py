@@ -1,6 +1,6 @@
 import sqlite3
 from fastapi import HTTPException
-from api.core.database import get_db_connection, is_select_query
+from ..core.database import get_db_connection, is_select_query
 
 def execute_select_query(query: str):
     """执行SELECT查询"""

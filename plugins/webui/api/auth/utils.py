@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
-from api.core.config import settings
+from ...api.core.config import settings
 from .models import TokenData, User, UserInDB
 
 # OAuth2 的password bearer设置

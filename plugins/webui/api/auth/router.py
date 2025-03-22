@@ -2,7 +2,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from api.core.config import settings
+from ...api.core.config import settings
 from .utils import authenticate_user, create_access_token, get_current_active_user
 from .models import Token, User
 

@@ -1,7 +1,7 @@
 import uvicorn
 import os
 import sqlite3
-from api import app
+from api import create_app
 from api.core.config import settings
 from init_db import initialize_database
 
@@ -35,6 +35,10 @@ def main():
     print("默认密码: admin")
     print("按Ctrl+C停止服务...")
     
+    # 创建独立运行的FastAPI应用
+    app = create_app()
+    
+    # 启动服务
     uvicorn.run(app, host="127.0.0.1", port=8080)
 
 if __name__ == "__main__":
