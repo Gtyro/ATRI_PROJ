@@ -2,7 +2,7 @@ const Navbar = {
   template: `
     <div class="header">
       <div class="logo">
-        <h1>数据库管理面板</h1>
+        <h1>ATRI管理面板</h1>
       </div>
       <div class="user-info" v-if="auth.state.user">
         <el-dropdown @command="handleCommand">

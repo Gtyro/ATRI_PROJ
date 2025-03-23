@@ -22,6 +22,11 @@ const routes = [
         path: 'db-admin',
         component: DBAdmin,
         meta: { requiresAuth: true }
+      },
+      {
+        path: 'memory-admin',
+        component: MemoryAdmin,
+        meta: { requiresAuth: true }
       }
     ]
   }
