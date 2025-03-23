@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     
     # 数据库设置
     DATABASE_PATH: str = os.path.expanduser("~/ATRI_PROJ/data/memory.db")
+    PUBLIC_PATH: str = os.path.expanduser("~/ATRI_PROJ/plugins/webui/static/webui")
     
     # CORS设置
     CORS_ORIGINS: list = ["*"]  # 在生产环境中应该限制来源
