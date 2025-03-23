@@ -1,3 +1,12 @@
+import { createRouter, createWebHashHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+// 懒加载路由组件
+const Login = () => import('@/views/LoginPage.vue')
+const Dashboard = () => import('@/views/DashboardPage.vue')
+const DBAdmin = () => import('@/views/DBAdmin.vue')
+const MemoryAdmin = () => import('@/views/MemoryAdmin.vue')
+
 // 路由配置
 const routes = [
   { 
@@ -32,24 +41,27 @@ const routes = [
   }
 ];
 
-const router = VueRouter.createRouter({
-  history: VueRouter.createWebHashHistory(),
+const router = createRouter({
+  history: createWebHashHistory(),
   routes
 });
 
 // 全局前置守卫
 router.beforeEach((to, from, next) => {
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const isAuthenticated = !!localStorage.getItem('token');
+  const authStore = useAuthStore()
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const isAuthenticated = authStore.isAuthenticated
 
   if (requiresAuth && !isAuthenticated) {
     // 需要认证但未登录，重定向到登录页
-    next('/login');
+    next('/login')
   } else if (to.path === '/login' && isAuthenticated) {
     // 已登录但尝试访问登录页，重定向到首页
-    next('/dashboard');
+    next('/dashboard')
   } else {
     // 其他情况正常通过
-    next();
+    next()
   }
-}); 
+});
+
+export default router 

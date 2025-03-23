@@ -22,8 +22,8 @@ except ImportError:
     logging.warning("未安装openai库，将使用httpx直接调用API。建议安装openai: pip install openai")
 
 # 配置
-DEFAULT_TIMEOUT = 40.0  # 超时时间（秒）
-MAX_RETRIES = 1  # 最大重试次数
+DEFAULT_TIMEOUT = 60.0  # 超时时间（秒）
+MAX_RETRIES = 0  # 最大重试次数
 
 class AIProcessor:
     """通过AI API增强记忆处理能力"""
@@ -45,7 +45,7 @@ class AIProcessor:
         
         # 初始化客户端
         if OPENAI_CLIENT_AVAILABLE:
-            self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
+            self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base, timeout=DEFAULT_TIMEOUT)
             logging.info(f"使用OpenAI客户端调用API: {self.api_base}")
         else:
             self.client = httpx.AsyncClient(timeout=DEFAULT_TIMEOUT)
@@ -76,9 +76,13 @@ class AIProcessor:
         """
         
         # 对话系统提示
-        self.chat_system_prompt = """
-任务 你需要扮演一个AI助手，进行线上的日常对话。
-        """
+        self.chat_system_prompt = "你需要扮演指定角色，根据角色的信息，模仿她的语气进行线上的日常对话。"
+        try:
+            with open("data/prompt.txt", "r", encoding="utf-8") as f:
+                self.chat_system_prompt += f.read()
+        except Exception as e:
+                logging.warning("data/prompt.txt不存在，使用默认系统提示")
+                self.chat_system_prompt += "任务 你需要扮演一个AI助手，进行线上的日常对话。"
     
     async def process_memory(self, message: str) -> Dict:
         """处理消息，返回结构化的记忆信息"""

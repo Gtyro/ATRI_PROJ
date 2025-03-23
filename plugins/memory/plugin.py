@@ -7,6 +7,8 @@
 3. 定期维护：自动执行记忆衰减和整理
 """
 
+import random
+import re
 from nonebot import on_message, on_command, get_driver
 from nonebot import require
 require("nonebot_plugin_apscheduler")
@@ -219,7 +221,11 @@ async def handle_ai_reply(bot: Bot, event: Event, message: str, is_group: bool):
         logging.debug(f"生成的回复: {reply_content[:30]}...")
         
         # 发送回复
-        await bot.send(event, reply_content)
+        split_replies = [''.join(t) for t in re.findall(r'(\(.*?\))|(（.*?）)|([^，。！？]+\.+)|([^，。！？（）()]+)', reply_content)]
+        for reply in split_replies:
+            await bot.send(event, reply)
+            sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
+            await asyncio.sleep(sleep_time)
         
         # 记录回复到记忆系统
         bot_id = bot.self_id
