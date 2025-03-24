@@ -84,7 +84,7 @@ class MessageQueue:
         try:
             memory_data = await self.processor.process_message(user_id, message, context)
             memory_id = await self.storage.add_memory(memory_data)
-            logging.debug(f"消息已处理: {user_id} - {message[:20]}...，记忆ID: {memory_id}")
+            logging.info(f"消息已添加: {user_id} - {message[:20]}...，记忆ID: {memory_id}")
             return memory_id
         except Exception as e:
             logging.error(f"消息处理失败: {e}")

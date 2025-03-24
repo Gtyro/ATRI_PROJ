@@ -4,7 +4,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from .config import settings
-
+from .database import initialize_tortoise
 
 router = APIRouter()
 
@@ -19,3 +19,6 @@ async def waitfor_nonebot_app(app: FastAPI):
 
     # 挂载静态文件
     app.mount("/", StaticFiles(directory=static_webui_path, html=True), name="webui")
+
+    # 初始化Tortoise ORM
+    await initialize_tortoise()

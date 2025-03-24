@@ -1,8 +1,12 @@
-import sqlite3
+from tortoise.expressions import Q, RawSQL
+from tortoise import Tortoise
 from fastapi import HTTPException
-from ..core.database import get_db_connection, is_select_query
+import re
+import logging
+from ..core.database import table_to_model_map
+# from ..core.database import execute_checkpoint
 
-def execute_select_query(query: str):
+async def execute_select_query(query: str):
     """执行SELECT查询"""
     if not is_select_query(query):
         raise HTTPException(
@@ -10,50 +14,52 @@ def execute_select_query(query: str):
             detail="出于安全原因，仅支持SELECT查询"
         )
     
-    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(query)
-        columns = [description[0] for description in cursor.description] if cursor.description else []
-        rows = [dict(row) for row in cursor.fetchall()]
+        # 使用连接对象执行查询
+        conn = Tortoise.get_connection("default")
+        results = await conn.execute_query_dict(query) # Executes a RAW SQL query statement, and returns the resultset as a list of dicts.
+        
+        # 处理结果 - 针对SELECT查询，结果通常是一个包含行的列表
+        # 将每一行转换为字典
+        columns = []
+        rows = []
+
+        if results and len(results) > 0:
+            if hasattr(results[0], 'keys'):
+                # 如果结果有keys方法，说明是Row对象
+                first_row = results[0]
+                columns = list(first_row.keys())
+                rows = [dict(row) for row in results]
+
         return {"columns": columns, "rows": rows}
-    except sqlite3.Error as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=f"查询执行错误: {str(e)}")
-    finally:
-        conn.close()
 
-def get_tables():
+def is_select_query(query: str) -> bool:
+    """检查是否为SELECT查询，阻止非SELECT语句"""
+    pattern = re.compile(r'^\s*SELECT\s+', re.IGNORECASE)
+    return bool(pattern.match(query))
+
+async def get_tables():
     """获取所有表名称"""
-    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = [row[0] for row in cursor.fetchall()]
-        return {"tables": tables}
-    except sqlite3.Error as e:
+        # 执行checkpoint确保能看到最新数据
+        # await execute_checkpoint()
+        
+        models = Tortoise.apps.get("models", {})
+        table_names = [model._meta.db_table for model in models.values()]
+        return {"tables": table_names}
+    except Exception as e:
+        logging.error(f"获取表名称错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"数据库错误: {str(e)}")
-    finally:
-        conn.close()
 
-def get_table_structure(table_name: str):
+async def get_table_structure(table_name: str):
     """获取表结构"""
-    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name});")
-        columns = [
-            {
-                "cid": row[0],
-                "name": row[1],
-                "type": row[2],
-                "notnull": row[3],
-                "default_value": row[4],
-                "pk": row[5]
-            }
-            for row in cursor.fetchall()
-        ]
+        query = f"PRAGMA table_info({table_name});"
+        conn = Tortoise.get_connection("default")
+        columns = await conn.execute_query_dict(query)
         return {"table_name": table_name, "columns": columns}
-    except sqlite3.Error as e:
+    except Exception as e:
+        logging.error(f"获取表结构错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"数据库错误: {str(e)}")
-    finally:
-        conn.close()
