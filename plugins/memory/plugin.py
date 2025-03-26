@@ -187,6 +187,10 @@ async def handle_ai_reply(bot: Bot, event: Event, message: str, is_group: bool):
             history = await memory_system.storage.get_user_memories(user_id)
             # 只保留最近10条记录
             history = history[:10]
+            
+            # 反转顺序，让历史消息按时间从旧到新排列
+            history.reverse()
+            
             for item in history:
                 role = "user" if item["user_id"] == user_id else "assistant"
                 history_messages.append({
@@ -199,7 +203,13 @@ async def handle_ai_reply(bot: Bot, event: Event, message: str, is_group: bool):
             group_id = event.group_id
             context = f"group_{group_id}"
             logging.debug(f"获取群 {group_id} 的历史记忆")
+            
+            # 获取该群最近的历史记忆（由于优先处理队列，历史消息应已被处理）
             history = await memory_system.storage.get_context_memories(context, limit=10)
+            
+            # 反转顺序，让历史消息按时间从旧到新排列
+            history.reverse()
+            
             for item in history:
                 # 群聊中都作为用户角色，但添加用户ID标识
                 history_messages.append({

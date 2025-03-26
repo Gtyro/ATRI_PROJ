@@ -49,12 +49,16 @@ class MessageQueue:
         # 提取分组信息（群组ID或用户ID）
         group_id = context.split('_')[1] if '_' in context else user_id
         
-        # 优先消息直接处理
+        # 优先消息处理
         if is_priority:
             # 将此分组添加到优先处理组
             self.priority_groups.add(group_id)
             # 重置处理时间
             self.next_process_time = time.time() + self.batch_interval
+            
+            # 先处理该群聊/用户的历史消息队列
+            await self._process_group_queue(group_id)
+            
             # 立即处理此消息
             return await self._process_message(user_id, message, context)
         
@@ -89,6 +93,39 @@ class MessageQueue:
         except Exception as e:
             logging.error(f"消息处理失败: {e}")
             return None
+    
+    async def _process_group_queue(self, group_id: str) -> int:
+        """处理特定群组/用户的队列消息
+        
+        Args:
+            group_id: 群组ID或用户ID
+            max_items: 单次最大处理条数
+            
+        Returns:
+            处理的消息数量
+        """
+        try:
+            # 获取该群组/用户在队列中的消息
+            group_items = await self.storage.get_group_queue_items(group_id)
+            if not group_items:
+                logging.info(f"群组/用户 {group_id} 队列为空，无需处理")
+                return 0
+                
+            processed_count = 0
+            for item in group_items:
+                await self._process_message(
+                    item["user_id"], 
+                    item["content"], 
+                    item["context"]
+                )
+                await self.storage.remove_from_queue(item["id"])
+                processed_count += 1
+                
+            logging.info(f"群组/用户 {group_id} 队列处理完成，共处理 {processed_count} 条消息")
+            return processed_count
+        except Exception as e:
+            logging.error(f"处理群组/用户队列异常: {e}")
+            return 0
     
     async def process_queue(self, max_items: int = 100) -> int:
         """处理队列中的消息

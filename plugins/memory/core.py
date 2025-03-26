@@ -53,7 +53,8 @@ class MemorySystem:
             "access_boost": 0.1,
             "default_retention": 0.7,
             "batch_interval": batch_interval,
-            "batch_size": 50  # 每次批处理的消息数量
+            "batch_size": 50,  # 每次批处理的消息数量
+            "history_limit": 10  # 保留给AI回复的历史消息数量
         }
         
         # 加载自定义配置

@@ -308,6 +308,40 @@ class StorageManager:
             logging.error(f"获取队列项失败: {e}")
             return []
     
+    async def get_group_queue_items(self, group_id: str) -> List[Dict]:
+        """获取特定群组的队列消息
+        
+        Args:
+            group_id: 群组ID或用户ID
+            limit: 最大获取条数
+            
+        Returns:
+            该群组/用户的队列消息列表
+        """
+        try:
+            # 获取特定群组的消息，按创建时间排序
+            items = await MessageQueueItem.filter(
+                processed=False, 
+                group_id=group_id
+            ).order_by("created_at")
+            
+            # 转换为字典列表
+            return [
+                {
+                    "id": item.id,
+                    "user_id": item.user_id,
+                    "content": item.content,
+                    "context": item.context,
+                    "group_id": item.group_id,
+                    "created_at": item.created_at,
+                    "priority": item.priority
+                }
+                for item in items
+            ]
+        except Exception as e:
+            logging.error(f"获取群组队列项失败: {e}")
+            return []
+    
     async def remove_from_queue(self, item_id: str) -> bool:
         """从队列中移除消息"""
         try:
