@@ -221,7 +221,11 @@ async def handle_ai_reply(bot: Bot, event: Event, message: str, is_group: bool):
         logging.debug(f"生成的回复: {reply_content[:30]}...")
         
         # 发送回复
-        split_replies = [''.join(t) for t in re.findall(r'(\(.*?\))|(（.*?）)|([^，。！？]+\.+)|([^，。！？（）()]+)', reply_content)]
+        pattern1 = r'(\(.*?\))'
+        pattern2 = r'（.*?）'
+        pattern3 = r'([^，。！？（）()\s]+\.+)'
+        pattern4 = r'([^，。！？（）()\s]+)'
+        split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
         for reply in split_replies:
             await bot.send(event, reply)
             sleep_time = random.uniform(0.5*len(reply), 1*len(reply))

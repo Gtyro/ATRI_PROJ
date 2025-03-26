@@ -5,7 +5,7 @@ from nonebot.params import CommandArg
 from nonebot.rule import to_me
 
 # 注册一个问候命令处理器（使用命令方式）
-greeting_cmd = on_command("你好", aliases={"hello", "hi"}, priority=5)
+greeting_cmd = on_command("你好", aliases={"hello", "hi"}, priority=5, block=True)
 
 @greeting_cmd.handle()
 async def handle_greeting_cmd(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
