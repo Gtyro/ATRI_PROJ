@@ -313,8 +313,6 @@ async def handle_memory_stats(bot: Bot, event: Event, state: T_State):
         # 生成统计信息
         reply = "记忆系统状态:\n"
         reply += f"- 队列消息: {stats['total']} 条\n"
-        reply += f"  - 优先消息: {stats['priority']} 条\n"
-        reply += f"  - 普通消息: {stats['normal']} 条\n"
         reply += f"- 下次处理: {queue_status['next_process_in']} 秒后\n"
         reply += f"- 处理间隔: {queue_status['batch_interval']} 秒\n"
         

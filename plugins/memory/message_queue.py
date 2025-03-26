@@ -31,7 +31,6 @@ class MessageQueue:
         self.batch_interval = batch_interval
         self.next_process_time = time.time() + batch_interval
         self.processing_lock = asyncio.Lock()
-        self.priority_groups: Set[str] = set()  # 优先处理的群组/用户
         
     async def add_message(self, user_id: str, message: str, 
                           context: str, is_priority: bool = False) -> Optional[str]:
@@ -51,8 +50,6 @@ class MessageQueue:
         
         # 优先消息处理
         if is_priority:
-            # 将此分组添加到优先处理组
-            self.priority_groups.add(group_id)
             # 重置处理时间
             self.next_process_time = time.time() + self.batch_interval
             
@@ -74,8 +71,7 @@ class MessageQueue:
                 "content": message,
                 "context": context,
                 "group_id": group_id,
-                "created_at": time.time(),
-                "priority": 1 if group_id in self.priority_groups else 0
+                "created_at": time.time()
             })
             logging.debug(f"消息已加入队列: {user_id} - {message[:20]}...")
             return None
@@ -157,28 +153,8 @@ class MessageQueue:
                     self.next_process_time = current_time + self.batch_interval
                     return 0
                 
-                # 按优先级分组处理
-                priority_items = []
-                normal_items = []
-                
+                # 直接按创建时间处理所有消息
                 for item in queue_items:
-                    if item["priority"] > 0 or item["group_id"] in self.priority_groups:
-                        priority_items.append(item)
-                    else:
-                        normal_items.append(item)
-                
-                # 先处理优先消息
-                for item in priority_items:
-                    await self._process_message(
-                        item["user_id"], 
-                        item["content"], 
-                        item["context"]
-                    )
-                    await self.storage.remove_from_queue(item["id"])
-                    processed_count += 1
-                
-                # 再处理普通消息
-                for item in normal_items:
                     await self._process_message(
                         item["user_id"], 
                         item["content"], 

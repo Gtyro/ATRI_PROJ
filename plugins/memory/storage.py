@@ -79,7 +79,6 @@ class MessageQueueItem(Model):
     group_id = fields.CharField(max_length=36, null=True)
     created_at = fields.FloatField(index=True)
     processed = fields.BooleanField(default=False)
-    priority = fields.IntField(default=0, index=True)
 
     class Meta:
         table = "message_queue"
@@ -277,7 +276,6 @@ class StorageManager:
                 group_id=queue_item.get("group_id"),
                 created_at=queue_item.get("created_at", time.time()),
                 processed=queue_item.get("processed", False),
-                priority=queue_item.get("priority", 0)
             )
             
             return item_id
@@ -288,8 +286,8 @@ class StorageManager:
     async def get_queue_items(self, limit: int = 100) -> List[Dict]:
         """获取队列中的消息"""
         try:
-            # 按优先级和创建时间排序
-            items = await MessageQueueItem.filter(processed=False).order_by("-priority", "created_at").limit(limit)
+            # 按创建时间排序
+            items = await MessageQueueItem.filter(processed=False).order_by("created_at").limit(limit)
             
             # 转换为字典列表
             return [
@@ -300,7 +298,6 @@ class StorageManager:
                     "context": item.context,
                     "group_id": item.group_id,
                     "created_at": item.created_at,
-                    "priority": item.priority
                 }
                 for item in items
             ]
@@ -333,8 +330,7 @@ class StorageManager:
                     "content": item.content,
                     "context": item.context,
                     "group_id": item.group_id,
-                    "created_at": item.created_at,
-                    "priority": item.priority
+                    "created_at": item.created_at
                 }
                 for item in items
             ]
@@ -357,17 +353,9 @@ class StorageManager:
             # 获取总数
             total = await MessageQueueItem.filter(processed=False).count()
             
-            # 获取优先级消息数
-            priority = await MessageQueueItem.filter(processed=False, priority__gt=0).count()
-            
-            # 获取普通消息数
-            normal = total - priority
-            
             return {
-                "total": total,
-                "priority": priority,
-                "normal": normal
+                "total": total
             }
         except Exception as e:
             logging.error(f"获取队列统计失败: {e}")
-            return {"total": 0, "priority": 0, "normal": 0} 
+            return {"total": 0} 
