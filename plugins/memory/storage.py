@@ -23,7 +23,7 @@ class Memory(Model):
     """记忆模型"""
     id = fields.CharField(pk=True, max_length=36)
     user_id = fields.CharField(max_length=36, index=True)
-    content = fields.TextField()
+    content = fields.TextField() # 消息内容
     context = fields.CharField(max_length=100, index=True)
     type = fields.CharField(max_length=50, index=True)
     created_at = fields.FloatField(index=True)
@@ -31,6 +31,7 @@ class Memory(Model):
     weight = fields.FloatField(default=1.0)
     emotion_score = fields.FloatField(default=0)
     metadata = fields.JSONField(null=True)
+    # CREATE INDEX idx_memory_created_at ON memories (created_at DESC);
 
     class Meta:
         table = "memories"
@@ -60,6 +61,7 @@ class MemoryTag(Model):
     """记忆标签模型"""
     memory = fields.ForeignKeyField('models.Memory', related_name='tags')
     tag = fields.CharField(max_length=50, index=True)
+    # CREATE INDEX idx_memory_tag_tag ON memory_tags (tag);
 
     class Meta:
         table = "memory_tags"
@@ -358,4 +360,76 @@ class StorageManager:
             }
         except Exception as e:
             logging.error(f"获取队列统计失败: {e}")
-            return {"total": 0} 
+            return {"total": 0}
+        
+    async def _update_cooccurrences(self, entities: List[str], context: str):
+        """根据Hebbian规则更新共现关系（纯数据库方案）"""
+        current_time = time.time()
+        time_window = 300  # 5分钟短期记忆窗口
+        
+        # 同消息共现更新
+        for i in range(len(entities)):
+            for j in range(i+1, len(entities)):
+                await self._update_pair(entities[i], entities[j], 0.3, current_time, context)
+
+        # 跨消息共现更新：查询最近5分钟的记忆
+        recent_memories = await Memory.filter(
+            created_at__gte=current_time - time_window
+        ).prefetch_related('tags')
+        
+        # 提取近期实体（去重）
+        recent_entities = set()
+        for memory in recent_memories:
+            recent_entities.update([tag.tag for tag in memory.tags])
+        
+        # 计算跨消息共现
+        for entity in entities:
+            # 查找近期出现过的关联实体
+            for cached_entity in recent_entities:
+                if cached_entity == entity:
+                    continue
+                
+                # 计算共现次数
+                cooccur_count = await MemoryTag.filter(
+                    Q(memory__created_at__gte=current_time - time_window) &
+                    (Q(tag=entity) | Q(tag=cached_entity))
+                ).group_by('memory_id').count()
+                
+                if cooccur_count > 0:
+                    strength = 0.5 * (1 + math.log(cooccur_count + 1))
+                    await self._update_pair(entity, cached_entity, strength, current_time, context)
+
+    async def _update_pair(self, entity_a: str, entity_b: str, delta: float, timestamp: float, context: str):
+        """优化后的关联更新方法"""
+        # 查找双向关联
+        assoc = await MemoryAssociation.filter(
+            Q(source=entity_a, target=entity_b) | 
+            Q(source=entity_b, target=entity_a)
+        ).first()
+
+        if assoc:
+            # 统一更新两个方向的关联
+            new_strength = min(assoc.strength + delta, 5.0)
+            await MemoryAssociation.filter(
+                Q(source=entity_a, target=entity_b) |
+                Q(source=entity_b, target=entity_a)
+            ).update(
+                strength=new_strength,
+                created_at=timestamp
+            )
+        else:
+            # 创建双向关联（使用bulk_create提高效率）
+            await MemoryAssociation.bulk_create([
+                MemoryAssociation(
+                    source=entity_a,
+                    target=entity_b,
+                    strength=1.0 + delta,
+                    created_at=timestamp
+                ),
+                MemoryAssociation(
+                    source=entity_b,
+                    target=entity_a,
+                    strength=1.0 + delta,
+                    created_at=timestamp
+                )
+            ])
