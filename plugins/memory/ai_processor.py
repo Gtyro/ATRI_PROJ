@@ -9,6 +9,7 @@
 
 import json
 import logging
+import re
 import httpx
 import asyncio
 from typing import Dict, List, Any, Optional, Union
@@ -24,6 +25,7 @@ except ImportError:
 # 配置
 DEFAULT_TIMEOUT = 60.0  # 超时时间（秒）
 MAX_RETRIES = 0  # 最大重试次数
+RETRY_DELAY = 1  # 重试延迟（秒）
 
 class AIProcessor:
     """通过AI API增强记忆处理能力"""
@@ -213,3 +215,65 @@ class AIProcessor:
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logging.error(f"解析AI响应失败: {e}")
             raise ValueError(f"无法解析AI响应: {e}") 
+
+    async def process_conversation_batch(self, conversation_text: str) -> List[Dict]:
+        """批量处理会话，提取话题和交互模式
+        
+        Args:
+            conversation_text: 格式化的会话文本
+            
+        Returns:
+            话题列表，每个话题包含主题、摘要、实体、时间范围等
+        """
+        # 会话处理提示模板
+        conversation_prompt = """
+        分析以下群聊消息，提取其中的主要话题及交互。消息格式为 "[时间] {用户ID}: 消息内容"。
+
+        请提取所有独立的话题，并以JSON数组格式返回，每个话题(数组元素/字典)包含以下信息：
+        1. topic: 话题名称，简洁表达话题核心
+        2. summary: 话题摘要，使用 {userX} 表示用户（不要替换为实际ID），描述用户间的主要交互
+        3. entities: 话题中提到的关键实体、对象、概念等
+        4. start_time: 话题开始时间（从消息时间提取）
+        5. end_time: 话题结束时间（从消息时间提取）
+
+        只返回JSON数组，不要有其他文字。如果没有明确的话题，返回空数组 []。
+
+        群聊消息:
+        {conversation}
+        """
+        
+        prompt = conversation_prompt.format(conversation=conversation_text)
+        
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = await self._call_api(prompt)
+                logging.debug(f"会话处理API响应: {response}")
+                result = self._parse_conversation_response(response)
+                logging.debug(f"会话处理API响应解析结果: {result}")
+                return result
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    logging.warning(f"会话处理尝试 {attempt+1}/{MAX_RETRIES+1} 失败: {e}，重试中...")
+                    await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
+                else:
+                    logging.error(f"会话处理失败，已达最大重试次数: {e}")
+                    raise
+                    
+        return []
+        
+    def _parse_conversation_response(self, response: str) -> List[Dict]:
+        """解析会话处理API响应"""
+        try:
+            # 提取JSON部分
+            json_match = re.search(r'(\[.*\])', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+                topics = json.loads(json_str)
+                return topics
+            else:
+                # 尝试直接解析整个响应
+                return json.loads(response)
+        except Exception as e:
+            logging.error(f"解析会话响应失败: {e}")
+            logging.debug(f"原始响应: {response}")
+            return []

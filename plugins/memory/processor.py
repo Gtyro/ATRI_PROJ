@@ -4,6 +4,8 @@
 该模块将输入消息处理成结构化记忆，通过AI增强处理实现高质量的语义分析。
 """
 
+from datetime import datetime
+import re
 import uuid
 import time
 import json
@@ -86,54 +88,50 @@ class MemoryProcessor:
         
         return default_api_base
     
-    async def process_message(self, user_id: str, message: str, context: str = "chat") -> Dict:
-        """处理消息，转换为记忆数据结构"""
-        # 生成唯一ID
-        memory_id = str(uuid.uuid4())
+async def process_conversation(self, group_id: str, messages: List[Dict]) -> List[Dict]:
+    """处理一批会话消息，提取话题和交互模式
+    
+    Args:
+        group_id: 群组ID
+        messages: 消息列表，每个消息包含user_id、content和timestamp
         
-        # 基础数据结构
-        memory_data = {
-            "id": memory_id,
-            "user_id": user_id,
-            "content": message,
-            "context": context,
-            "created_at": time.time(),
-            "weight": 1.0,
-            "metadata": {}
-        }
+    Returns:
+        话题列表，每个话题包含主题、摘要、实体、时间范围等信息
+    """
+    # 确保消息按时间排序
+    sorted_messages = sorted(messages, key=lambda x: x.get("timestamp", 0))
+    
+    # 准备提交给AI的消息格式
+    formatted_messages = []
+    for msg in sorted_messages:
+        timestamp = datetime.fromtimestamp(msg.get("timestamp", time.time()))
+        formatted_time = timestamp.strftime("%Y-%m-%d %H:%M") # 只保留到分钟
+        formatted_messages.append(f"[{formatted_time}] {{{msg['user_id']}}}: {msg['content']}")
+    
+    conversation_text = "\n".join(formatted_messages)
+    
+    # 调用AI处理器提取话题
+    try:
+        topics = await self.ai_processor.process_conversation_batch(conversation_text)
         
-        # AI处理消息
-        try:
-            ai_result = await self.ai_processor.process_memory(message)
+        # 处理AI返回的结果
+        processed_topics = []
+        for topic in topics:
+            # 添加元数据
+            topic["group_id"] = group_id
             
-            # 提取AI处理结果
-            memory_data.update({
-                "type": ai_result.get("memory_type", "general"),
-                "emotion_score": ai_result.get("emotion", {}).get("polarity", 0),
-                "emotion_intensity": ai_result.get("emotion", {}).get("intensity", 0),
-                "tags": ai_result.get("tags", []),
-                "summary": ai_result.get("summary", "")
-            })
+            # 提取参与话题的用户
+            involved_users = set()
+            for user_ref in re.findall(r"{([^}]+)}", topic.get("summary", "")):
+                involved_users.add(user_ref)
+            topic["involved_users"] = list(involved_users)
             
-            # 如果情感强烈，增加初始权重
-            if memory_data.get("emotion_intensity", 0) > 0.6:
-                memory_data["weight"] = 1.2
-                
-            # 保存原始AI结果
-            memory_data["metadata"]["ai_analysis"] = ai_result
+            processed_topics.append(topic)
             
-        except Exception as e:
-            # 记录错误但继续执行，设置默认值
-            logging.error(f"消息处理失败: {e}")
-            memory_data.update({
-                "type": "general",
-                "emotion_score": 0,
-                "emotion_intensity": 0,
-                "tags": [],
-                "summary": message[:50] + ("..." if len(message) > 50 else "")
-            })
-        
-        return memory_data
+        return processed_topics
+    except Exception as e:
+        logging.error(f"会话批处理失败: {e}")
+        return []
     
     def find_associations(self, memory_data: Dict) -> List[Dict]:
         """查找关联 - 未来扩展功能

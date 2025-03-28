@@ -109,17 +109,18 @@ class MemorySystem:
     
     async def process_message(self, user_id: str, message: str, context: str = "chat", 
                             is_priority: bool = False) -> Optional[str]:
-        """处理新消息，如果是优先级消息则立即处理，否则加入队列
+        """处理新消息并加入队列，如果是优先级消息则立即处理该群消息
         
         Args:
             user_id: 用户ID
             message: 消息内容
             context: 上下文（如"group_123456"）
             is_priority: 是否为优先处理消息（私聊或@机器人）
-            
         Returns:
-            处理后的记忆ID（如果立即处理）或None（如果加入队列）
+            处理后的记忆ID
         """
+        if context.startswith("private_"):
+            return # 私聊消息暂不处理
         return await self.message_queue.add_message(user_id, message, context, is_priority)
     
     async def process_queue(self, max_items: int = None) -> int:

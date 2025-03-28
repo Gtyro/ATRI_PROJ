@@ -7,6 +7,7 @@
 """
 
 import json
+import math
 import time
 import logging
 import uuid
@@ -21,24 +22,23 @@ from tortoise.transactions import atomic
 # 定义Tortoise ORM模型
 class Memory(Model):
     """记忆模型"""
-    id = fields.CharField(pk=True, max_length=36)
-    user_id = fields.CharField(max_length=36, index=True)
-    content = fields.TextField() # 消息内容
-    context = fields.CharField(max_length=100, index=True)
-    type = fields.CharField(max_length=50, index=True)
-    created_at = fields.FloatField(index=True)
+    id = fields.CharField(max_length=36, primary_key=True)
+    group_id = fields.CharField(max_length=16, index=True)
+    topic = fields.CharField(max_length=128)
+    summary = fields.TextField()
+    entities = fields.TextField()  # JSON 格式存储实体列表
+    start_time = fields.CharField(max_length=20)
+    end_time = fields.CharField(max_length=20)
+    involved_users = fields.TextField()  # JSON 格式存储参与用户
     last_accessed = fields.FloatField()
-    weight = fields.FloatField(default=1.0)
-    emotion_score = fields.FloatField(default=0)
-    metadata = fields.JSONField(null=True)
-    # CREATE INDEX idx_memory_created_at ON memories (created_at DESC);
-
+    metadata = fields.TextField()  # JSON 格式存储额外元数据
+    
     class Meta:
         table = "memories"
-        table_description = "存储用户记忆的核心表"
+        table_description = "存储记忆的核心表"
 
     def __str__(self):
-        return f"{self.user_id}:{self.content[:20]}"
+        return f"{self.group_id}:{self.topic[:20]}"
 
 
 class MemoryAssociation(Model):
@@ -152,7 +152,7 @@ class StorageManager:
                 last_accessed=memory_data.get("last_accessed", time.time()),
                 weight=memory_data.get("weight", 1.0),
                 emotion_score=memory_data.get("emotion_score", 0),
-                metadata=memory_data.get("metadata", {})
+                metadata=json.dumps(memory_data.get("metadata", {}), ensure_ascii=False)
             )
             
             # 添加标签
@@ -433,3 +433,30 @@ class StorageManager:
                     created_at=timestamp
                 )
             ])
+
+    @atomic()
+    async def add_conversation_topic(self, group_id: str, topic_data: Dict) -> str:
+        """添加一个会话话题"""
+        try:
+            # 生成话题ID
+            topic_id = topic_data.get("id") or str(uuid.uuid4())
+            
+            # 创建话题记录
+            await Memory.create(
+                id=topic_id,
+                group_id=group_id,
+                topic=topic_data.get("topic", "未命名话题"),
+                summary=topic_data.get("summary", ""),
+                entities=json.dumps(topic_data.get("entities", []), ensure_ascii=False),
+                start_time=topic_data.get("start_time", ""),
+                end_time=topic_data.get("end_time", ""),
+                involved_users=json.dumps(topic_data.get("involved_users", []), ensure_ascii=False),
+                last_accessed=topic_data.get("last_accessed", time.time()),
+                metadata=json.dumps(topic_data.get("metadata", {}), ensure_ascii=False)
+            )
+            
+            return topic_id
+            
+        except Exception as e:
+            logging.error(f"添加会话话题失败: {e}")
+            raise

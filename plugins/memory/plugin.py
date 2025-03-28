@@ -297,7 +297,7 @@ async def handle_recall(bot: Bot, event: Event, state: T_State):
         await recall.finish("回忆过程出现了问题...")
 
 # 记忆统计指令 - 查看记忆系统状态
-memory_stats = on_command("记忆统计", permission=SUPERUSER, priority=5, block=True)
+memory_stats = on_command("记忆统计", permission=SUPERUSER, rule=to_me(), priority=5, block=True)
 @memory_stats.handle()
 async def handle_memory_stats(bot: Bot, event: Event, state: T_State):
     # 如果记忆系统未启用，返回错误信息
@@ -328,7 +328,7 @@ async def handle_memory_stats(bot: Bot, event: Event, state: T_State):
         await memory_stats.finish(f"获取统计信息失败: {str(e)}")
 
 # 处理队列指令 - 立即处理消息队列
-process_queue = on_command("处理队列", permission=SUPERUSER, priority=5, block=True)
+process_queue = on_command("处理队列", permission=SUPERUSER, rule=to_me(), priority=5, block=True)
 @process_queue.handle()
 async def handle_process_queue(bot: Bot, event: Event, state: T_State):
     # 如果记忆系统未启用，返回错误信息

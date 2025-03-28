@@ -45,9 +45,13 @@ class MessageQueue:
         Returns:
             如果是优先消息立即处理并返回记忆ID，否则返回None
         """
-        # 提取分组信息（群组ID或用户ID）
+        # 提取分组信息（群组ID）
         group_id = context.split('_')[1] if '_' in context else user_id
         
+        
+        # 普通消息加入队列
+        id = await self._enqueue_message(user_id, message, context, group_id)
+
         # 优先消息处理
         if is_priority:
             # 重置处理时间
@@ -57,10 +61,9 @@ class MessageQueue:
             await self._process_group_queue(group_id)
             
             # 立即处理此消息
-            return await self._process_message(user_id, message, context)
+            await self._process_message(user_id, message, context)
         
-        # 普通消息加入队列
-        return await self._enqueue_message(user_id, message, context, group_id)
+        return id
     
     async def _enqueue_message(self, user_id: str, message: str, 
                               context: str, group_id: str) -> None:
@@ -90,11 +93,11 @@ class MessageQueue:
             logging.error(f"消息处理失败: {e}")
             return None
     
-    async def _process_group_queue(self, group_id: str) -> int:
+    async def _process_group_queue(self, group_id: str, max_items: int = 100) -> int:
         """处理特定群组/用户的队列消息
         
         Args:
-            group_id: 群组ID或用户ID
+            group_id: 群组ID
             max_items: 单次最大处理条数
             
         Returns:
@@ -106,23 +109,45 @@ class MessageQueue:
             if not group_items:
                 logging.info(f"群组/用户 {group_id} 队列为空，无需处理")
                 return 0
+            
+            # 不再逐条处理，而是批量处理整个群组的消息
+            if len(group_items) > 0:
+                # 将队列消息批量提交给处理器
+                await self._process_group_batch(group_id, group_items)
                 
-            processed_count = 0
-            for item in group_items:
-                await self._process_message(
-                    item["user_id"], 
-                    item["content"], 
-                    item["context"]
-                )
-                await self.storage.remove_from_queue(item["id"])
-                processed_count += 1
-                
-            logging.info(f"群组/用户 {group_id} 队列处理完成，共处理 {processed_count} 条消息")
-            return processed_count
+                # 处理完成后，移除所有已处理的消息
+                for item in group_items:
+                    await self.storage.remove_from_queue(item["id"])
+                    
+            logging.info(f"群组/用户 {group_id} 队列处理完成，共处理 {len(group_items)} 条消息")
+            return len(group_items)
         except Exception as e:
             logging.error(f"处理群组/用户队列异常: {e}")
             return 0
-    
+
+    async def _process_group_batch(self, group_id: str, message_items: List[Dict]) -> None:
+        """批量处理群组消息，提取话题和交互模式"""
+        try:
+            # 准备批量消息数据
+            group_data = []
+            for item in message_items:
+                group_data.append({
+                    "user_id": item["user_id"],
+                    "content": item["content"],
+                    "timestamp": item.get("created_at", time.time())
+                })
+                
+            # 批量处理群组数据
+            group_topics = await self.processor.process_conversation(group_id, group_data)
+            
+            # 将话题记忆保存到数据库
+            for topic in group_topics:
+                await self.storage.add_group_topic(group_id, topic)
+                
+            logging.info(f"群组 {group_id} 批量处理完成，提取了 {len(group_topics)} 个话题")
+        except Exception as e:
+            logging.error(f"批量处理群组异常: {e}")
+
     async def process_queue(self, max_items: int = 100) -> int:
         """处理队列中的消息
         
