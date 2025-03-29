@@ -90,18 +90,13 @@ class AIProcessor:
         """处理消息，返回结构化的记忆信息"""
         prompt = self.memory_prompt.format(message=message)
         
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                response = await self._call_api(prompt)
-                result = self._parse_response(response, message)
-                return result
-            except Exception as e:
-                if attempt < MAX_RETRIES:
-                    logging.warning(f"AI处理失败，尝试重试 ({attempt+1}/{MAX_RETRIES}): {e}")
-                    await asyncio.sleep(1)  # 重试前短暂延迟
-                else:
-                    logging.error(f"AI处理最终失败: {e}")
-                    raise ValueError(f"无法处理消息: {e}")
+        try:
+            response = await self._call_api(prompt)
+            result = self._parse_response(response, message)
+            return result
+        except Exception as e:
+            logging.error(f"AI处理失败: {e}")
+            raise ValueError(f"无法处理消息: {e}")
     
     async def generate_response(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
         """生成对话响应
@@ -124,38 +119,39 @@ class AIProcessor:
             "max_tokens": 800
         }
         
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                response = await self._call_api(payload)
-                content = response["choices"][0]["message"]["content"].strip()
-                return content
-            except Exception as e:
-                if attempt < MAX_RETRIES:
-                    logging.warning(f"AI回复生成失败，尝试重试 ({attempt+1}/{MAX_RETRIES}): {e}")
-                    await asyncio.sleep(1)  # 重试前短暂延迟
-                else:
-                    logging.error(f"AI回复生成最终失败: {e}")
-                    raise ValueError(f"无法生成回复: {e}")
+        try:
+            response = await self._call_api(payload)
+            content = response["choices"][0]["message"]["content"].strip()
+            return content
+        except Exception as e:
+            logging.error(f"AI回复生成失败: {e}")
+            raise ValueError(f"无法生成回复: {e}")
     
     async def _call_api(self, payload_or_prompt) -> Dict:
         """调用AI API"""
         if isinstance(payload_or_prompt, str):
+            # 为会话分析设置系统提示和较低温度
+            system_message = "你是一个专业的对话分析助手，请从群聊消息中提取结构化话题信息，严格按照指定的JSON格式返回结果。"
+            
             payload = {
                 "model": self.model,
-                "messages": [{"role": "user", "content": payload_or_prompt}],
-                "temperature": 0.1,  # 低温度，提高可预测性
-                "max_tokens": 300
+                "messages": [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": payload_or_prompt}
+                ],
+                "temperature": 0.1,  # 低温度，提高确定性
+                "max_tokens": 1500,   # 足够返回多个话题
+                "response_format": {"type": "text"}
             }
         else:
             payload = payload_or_prompt
         
-        logging.debug(f"调用AI API: {payload}")
+        logging.debug(f"调用AI API: {self.model}")
         
         if OPENAI_CLIENT_AVAILABLE:
             try:
                 # 使用OpenAI客户端
                 response = await self.client.chat.completions.create(**payload)
-                logging.debug(f"API响应: {response}")
                 
                 # 将OpenAI响应对象转换为旧格式的字典
                 response_dict = {
@@ -179,7 +175,6 @@ class AIProcessor:
                 raise Exception(f"API调用失败: {e}")
         else:
             # 使用httpx直接调用
-            logging.debug(f"API基础URL: {self.api_base}")
             response = await self.client.post(
                 self.api_base,
                 headers=self.headers,
@@ -191,7 +186,6 @@ class AIProcessor:
                 raise Exception(f"API调用失败: {response.status_code}")
                 
             result = response.json()
-            logging.debug(f"API响应: {result}")
             return result
     
     def _parse_response(self, response: Dict, original_message: str) -> Dict:
@@ -225,55 +219,97 @@ class AIProcessor:
         Returns:
             话题列表，每个话题包含主题、摘要、实体、时间范围等
         """
-        # 会话处理提示模板
+        # 会话处理提示模板 - 不使用直接的format，而是手动替换，避免花括号转义问题
         conversation_prompt = """
-        分析以下群聊消息，提取其中的主要话题及交互。消息格式为 "[时间] {用户ID}: 消息内容"。
+        分析群聊消息并提取以下结构化信息。
+        - 话题情感倾向（positive/negative）
+        - 话题延续可能性（0.0-1.0）：根据对话结束时的情况，预测此话题在未来继续讨论的可能性
 
-        请提取所有独立的话题，并以JSON数组格式返回，每个话题(数组元素/字典)包含以下信息：
-        1. topic: 话题名称，简洁表达话题核心
-        2. summary: 话题摘要，使用 {userX} 表示用户（不要替换为实际ID），描述用户间的主要交互
-        3. entities: 话题中提到的关键实体、对象、概念等
-        4. start_time: 话题开始时间（从消息时间提取）
-        5. end_time: 话题结束时间（从消息时间提取）
-
-        只返回JSON数组，不要有其他文字。如果没有明确的话题，返回空数组 []。
+        消息格式：[时间] {用户}：内容
+        返回要求：{
+        "topics": [
+            {
+            "topic": "话题核心词",
+            "summary": "{用户A}讨论了X，{用户B}回应了Y",
+            "entities": ["实体1", "对象2", "概念3"], # 最少1个
+            "start_time": "YYYY-MM-DD HH:mm",
+            "end_time": "YYYY-MM-DD HH:mm",
+            "continuation_probability": 0.7  # 话题延续可能性，范围0.0-1.0
+            }
+        ]
+        }
 
         群聊消息:
-        {conversation}
+        CONVERSATION_PLACEHOLDER
         """
         
-        prompt = conversation_prompt.format(conversation=conversation_text)
+        try:
+            # 手动替换占位符，避免format函数的花括号转义问题
+            prompt = conversation_prompt.replace("CONVERSATION_PLACEHOLDER", conversation_text)
+        except Exception as e:
+            logging.error(f"会话处理提示生成失败: {e}")
+            return []
         
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                response = await self._call_api(prompt)
-                logging.debug(f"会话处理API响应: {response}")
-                result = self._parse_conversation_response(response)
-                logging.debug(f"会话处理API响应解析结果: {result}")
-                return result
-            except Exception as e:
-                if attempt < MAX_RETRIES:
-                    logging.warning(f"会话处理尝试 {attempt+1}/{MAX_RETRIES+1} 失败: {e}，重试中...")
-                    await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
-                else:
-                    logging.error(f"会话处理失败，已达最大重试次数: {e}")
-                    raise
-                    
-        return []
+        logging.info(f"会话处理提示: {prompt[:200]}...")  # 只记录前200个字符避免日志过长
         
-    def _parse_conversation_response(self, response: str) -> List[Dict]:
+        try:
+            response = await self._call_api(prompt)
+            logging.debug(f"会话处理API响应: {response}")
+            result = self._parse_conversation_response(response)
+            logging.debug(f"会话处理API响应解析结果: {result}")
+            return result
+        except Exception as e:
+            logging.error(f"会话处理失败: {e}")
+            return []
+        
+    def _parse_conversation_response(self, response: dict) -> List[Dict]:
         """解析会话处理API响应"""
         try:
-            # 提取JSON部分
-            json_match = re.search(r'(\[.*\])', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-                topics = json.loads(json_str)
+            content = response["choices"][0]["message"]["content"].strip()
+            
+            # 处理Markdown格式
+            if "```json" in content and "```" in content:
+                # 提取Markdown代码块中的JSON
+                start_idx = content.find("```json") + 7
+                end_idx = content.rfind("```")
+                logging.info(f"start_idx: {start_idx}, end_idx: {end_idx}")
+                # 修正条件：如果找到了开始标记且有结束标记
+                if start_idx >= 7 and end_idx > start_idx:
+                    content = content[start_idx:end_idx].strip()
+                    logging.info("成功从Markdown代码块中提取JSON内容")
+                    logging.debug(f"提取的JSON内容: {content[:100]}...")
+            
+            logging.info(f"原始响应内容: {content[:200]}...") # 只记录前200个字符
+            
+            # 解析JSON对象
+            data = json.loads(content)
+            
+            # 如果是对象且包含topics字段
+            if isinstance(data, dict) and "topics" in data:
+                logging.info(f"成功解析为JSON对象，包含 {len(data['topics'])} 个话题")
+                topics = data["topics"]
+                # 确保每个话题有必要字段
+                for topic in topics:
+                    self._ensure_topic_fields(topic)
                 return topics
-            else:
-                # 尝试直接解析整个响应
-                return json.loads(response)
+            
+            # 如果得到的JSON不符合预期格式
+            logging.warning(f"API返回的JSON格式不符合预期: {type(data)}")
+            return []
+                
         except Exception as e:
             logging.error(f"解析会话响应失败: {e}")
-            logging.debug(f"原始响应: {response}")
+            logging.info(f"原始响应: {response}")
             return []
+            
+    def _ensure_topic_fields(self, topic: Dict) -> None:
+        """确保话题对象包含所有必要字段"""
+        # 确保基本字段存在
+        topic.setdefault("topic", "未命名话题")
+        topic.setdefault("summary", "")
+        topic.setdefault("entities", [])
+        topic.setdefault("start_time", "")
+        topic.setdefault("end_time", "")
+        # 确保continuation_probability字段存在
+        if "continuation_probability" not in topic:
+            topic["continuation_probability"] = 0.5

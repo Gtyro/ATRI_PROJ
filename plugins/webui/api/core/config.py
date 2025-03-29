@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # 项目根目录
-    PROJECT_ROOT: str = str(Path(__file__).parent.parent.parent.parent)
+    PROJECT_ROOT: str = str(Path(__file__).parent.parent.parent.parent.parent)
     
     # 数据库设置
     DATABASE_PATH: str = str(Path(PROJECT_ROOT) / "data" / "memory.db")

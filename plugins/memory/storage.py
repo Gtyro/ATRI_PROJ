@@ -23,13 +23,14 @@ from tortoise.transactions import atomic
 class Memory(Model):
     """记忆模型"""
     id = fields.CharField(max_length=36, primary_key=True)
-    group_id = fields.CharField(max_length=16, index=True)
+    context = fields.CharField(max_length=20, index=True) # group_id or private_id
     topic = fields.CharField(max_length=128)
     summary = fields.TextField()
     entities = fields.TextField()  # JSON 格式存储实体列表
     start_time = fields.CharField(max_length=20)
     end_time = fields.CharField(max_length=20)
     involved_users = fields.TextField()  # JSON 格式存储参与用户
+    created_at = fields.FloatField()
     last_accessed = fields.FloatField()
     metadata = fields.TextField()  # JSON 格式存储额外元数据
     
@@ -38,45 +39,51 @@ class Memory(Model):
         table_description = "存储记忆的核心表"
 
     def __str__(self):
-        return f"{self.group_id}:{self.topic[:20]}"
+        return f"{self.context}:{self.topic[:20]}"
+
+
+class MemoryEntity(Model):
+    """记忆实体模型 - 表示记忆中的概念、对象或实体"""
+    id = fields.IntField(pk=True)
+    name = fields.CharField(max_length=100, unique=True, index=True)  # 实体名称，全局唯一
+    memory = fields.ForeignKeyField('models.Memory', related_name='entities')
+    created_at = fields.FloatField(default=time.time)
+    
+    class Meta:
+        table = "memory_entities"
+        table_description = "记忆中的实体，用于快速检索"
+
+    def __str__(self):
+        return self.name
 
 
 class MemoryAssociation(Model):
-    """记忆关联模型"""
-    source = fields.ForeignKeyField('models.Memory', related_name='outgoing_associations')
-    target = fields.ForeignKeyField('models.Memory', related_name='incoming_associations')
-    strength = fields.FloatField(default=0.5)
-    created_at = fields.FloatField()
+    """记忆关联模型 - 表示实体之间的关联关系"""
+    id = fields.IntField(pk=True)
+    source = fields.ForeignKeyField('models.MemoryEntity', related_name='outgoing_associations')
+    target = fields.ForeignKeyField('models.MemoryEntity', related_name='incoming_associations')
+    source_name = fields.CharField(max_length=100, null=True)  # 源实体名称，便于直接查看
+    target_name = fields.CharField(max_length=100, null=True)  # 目标实体名称，便于直接查看
+    strength = fields.FloatField(default=0.5)  # 关联强度
+    created_at = fields.FloatField()  # 创建时间
+    updated_at = fields.FloatField()  # 最后更新时间
 
     class Meta:
         table = "memory_associations"
-        table_description = "记忆之间的关联关系"
+        table_description = "实体之间的关联关系"
         unique_together = (("source_id", "target_id"),)
 
     def __str__(self):
-        return f"{self.source_id}->{self.target_id}"
-
-
-class MemoryTag(Model):
-    """记忆标签模型"""
-    memory = fields.ForeignKeyField('models.Memory', related_name='tags')
-    tag = fields.CharField(max_length=50, index=True)
-    # CREATE INDEX idx_memory_tag_tag ON memory_tags (tag);
-
-    class Meta:
-        table = "memory_tags"
-        table_description = "记忆的标签，用于快速检索"
-        unique_together = (("memory_id", "tag"),)
-
-    def __str__(self):
-        return f"{self.memory_id}:{self.tag}"
+        return f"{self.source_name}->{self.target_name} ({self.strength:.2f})"
 
 
 class MessageQueueItem(Model):
     """消息队列项模型"""
     id = fields.CharField(pk=True, max_length=36)
     user_id = fields.CharField(max_length=36)
+    user_name = fields.CharField(max_length=36)
     content = fields.TextField()
+    is_tome = fields.BooleanField(default=False)
     context = fields.CharField(max_length=100, null=True)
     group_id = fields.CharField(max_length=36, null=True)
     created_at = fields.FloatField(index=True)
@@ -87,7 +94,7 @@ class MessageQueueItem(Model):
         table_description = "消息处理队列"
 
     def __str__(self):
-        return f"{self.user_id}:{self.content[:20]}"
+        return f"{self.user_id}:{self.user_name}:{self.content[:20]}"
 
 
 class StorageManager:
@@ -144,22 +151,33 @@ class StorageManager:
             # 创建记忆对象
             memory = await Memory.create(
                 id=memory_id,
-                user_id=memory_data["user_id"],
-                content=memory_data["content"],
                 context=memory_data.get("context", "default"),
-                type=memory_data.get("type", "general"),
+                topic=memory_data.get("topic", ""),
+                summary=memory_data.get("summary", ""),
+                entities=json.dumps(memory_data.get("entities", []), ensure_ascii=False),
+                start_time=memory_data.get("start_time", ""),
+                end_time=memory_data.get("end_time", ""),
+                involved_users=json.dumps(memory_data.get("involved_users", []), ensure_ascii=False),
                 created_at=memory_data.get("created_at", time.time()),
                 last_accessed=memory_data.get("last_accessed", time.time()),
-                weight=memory_data.get("weight", 1.0),
-                emotion_score=memory_data.get("emotion_score", 0),
                 metadata=json.dumps(memory_data.get("metadata", {}), ensure_ascii=False)
             )
             
-            # 添加标签
-            tags = memory_data.get("tags", [])
-            for tag in tags:
-                await MemoryTag.create(memory_id=memory_id, tag=tag)
-            
+            # 添加实体
+            entities = memory_data.get("tags", [])
+            for entity_name in entities:
+                if not entity_name:
+                    continue
+                    
+                # 查找或创建实体
+                entity = await MemoryEntity.filter(name=entity_name).first()
+                if not entity:
+                    entity = await MemoryEntity.create(
+                        name=entity_name,
+                        memory_id=memory_id,
+                        created_at=time.time()
+                    )
+                
             return memory_id
             
         except Exception as e:
@@ -188,9 +206,9 @@ class StorageManager:
                 "metadata": memory.metadata,
             }
             
-            # 获取标签
-            tags = await MemoryTag.filter(memory_id=memory_id).values_list("tag", flat=True)
-            result["tags"] = tags
+            # 获取实体
+            entities = await MemoryEntity.filter(memory_id=memory_id).values_list("name", flat=True)
+            result["entities"] = list(entities)
             
             return result
         except Exception as e:
@@ -219,9 +237,9 @@ class StorageManager:
                     "metadata": memory.metadata,
                 }
                 
-                # 获取标签
-                tags = await MemoryTag.filter(memory_id=memory.id).values_list("tag", flat=True)
-                memory_dict["tags"] = tags
+                # 获取实体
+                entities = await MemoryEntity.filter(memory_id=memory.id).values_list("name", flat=True)
+                memory_dict["entities"] = list(entities)
                 
                 results.append(memory_dict)
                 
@@ -252,9 +270,9 @@ class StorageManager:
                     "metadata": memory.metadata,
                 }
                 
-                # 获取标签
-                tags = await MemoryTag.filter(memory_id=memory.id).values_list("tag", flat=True)
-                memory_dict["tags"] = tags
+                # 获取实体
+                entities = await MemoryEntity.filter(memory_id=memory.id).values_list("name", flat=True)
+                memory_dict["entities"] = list(entities)
                 
                 results.append(memory_dict)
                 
@@ -273,11 +291,13 @@ class StorageManager:
             await MessageQueueItem.create(
                 id=item_id,
                 user_id=queue_item["user_id"],
+                user_name=queue_item["user_name"],
                 content=queue_item["content"],
                 context=queue_item.get("context"),
                 group_id=queue_item.get("group_id"),
                 created_at=queue_item.get("created_at", time.time()),
                 processed=queue_item.get("processed", False),
+                is_tome=queue_item.get("is_tome", False),
             )
             
             return item_id
@@ -296,10 +316,12 @@ class StorageManager:
                 {
                     "id": item.id,
                     "user_id": item.user_id,
+                    "user_name": item.user_name,
                     "content": item.content,
                     "context": item.context,
                     "group_id": item.group_id,
                     "created_at": item.created_at,
+                    "is_tome": item.is_tome,
                 }
                 for item in items
             ]
@@ -329,10 +351,12 @@ class StorageManager:
                 {
                     "id": item.id,
                     "user_id": item.user_id,
+                    "user_name": item.user_name,
                     "content": item.content,
                     "context": item.context,
                     "group_id": item.group_id,
-                    "created_at": item.created_at
+                    "created_at": item.created_at,
+                    "is_tome": item.is_tome,
                 }
                 for item in items
             ]
@@ -364,97 +388,214 @@ class StorageManager:
         
     async def _update_cooccurrences(self, entities: List[str], context: str):
         """根据Hebbian规则更新共现关系（纯数据库方案）"""
+        if not entities or len(entities) < 1:
+            logging.debug(f"实体列表为空，跳过更新共现关系")
+            return
+            
+        # 过滤掉空字符串和None
+        entities = [e for e in entities if e and isinstance(e, str)]
+        if not entities:
+            logging.debug(f"过滤后实体列表为空，跳过更新共现关系")
+            return
+            
+        # 记录处理开始
+        logging.info(f"开始更新实体共现关系，共{len(entities)}个实体: {entities}")
+        
         current_time = time.time()
         time_window = 300  # 5分钟短期记忆窗口
+        success_count = 0
         
-        # 同消息共现更新
-        for i in range(len(entities)):
-            for j in range(i+1, len(entities)):
-                await self._update_pair(entities[i], entities[j], 0.3, current_time, context)
+        try:
+            # 同消息共现更新
+            for i in range(len(entities)):
+                for j in range(i+1, len(entities)):
+                    try:
+                        await self._update_pair(entities[i], entities[j], 0.3, current_time, context)
+                        success_count += 1
+                    except Exception as e:
+                        logging.error(f"更新实体对失败 ({entities[i]}-{entities[j]}): {e}")
+                        # 继续处理其他实体对
+                        continue
 
-        # 跨消息共现更新：查询最近5分钟的记忆
-        recent_memories = await Memory.filter(
-            created_at__gte=current_time - time_window
-        ).prefetch_related('tags')
-        
-        # 提取近期实体（去重）
-        recent_entities = set()
-        for memory in recent_memories:
-            recent_entities.update([tag.tag for tag in memory.tags])
-        
-        # 计算跨消息共现
-        for entity in entities:
-            # 查找近期出现过的关联实体
-            for cached_entity in recent_entities:
-                if cached_entity == entity:
-                    continue
+            # 跨消息共现更新：查询最近5分钟的记忆
+            try:
+                # 获取最近的实体而不是记忆
+                recent_entities = await MemoryEntity.filter(
+                    created_at__gte=current_time - time_window
+                ).distinct().values_list('name', flat=True)
                 
-                # 计算共现次数
-                cooccur_count = await MemoryTag.filter(
-                    Q(memory__created_at__gte=current_time - time_window) &
-                    (Q(tag=entity) | Q(tag=cached_entity))
-                ).group_by('memory_id').count()
+                # 过滤掉当前消息中的实体，避免重复处理
+                recent_entities = [e for e in recent_entities if e not in entities]
                 
-                if cooccur_count > 0:
-                    strength = 0.5 * (1 + math.log(cooccur_count + 1))
-                    await self._update_pair(entity, cached_entity, strength, current_time, context)
-
+                # 计算跨消息共现
+                for entity in entities:
+                    for cached_entity in recent_entities:
+                        if not entity or not cached_entity or cached_entity == entity:
+                            continue
+                        
+                        try:
+                            # 简化共现计算逻辑
+                            strength = 0.2  # 跨消息共现强度较低
+                            await self._update_pair(entity, cached_entity, strength, current_time, context)
+                            success_count += 1
+                        except Exception as e:
+                            logging.error(f"更新跨消息实体对失败 ({entity}-{cached_entity}): {e}")
+                            # 继续处理其他实体对
+                            continue
+            except Exception as e:
+                logging.error(f"获取最近实体失败: {e}")
+                # 跳过跨消息更新，但继续函数执行
+            
+            # 记录处理结果
+            logging.info(f"实体关联更新完成，成功处理{success_count}个实体对")
+            
+        except Exception as e:
+            logging.error(f"更新实体共现关系失败: {e}")
+            # 不抛出异常，让调用者继续执行
+    
     async def _update_pair(self, entity_a: str, entity_b: str, delta: float, timestamp: float, context: str):
-        """优化后的关联更新方法"""
-        # 查找双向关联
-        assoc = await MemoryAssociation.filter(
-            Q(source=entity_a, target=entity_b) | 
-            Q(source=entity_b, target=entity_a)
-        ).first()
+        """优化后的关联更新方法，基于唯一实体名称
 
-        if assoc:
-            # 统一更新两个方向的关联
-            new_strength = min(assoc.strength + delta, 5.0)
-            await MemoryAssociation.filter(
-                Q(source=entity_a, target=entity_b) |
-                Q(source=entity_b, target=entity_a)
-            ).update(
-                strength=new_strength,
-                created_at=timestamp
-            )
-        else:
-            # 创建双向关联（使用bulk_create提高效率）
-            await MemoryAssociation.bulk_create([
-                MemoryAssociation(
-                    source=entity_a,
-                    target=entity_b,
-                    strength=1.0 + delta,
-                    created_at=timestamp
-                ),
-                MemoryAssociation(
-                    source=entity_b,
-                    target=entity_a,
-                    strength=1.0 + delta,
+        Args:
+            entity_a: 实体A的名称
+            entity_b: 实体B的名称
+            delta: 关联强度增量
+            timestamp: 时间戳
+            context: 上下文
+        """
+        try:
+            # 系统记忆ID，用于存储没有归属的实体
+            system_memory_id = f"system_{context}"
+            
+            # 查找或创建系统记忆
+            system_memory = await Memory.filter(id=system_memory_id).first()
+            if not system_memory:
+                system_memory = await Memory.create(
+                    id=system_memory_id,
+                    context=context,
+                    topic="系统记忆",
+                    summary="用于存储系统生成的实体关联",
+                    entities="[]",
+                    start_time="",
+                    end_time="",
+                    involved_users="[]",
+                    created_at=timestamp,
+                    last_accessed=timestamp,
+                    metadata="{}"
+                )
+                
+            # 查找或创建实体A
+            entity_a_obj = await MemoryEntity.filter(name=entity_a).first()
+            if not entity_a_obj:
+                entity_a_obj = await MemoryEntity.create(
+                    name=entity_a,
+                    memory_id=system_memory_id,
                     created_at=timestamp
                 )
-            ])
+                
+            # 查找或创建实体B
+            entity_b_obj = await MemoryEntity.filter(name=entity_b).first()
+            if not entity_b_obj:
+                entity_b_obj = await MemoryEntity.create(
+                    name=entity_b,
+                    memory_id=system_memory_id,
+                    created_at=timestamp
+                )
+                
+            # 查找已有关联
+            assoc = await MemoryAssociation.filter(
+                (Q(source_id=entity_a_obj.id) & Q(target_id=entity_b_obj.id)) | 
+                (Q(source_id=entity_b_obj.id) & Q(target_id=entity_a_obj.id))
+            ).first()
+
+            if assoc:
+                # 更新关联强度和时间戳
+                new_strength = min(assoc.strength + delta, 5.0)
+                await MemoryAssociation.filter(id=assoc.id).update(
+                    strength=new_strength,
+                    updated_at=timestamp
+                )
+            else:
+                # 创建双向关联
+                await MemoryAssociation.bulk_create([
+                    MemoryAssociation(
+                        source_id=entity_a_obj.id,
+                        target_id=entity_b_obj.id,
+                        source_name=entity_a,
+                        target_name=entity_b,
+                        strength=1.0 + delta,
+                        created_at=timestamp,
+                        updated_at=timestamp
+                    ),
+                    MemoryAssociation(
+                        source_id=entity_b_obj.id,
+                        target_id=entity_a_obj.id,
+                        source_name=entity_b,
+                        target_name=entity_a,
+                        strength=1.0 + delta,
+                        created_at=timestamp,
+                        updated_at=timestamp
+                    )
+                ])
+                logging.debug(f"创建了实体关联: {entity_a} <-> {entity_b}")
+        except Exception as e:
+            logging.error(f"更新实体关联失败 ({entity_a}-{entity_b}): {e}")
+            raise
 
     @atomic()
-    async def add_conversation_topic(self, group_id: str, topic_data: Dict) -> str:
+    async def add_conversation_topic(self, context: str, topic_data: Dict) -> str:
         """添加一个会话话题"""
         try:
             # 生成话题ID
             topic_id = topic_data.get("id") or str(uuid.uuid4())
             
-            # 创建话题记录
-            await Memory.create(
+            # 准备元数据，包含更多可能变动的字段
+            metadata = topic_data.get("metadata", {})
+            
+            # 将不稳定字段或未来可能删除的字段放入metadata
+            for field in ["continuation_probability", "emotion_intensity", "emotion_polarity", 
+                         "relevance_score", "confidence", "priority"]:
+                if field in topic_data:
+                    metadata[field] = topic_data[field]
+            
+            # 当前时间戳
+            current_time = topic_data.get("created_at", time.time())
+            
+            # 创建话题记忆记录
+            memory = await Memory.create(
                 id=topic_id,
-                group_id=group_id,
+                context=context,
                 topic=topic_data.get("topic", "未命名话题"),
                 summary=topic_data.get("summary", ""),
                 entities=json.dumps(topic_data.get("entities", []), ensure_ascii=False),
                 start_time=topic_data.get("start_time", ""),
                 end_time=topic_data.get("end_time", ""),
                 involved_users=json.dumps(topic_data.get("involved_users", []), ensure_ascii=False),
-                last_accessed=topic_data.get("last_accessed", time.time()),
-                metadata=json.dumps(topic_data.get("metadata", {}), ensure_ascii=False)
+                created_at=current_time,
+                last_accessed=current_time,
+                metadata=json.dumps(metadata, ensure_ascii=False)
             )
             
+            # 创建实体记录，用于快速检索
+            entities = topic_data.get("entities", [])
+            if entities:
+                # 为每个实体查找或创建记录
+                for entity_name in entities:
+                    if not entity_name:
+                        continue
+                        
+                    # 查找或创建实体记录
+                    entity = await MemoryEntity.filter(name=entity_name).first()
+                    if not entity:
+                        entity = await MemoryEntity.create(
+                            name=entity_name,
+                            memory_id=topic_id,
+                            created_at=current_time
+                        )
+                
+                # 基于Hebbian理论更新实体关联
+                await self._update_cooccurrences(entities, context)
+                
             return topic_id
             
         except Exception as e:

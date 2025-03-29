@@ -19,6 +19,8 @@ from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.exception import MatcherException
 from nonebot_plugin_apscheduler import scheduler
+from nonebot_plugin_uninfo import Uninfo
+from nonebot.internal.params import Depends
 
 import os
 import asyncio
@@ -95,6 +97,16 @@ except Exception as e:
     memory_system = None
     ai_processor = None
 
+def UserName():
+    """
+    用户名称
+    """
+
+    async def dependency(user_info: Uninfo):
+        return user_info.user.nick or user_info.user.name or ""
+
+    return Depends(dependency)
+
 # 启动时初始化数据库
 @driver.on_startup
 async def init_memory_system():
@@ -123,7 +135,7 @@ async def shutdown_memory_system():
 # 消息处理器 - 记录所有接收到的消息
 message_recorder = on_message(priority=10)
 @message_recorder.handle()
-async def record_message(bot: Bot, event: Event, state: T_State):
+async def record_message(bot: Bot, event: Event, state: T_State, uname: str = UserName()):
     # 如果记忆系统未启用，跳过处理
     if not MEMORY_SYSTEM_ENABLED:
         return
@@ -154,7 +166,9 @@ async def record_message(bot: Bot, event: Event, state: T_State):
     try:
         await memory_system.process_message(
             user_id=user_id, 
-            message=message, 
+            user_name=uname,
+            message=message,
+            is_tome=event.is_tome(),
             context=context,
             is_priority=is_priority
         )
@@ -173,6 +187,7 @@ async def handle_ai_reply(bot: Bot, event: Event, message: str, is_group: bool):
         return
         
     user_id = event.get_user_id()
+    user_name = event.get_user_name()
     
     # 只处理私聊消息或@机器人的群聊消息
     if not (isinstance(event, PrivateMessageEvent) or (is_group and event.is_tome())):

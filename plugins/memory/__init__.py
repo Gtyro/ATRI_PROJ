@@ -7,7 +7,7 @@
 """
 
 from .core import MemorySystem
-from .storage import StorageManager, Memory, MemoryAssociation, MemoryTag, MessageQueueItem
+from .storage import StorageManager, Memory, MemoryAssociation, MemoryEntity, MessageQueueItem
 from .processor import MemoryProcessor
 from .decay import DecayManager
 from .ai_processor import AIProcessor
@@ -20,7 +20,7 @@ from .plugin import *
 __all__ = [
     'MemorySystem', 'StorageManager', 'MemoryProcessor', 
     'DecayManager', 'AIProcessor', 'MessageQueue',
-    'Memory', 'MemoryAssociation', 'MemoryTag', 'MessageQueueItem'
+    'Memory', 'MemoryAssociation', 'MemoryEntity', 'MessageQueueItem'
 ]
 
 # 版本信息

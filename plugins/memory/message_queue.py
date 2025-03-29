@@ -32,16 +32,17 @@ class MessageQueue:
         self.next_process_time = time.time() + batch_interval
         self.processing_lock = asyncio.Lock()
         
-    async def add_message(self, user_id: str, message: str, 
-                          context: str, is_priority: bool = False) -> Optional[str]:
+    async def add_message(self, user_id: str, user_name: str, message: str, 
+                          context: str, is_priority: bool = False, is_tome: bool = False) -> Optional[str]:
         """添加消息到队列
         
         Args:
             user_id: 用户ID
+            user_name: 用户昵称
             message: 消息内容
             context: 上下文标识（如"group_123456"）
             is_priority: 是否为优先消息
-            
+            is_tome: 是否为@机器人消息
         Returns:
             如果是优先消息立即处理并返回记忆ID，否则返回None
         """
@@ -50,7 +51,7 @@ class MessageQueue:
         
         
         # 普通消息加入队列
-        id = await self._enqueue_message(user_id, message, context, group_id)
+        id = await self._enqueue_message(user_id, user_name, message, context, group_id, is_tome)
 
         # 优先消息处理
         if is_priority:
@@ -61,36 +62,27 @@ class MessageQueue:
             await self._process_group_queue(group_id)
             
             # 立即处理此消息
-            await self._process_message(user_id, message, context)
+            # await self._process_message(user_id, message, context)
         
         return id
     
-    async def _enqueue_message(self, user_id: str, message: str, 
-                              context: str, group_id: str) -> None:
+    async def _enqueue_message(self, user_id: str, user_name: str, message: str, 
+                              context: str, group_id: str, is_tome: bool) -> None:
         """将消息加入队列"""
         try:
             await self.storage.add_to_queue({
                 "user_id": user_id,
+                "user_name": user_name,
                 "content": message,
                 "context": context,
                 "group_id": group_id,
-                "created_at": time.time()
+                "created_at": time.time(),
+                "is_tome": is_tome
             })
             logging.debug(f"消息已加入队列: {user_id} - {message[:20]}...")
             return None
         except Exception as e:
             logging.error(f"加入队列失败: {e}")
-            return None
-    
-    async def _process_message(self, user_id: str, message: str, context: str) -> Optional[str]:
-        """处理单条消息"""
-        try:
-            memory_data = await self.processor.process_message(user_id, message, context)
-            memory_id = await self.storage.add_memory(memory_data)
-            logging.info(f"消息已添加: {user_id} - {message[:20]}...，记忆ID: {memory_id}")
-            return memory_id
-        except Exception as e:
-            logging.error(f"消息处理失败: {e}")
             return None
     
     async def _process_group_queue(self, group_id: str, max_items: int = 100) -> int:
@@ -133,20 +125,29 @@ class MessageQueue:
             for item in message_items:
                 group_data.append({
                     "user_id": item["user_id"],
+                    "user_name": item["user_name"],
                     "content": item["content"],
                     "timestamp": item.get("created_at", time.time())
                 })
                 
             # 批量处理群组数据
             group_topics = await self.processor.process_conversation(group_id, group_data)
+            logging.info(f"提取的话题: {group_topics}")
             
-            # 将话题记忆保存到数据库
+            # 群组上下文
+            context = f"group_{group_id}"
+            
+            # 将话题记忆保存到数据库并更新实体关联
             for topic in group_topics:
-                await self.storage.add_group_topic(group_id, topic)
+                # 保存话题记忆，使用add_conversation_topic方法
+                # 注意：add_conversation_topic方法内部已经处理了实体关联的更新
+                topic_id = await self.storage.add_conversation_topic(context, topic)
+                logging.debug(f"已保存话题: {topic.get('topic')}，ID: {topic_id}")
                 
             logging.info(f"群组 {group_id} 批量处理完成，提取了 {len(group_topics)} 个话题")
         except Exception as e:
             logging.error(f"批量处理群组异常: {e}")
+            logging.exception(e)  # 输出完整异常堆栈信息
 
     async def process_queue(self, max_items: int = 100) -> int:
         """处理队列中的消息
@@ -178,17 +179,24 @@ class MessageQueue:
                     self.next_process_time = current_time + self.batch_interval
                     return 0
                 
-                # 直接按创建时间处理所有消息
+                # 按群组/用户分组消息
+                group_messages = {}
                 for item in queue_items:
-                    await self._process_message(
-                        item["user_id"], 
-                        item["content"], 
-                        item["context"]
-                    )
-                    await self.storage.remove_from_queue(item["id"])
-                    processed_count += 1
+                    group_id = item.get("group_id", "default")
+                    if group_id not in group_messages:
+                        group_messages[group_id] = []
+                    group_messages[group_id].append(item)
                 
-                logging.info(f"队列处理完成，共处理 {processed_count} 条消息")
+                # 对每个群组批量处理消息
+                for group_id, items in group_messages.items():
+                    if items:
+                        await self._process_group_batch(group_id, items)
+                        # 处理完成后移除消息
+                        for item in items:
+                            await self.storage.remove_from_queue(item["id"])
+                            processed_count += 1
+                
+                logging.info(f"队列处理完成，共处理 {processed_count} 条消息，涉及 {len(group_messages)} 个群组/用户")
                 
             except Exception as e:
                 logging.error(f"处理队列异常: {e}")
