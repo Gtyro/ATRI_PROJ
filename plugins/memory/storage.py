@@ -85,8 +85,7 @@ class MessageQueueItem(Model):
     content = fields.TextField()
     is_tome = fields.BooleanField(default=False)  # 消息是否是发给机器人的
     is_me = fields.BooleanField(default=False)    # 消息是否是机器人发的
-    conv_id = fields.CharField(max_length=100, null=True, index=True)
-    group_id = fields.CharField(max_length=36, null=True)
+    conv_id = fields.CharField(max_length=30, null=True, index=True)
     created_at = fields.FloatField(index=True)
     processed = fields.BooleanField(default=False)
     metadata = fields.TextField(default="{}")  # 存储额外元数据，如回复关系等
@@ -305,7 +304,6 @@ class StorageManager:
                 user_name=queue_item["user_name"],
                 content=queue_item["content"],
                 conv_id=queue_item.get("conv_id"),
-                group_id=queue_item.get("group_id"),
                 created_at=queue_item.get("created_at", time.time()),
                 processed=queue_item.get("processed", False),
                 is_tome=queue_item.get("is_tome", False),
@@ -332,7 +330,6 @@ class StorageManager:
                     "user_name": item.user_name,
                     "content": item.content,
                     "conv_id": item.conv_id,
-                    "group_id": item.group_id,
                     "created_at": item.created_at,
                     "is_tome": item.is_tome,
                     "is_me": item.is_me,
@@ -368,7 +365,6 @@ class StorageManager:
                     "user_name": item.user_name,
                     "content": item.content,
                     "conv_id": item.conv_id,
-                    "group_id": item.group_id,
                     "created_at": item.created_at,
                     "is_tome": item.is_tome,
                     "is_me": item.is_me,
@@ -629,11 +625,11 @@ class StorageManager:
             logging.error(f"添加对话话题失败: {e}")
             raise
 
-    async def get_message_by_seq_id(self, group_id: str, seq_id: int) -> Dict:
+    async def get_message_by_seq_id(self, conv_id: str, seq_id: int) -> Dict:
         """根据消息序号ID获取消息内容
         
         Args:
-            group_id: 群组ID
+            conv_id: 对话ID
             seq_id: 序号ID（内部使用的顺序ID）
             
         Returns:
@@ -643,7 +639,7 @@ class StorageManager:
             # 获取指定群组的所有消息 - 包括未处理和已处理消息
             # 这确保即使部分消息被删除，序号仍然有效（基于创建时间排序）
             messages = await MessageQueueItem.filter(
-                group_id=group_id
+                conv_id=conv_id
             ).order_by('created_at').limit(500).values()
             
             # 确保序号ID有效
@@ -666,22 +662,22 @@ class StorageManager:
             logging.error(f"获取消息内容失败: {e}")
             return {}
 
-    async def get_distinct_group_ids(self) -> List[str]:
-        """获取队列中所有不同的群组ID
+    async def get_distinct_conv_ids(self) -> List[str]:
+        """获取队列中所有不同的对话ID
         
         Returns:
-            不同群组ID的列表
+            不同对话ID的列表
         """
         try:
-            # 查询所有未处理消息的不同群组ID
-            query = "SELECT DISTINCT group_id FROM message_queue WHERE processed = 0"
+            # 查询所有未处理消息的不同对话ID
+            query = "SELECT DISTINCT conv_id FROM message_queue WHERE processed = 0"
             conn = Tortoise.get_connection("default")
             results = await conn.execute_query_dict(query)
             
-            # 提取群组ID
-            group_ids = [item["group_id"] for item in results if item["group_id"]]
+            # 提取对话ID
+            conv_ids = [item["conv_id"] for item in results if item["conv_id"]]
             
-            return group_ids
+            return conv_ids
         except Exception as e:
-            logging.error(f"获取不同群组ID失败: {e}")
+            logging.error(f"获取不同对话ID失败: {e}")
             return []

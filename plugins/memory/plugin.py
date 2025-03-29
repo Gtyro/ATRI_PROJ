@@ -239,7 +239,7 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
 
     bot: Bot 机器人实例,用于发送消息
     event: Event 事件实例,用于获取消息信息
-    uname: str 用户昵称
+    uname: str 用户昵称,记录到消息队列中
     '''
     # 如果记忆系统未启用，跳过处理
     if not MEMORY_SYSTEM_ENABLED:
@@ -263,14 +263,12 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
     # 保存最近的bot和事件类型，用于后续自动回复
     _latest_bots[conv_id] = (bot, is_group)
     
-    # 判断消息优先级和直接交互
-    is_priority = False
-    is_tome = False  # 是否为直接交互（私聊或@机器人）
+    # 判断直接交互
+    is_direct = False
     
     # 私聊消息或@机器人的消息立即处理，并标记为直接交互
     if not is_group or event.is_tome():
-        is_priority = True
-        is_tome = True
+        is_direct = True
     
     # 异步处理记忆
     try:
@@ -278,13 +276,12 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
             user_id=user_id, 
             user_name=uname,
             message=message,
-            is_tome=event.is_tome(),
-            conv_id=conv_id,
-            is_priority=is_priority
+            is_direct=is_direct,
+            conv_id=conv_id
         )
         
         # 如果是@或私聊，使用同步回复
-        if is_tome:
+        if is_direct:
             await handle_sync_reply(bot, event, conv_id)
     except Exception as e:
         logging.error(f"记忆处理异常: {e}")

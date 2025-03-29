@@ -48,11 +48,11 @@ class MessageQueue:
         self.reply_callback = callback
         logging.info("已注册自动回复回调函数")
         
-    async def trigger_auto_reply(self, group_id: str, topic: Dict) -> bool:
+    async def trigger_auto_reply(self, conv_id: str, topic: Dict) -> bool:
         """触发自动回复逻辑
         
         Args:
-            group_id: 群组ID
+            conv_id: 对话ID
             topic: 话题数据
             
         Returns:
@@ -62,7 +62,7 @@ class MessageQueue:
             return False
             
         # 构建话题标识符
-        topic_id = f"{group_id}:{topic['topic']}"
+        topic_id = f"{conv_id}:{topic['topic']}"
         
         # 如果最近回复过，避免重复回复
         if topic_id in self.recent_replied_topics:
@@ -91,7 +91,7 @@ class MessageQueue:
             for msg_id in topic.get("message_ids", []):
                 if isinstance(msg_id, int):
                     # 获取消息内容
-                    message = await self.storage.get_message_by_seq_id(group_id, msg_id)
+                    message = await self.storage.get_message_by_seq_id(conv_id, msg_id)
                     if message:
                         # 添加格式化消息
                         user_name = message.get("user_name", "未知用户")
@@ -106,7 +106,7 @@ class MessageQueue:
             
             # 准备回复数据
             reply_data = {
-                "group_id": group_id,
+                "conv_id": conv_id,
                 "topic": topic["topic"],
                 "entities": topic.get("entities", []),
                 "message_ids": topic.get("message_ids", []),
@@ -118,12 +118,11 @@ class MessageQueue:
             
             # 调用回调函数
             logging.info(f"触发自动回复: '{topic['topic']}' (概率: {continuation_prob})")
-            response = await self.reply_callback(group_id, reply_data)
+            response = await self.reply_callback(conv_id, reply_data)
             
             # 如果回调返回了回复内容，添加到队列
             if isinstance(response, str) and response.strip():
                 # 将回复添加到消息队列
-                conv_id = f"group_{group_id}"
                 await self.add_bot_message(response, conv_id, last_user_id)
             
             # 添加到最近回复集合
@@ -139,37 +138,34 @@ class MessageQueue:
             return False
     
     async def add_message(self, user_id: str, user_name: str, message: str, 
-                          conv_id: str, is_priority: bool = False, is_tome: bool = False) -> Optional[str]:
-        """添加消息到队列, 如果是优先消息立即处理
+                          conv_id: str, is_direct: bool = False) -> Optional[str]:
+        """添加消息到队列, 如果是直接交互立即处理
         
         Args:
             user_id: 用户ID
             user_name: 用户昵称
             message: 消息内容
             conv_id: 对话ID（如"group_123456"）
-            is_priority: 是否为优先消息
-            is_tome: 是否为@机器人消息
+            is_direct: 是否为直接交互
         Returns:
-            如果是优先消息立即处理并返回记忆ID，否则返回None
+            如果是直接交互立即处理并返回记忆ID，否则返回None
         """
-        # 提取分组信息（群组ID）
-        group_id = conv_id.split('_')[1] if '_' in conv_id else user_id
         
         # 消息先加入队列
-        message_id = await self._enqueue_message(user_id, user_name, message, conv_id, group_id, is_tome)
+        message_id = await self._enqueue_message(user_id, user_name, message, conv_id, is_direct)
 
-        # 优先消息处理
-        if is_priority or is_tome:
+        # 直接交互处理
+        if is_direct:
             # 重置处理时间
             self.next_process_time = time.time() + self.batch_interval
             
-            # 先处理该群聊/用户的历史消息队列
-            await self._process_group_queue(group_id)
+            # 先处理该对话的历史消息队列
+            await self._process_conv_queue(conv_id)
         
         return message_id
     
     async def _enqueue_message(self, user_id: str, user_name: str, message: str, 
-                              conv_id: str, group_id: str, is_tome: bool = False, 
+                              conv_id: str, is_direct: bool = False, 
                               is_me: bool = False, reply_to: Optional[str] = None) -> None:
         """将消息加入队列
         
@@ -178,8 +174,7 @@ class MessageQueue:
             user_name: 用户昵称
             message: 消息内容
             conv_id: 对话ID
-            group_id: 群组ID
-            is_tome: 是否发给机器人的消息
+            is_direct: 是否直接交互
             is_me: 是否机器人发的消息
             reply_to: 回复的用户ID
         """
@@ -194,9 +189,8 @@ class MessageQueue:
                 "user_name": user_name,
                 "content": message,
                 "conv_id": conv_id,
-                "group_id": group_id,
                 "created_at": time.time(),
-                "is_tome": is_tome,
+                "is_direct": is_direct,
                 "is_me": is_me,
                 "metadata": metadata
             })
@@ -206,26 +200,26 @@ class MessageQueue:
             logging.error(f"加入队列失败: {e}")
             return None
     
-    async def _process_group_queue(self, group_id: str) -> int:
-        """处理特定群组/用户的队列消息
+    async def _process_conv_queue(self, conv_id: str) -> int:
+        """处理特定对话的队列消息
         
         Args:
-            group_id: 群组ID
+            conv_id: 对话ID
             
         Returns:
             处理的消息数量
         """
         try:
             # 获取该群组/用户在队列中的消息
-            group_items = await self.storage.get_group_queue_items(group_id)
+            group_items = await self.storage.get_conv_queue_items(conv_id)
             if not group_items:
-                logging.info(f"群组/用户 {group_id} 队列为空，无需处理")
+                logging.info(f"对话 {conv_id} 队列为空，无需处理")
                 return 0
             
             # 不再逐条处理，而是批量处理整个群组的消息
             if len(group_items) > 0:
                 # 将队列消息批量提交给处理器，并获取已完结和未完结消息ID
-                completed_ids, ongoing_ids = await self._process_group_batch(group_id, group_items)
+                completed_ids, ongoing_ids = await self._process_conv_batch(conv_id, group_items)
                 
                 # 构建序号ID到数据库ID的映射
                 seq_to_db_id = {item.get("seq_id", 0): item["id"] for item in group_items}
@@ -250,17 +244,17 @@ class MessageQueue:
             else:
                 processed_count = 0
                 
-            logging.info(f"群组/用户 {group_id} 队列处理完成，处理 {processed_count} 条消息")
+            logging.info(f"对话 {conv_id} 队列处理完成，处理 {processed_count} 条消息")
             return processed_count
         except Exception as e:
-            logging.error(f"处理群组/用户队列异常: {e}")
+            logging.error(f"处理对话队列异常: {e}")
             return 0
 
-    async def _process_group_batch(self, group_id: str, message_items: List[Dict]) -> Tuple[List[int], List[int]]:
-        """批量处理群组消息，提取话题和交互模式
+    async def _process_conv_batch(self, conv_id: str, message_items: List[Dict]) -> Tuple[List[int], List[int]]:
+        """批量处理对话消息，提取话题和交互模式
         
         Args:
-            group_id: 群组ID
+            conv_id: 对话ID
             message_items: 消息列表
             
         Returns:
@@ -268,13 +262,13 @@ class MessageQueue:
         """
         try:
             # 准备批量消息数据
-            group_data = []
+            conv_data = []
             for idx, item in enumerate(message_items, 1):
                 # 为消息添加序号ID（仅在内部使用）
                 item["seq_id"] = idx
                 # 检查是否有直接交互标志
                 is_tome = item.get("is_tome", False)
-                group_data.append({
+                conv_data.append({
                     "user_id": item["user_id"],
                     "user_name": item["user_name"],
                     "content": item["content"],
@@ -282,19 +276,16 @@ class MessageQueue:
                     "is_tome": is_tome
                 })
                 
-            # 批量处理群组数据
-            group_topics = await self.processor.process_conversation(group_id, group_data)
-            logging.info(f"提取的话题: {len(group_topics)}个")
-            
-            # 对话ID
-            conv_id = f"group_{group_id}"
+            # 批量处理对话数据
+            conv_topics = await self.processor.process_conversation(conv_id, conv_data)
+            logging.info(f"提取的话题: {len(conv_topics)}个")
             
             # 用于存储已完结和未完结的消息ID
             completed_message_ids = set()
             ongoing_message_ids = set()
             
             # 保存话题记忆
-            for topic in group_topics:
+            for topic in conv_topics:
                 is_concluded = topic.get("is_concluded", True)
                 topic_id = topic.get("id")
                 
@@ -317,7 +308,7 @@ class MessageQueue:
                         ongoing_message_ids.add(msg_id)
                         
                     # 计算自动回复概率
-                    await self.trigger_auto_reply(group_id, topic)
+                    await self.trigger_auto_reply(conv_id, topic)
                 else:
                     # 已完结话题，可以删除消息
                     for msg_id in message_ids:
@@ -337,7 +328,7 @@ class MessageQueue:
             
             return (completed_ids_list, ongoing_ids_list)
         except Exception as e:
-            logging.error(f"批量处理群组异常: {e}")
+            logging.error(f"批量处理对话异常: {e}")
             logging.exception(e)  # 输出完整异常堆栈信息
             return ([], [])
 
@@ -345,7 +336,7 @@ class MessageQueue:
         """处理队列中的消息
         
         Args:
-            max_items_per_group: 每个群组最大处理条数
+            max_items_per_group: 每个对话最大处理条数
             
         Returns:
             处理的消息数量
@@ -364,24 +355,24 @@ class MessageQueue:
             total_processed_count = 0
             
             try:
-                # 直接获取所有需要处理的不同群组ID
-                distinct_groups = await self.storage.get_distinct_group_ids()
+                # 直接获取所有需要处理的不同对话ID
+                distinct_convs = await self.storage.get_distinct_conv_ids()
                 
-                if not distinct_groups:
+                if not distinct_convs:
                     logging.info("队列为空，无需处理")
                     self.next_process_time = current_time + self.batch_interval
                     return 0
                 
-                logging.info(f"发现 {len(distinct_groups)} 个不同群组/用户的消息")
+                logging.info(f"发现 {len(distinct_convs)} 个不同对话的消息")
                 
-                # 对每个群组单独处理
-                for group_id in distinct_groups:
-                    if group_id:  # 确保群组ID有效
-                        # 处理一个群组并获取该群组已处理的消息数
-                        processed_count = await self._process_group_queue(group_id)
+                # 对每个对话单独处理
+                for conv_id in distinct_convs:
+                    if conv_id:  # 确保对话ID有效
+                        # 处理一个对话并获取该对话已处理的消息数
+                        processed_count = await self._process_conv_queue(conv_id)
                         total_processed_count += processed_count
                 
-                logging.info(f"队列处理完成，共处理 {total_processed_count} 条消息，涉及 {len(distinct_groups)} 个群组/用户")
+                logging.info(f"队列处理完成，共处理 {total_processed_count} 条消息，涉及 {len(distinct_convs)} 个对话")
                 
             except Exception as e:
                 logging.error(f"处理队列异常: {e}")
@@ -390,12 +381,12 @@ class MessageQueue:
             self.next_process_time = current_time + self.batch_interval
             return total_processed_count
 
-    async def add_bot_message(self, message: str, conv_id: str, in_reply_to: Optional[str] = None) -> Optional[str]:
+    async def add_bot_message(self, message: str, context: str, in_reply_to: Optional[str] = None) -> Optional[str]:
         """添加机器人回复消息到队列
         
         Args:
             message: 消息内容
-            conv_id: 对话ID（如"group_123456"）
+            context: 上下文标识（如"group_123456"）
             in_reply_to: 所回复消息的用户ID（可选）
             
         Returns:
@@ -403,10 +394,10 @@ class MessageQueue:
         """
         # 机器人ID和名称（可根据实际情况配置）
         bot_id = "12345"
-        bot_name = "ATRI机器人"
+        bot_name = "你"
         
-        # 提取分组信息（群组ID）
-        group_id = conv_id.split('_')[1] if '_' in conv_id else ""
+        # 提取分组信息（对话ID）
+        conv_id = context.split('_')[1] if '_' in context else ""
         
         try:
             # 将机器人消息加入队列
@@ -414,8 +405,8 @@ class MessageQueue:
                 user_id=bot_id,
                 user_name=bot_name,
                 message=message,
+                context=context,
                 conv_id=conv_id,
-                group_id=group_id,
                 is_tome=False,  # 这不是发给机器人的
                 is_me=True,     # 这是机器人发的
                 reply_to=in_reply_to  # 记录回复的目标

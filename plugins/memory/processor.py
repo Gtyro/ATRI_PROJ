@@ -89,11 +89,11 @@ class MemoryProcessor:
         
         return default_api_base
     
-    async def process_conversation(self, group_id: str, messages: List[Dict]) -> List[Dict]:
+    async def process_conversation(self, conv_id: str, messages: List[Dict]) -> List[Dict]:
         """处理一批对话消息，提取话题和交互模式
         
         Args:
-            group_id: 群组ID
+            conv_id: 对话ID
             messages: 消息列表，每个消息包含user_id、user_name、content和timestamp
             
         Returns:
@@ -156,7 +156,7 @@ class MemoryProcessor:
         conversation_text = "\n".join(formatted_messages)
         
         # 记录对话处理开始
-        logging.info(f"开始处理群组 {group_id} 的对话，共 {len(sorted_messages)} 条消息")
+        logging.info(f"开始处理对话 {conv_id} 的对话，共 {len(sorted_messages)} 条消息")
         
         try:
             # 获取AI处理结果
@@ -164,14 +164,14 @@ class MemoryProcessor:
             
             # 如果没有提取到任何话题，返回空列表
             if not topics:
-                logging.debug(f"未从对话中提取到话题: {group_id}")
+                logging.debug(f"未从对话中提取到话题: {conv_id}")
                 return []
                 
             # 处理AI返回的结果
             processed_topics = []
             for topic in topics:
                 # 添加基础元数据
-                topic["group_id"] = group_id
+                topic["conv_id"] = conv_id
                 
                 # 提取参与话题的用户
                 involved_users = set()

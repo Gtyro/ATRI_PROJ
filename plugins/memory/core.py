@@ -135,7 +135,7 @@ class MemorySystem:
                 logging.error(f"加载配置文件失败: {e}")
     
     async def process_message(self, user_id: str, user_name: str, message: str, conv_id: str, 
-                            is_priority: bool = False, is_tome: bool = False) -> Optional[str]:
+                            is_direct: bool = False) -> Optional[str]:
         """处理新消息并加入队列，如果是优先级消息则立即处理该群消息
         
         注意：单条消息处理不如批量处理高效。系统会将消息加入队列，然后定期批量处理，
@@ -146,19 +146,14 @@ class MemorySystem:
             user_name: 用户昵称
             message: 消息内容
             conv_id: 对话ID（如"group_123456"）
-            is_priority: 是否为优先处理消息（私聊或@机器人）
-            is_tome: 是否为@机器人消息
+            is_direct: 是否为直接交互（私聊或@机器人）
         Returns:
             处理后的队列项ID；若为优先消息，则返回处理结果ID
         """
         if conv_id.startswith("private_"):
             return None  # 私聊消息暂不处理
             
-        # 如果是优先消息，添加警告日志
-        if is_priority:
-            logging.warning(f"正在使用优先处理: {user_id} - {message[:20]}... 这种方式不如批量处理高效")
-            
-        return await self.message_queue.add_message(user_id, user_name, message, conv_id, is_priority, is_tome)
+        return await self.message_queue.add_message(user_id, user_name, message, conv_id, is_direct)
     
     async def process_queue(self, max_items_per_group: int = None) -> int:
         """处理消息队列
