@@ -140,11 +140,11 @@ async def memory_callback(group_id: str, topic_data: dict) -> str:
         messages = topic_data.get("messages", [])
         related_users = topic_data.get("related_users", [])
         last_user_id = topic_data.get("last_user_id")
-        is_tome = topic_data.get("is_tome", False)  # 是否为直接@机器人的话题
+        is_direct = topic_data.get("is_direct", False)  # 是否为直接@机器人的话题
         
         # 如果是直接@机器人的话题，不进行自动回复
         # 这些话题会由handle_sync_reply处理
-        if is_tome:
+        if is_direct:
             logging.info(f"话题 '{topic_name}' 是直接@机器人的对话，跳过自动回复")
             return None
         
@@ -250,7 +250,7 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
     
     # 忽略空消息
     if not message.strip():
-        logging.warning(f"收到空消息，跳过处理")
+        logging.warning(f"收到空消息，跳过处理") # 图片消息也会触发这个
         return
     
     # 正确区分群聊和私聊
@@ -305,7 +305,12 @@ async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
             limit=memory_system.config["history_limit"],
             include_processed=True
         )
-        history = [{"role": "user", "content": f"[{item['user_name']}]: {item['content']}"} for item in conv_messages]
+
+        # 判断消息是否是机器人说的
+        # 如果是，在['user_name']前添加'我对'
+        # 判断消息是否是@机器人的
+        # 如果是，在['user_name']后添加'对你'
+        history = [{"role": "user", "content": f"{item['is_me'] and '我对' or ''}[{item['user_name']}]{'对你' if item['is_direct'] else ''}说: {item['content']}"} for item in conv_messages]
         
         # 生成回复
         logging.info(f"正在生成对 {user_id} 的回复，历史消息数: {len(history)}")
@@ -318,10 +323,15 @@ async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
         pattern3 = r'([^，。！？（）()\s]+\.+)'
         pattern4 = r'([^，。！？（）()\s]+)'
         split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
+
+
+        if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+            split_replies = [reply_content]
         for reply in split_replies:
             await bot.send(event, reply)
             sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
-            await asyncio.sleep(sleep_time)
+            if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
+                await asyncio.sleep(sleep_time)
         
         # 记录回复到消息队列
         await memory_system.message_queue.add_bot_message(
@@ -357,7 +367,7 @@ async def send_auto_reply(group_id: str, reply_content: str):
     
     try:
         logging.info(f"开始向群组 {group_id} 发送自动回复")
-        
+            
         # 分段发送回复
         pattern1 = r'(\(.*?\))'
         pattern2 = r'（.*?）'
@@ -365,8 +375,9 @@ async def send_auto_reply(group_id: str, reply_content: str):
         pattern4 = r'([^，。！？（）()\s]+)'
         split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
         
-        if not split_replies:
-            # 如果分割失败，就直接发送整个回复
+        
+        if not split_replies or logging.getLogger().getEffectiveLevel() == logging.DEBUG:
+            # 如果分割失败或DEBUG模式，就直接发送整个回复
             split_replies = [reply_content]
             
         send_count = 0
@@ -443,6 +454,8 @@ async def handle_process_queue(bot: Bot, event: Event, state: T_State):
         # 处理队列
         count = await memory_system.process_queue()
         await process_queue.finish(f"队列处理完成，处理了 {count} 条消息")
+    except MatcherException:
+        raise
     except Exception as e:
         logging.error(f"处理队列异常: {e}")
         await process_queue.finish(f"处理队列失败: {str(e)}")

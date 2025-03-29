@@ -118,7 +118,7 @@ class MemoryProcessor:
             formatted_time = timestamp.strftime("%Y-%m-%d %H:%M") # 只保留到分钟
             
             # 消息格式添加更多标注
-            is_tome = msg.get("is_tome", False)  # 是否是发给机器人的
+            is_direct = msg.get("is_direct", False)  # 是否是发给机器人的
             is_me = msg.get("is_me", False)      # 是否是机器人发的
             user_name = msg.get("user_name", "未知用户")
             
@@ -139,15 +139,15 @@ class MemoryProcessor:
             
             # 添加用户标识
             if is_me:
-                prefix += f"{user_name}(机器人)"
+                prefix += f"{user_name}(你)"
             else:
                 prefix += f"{user_name}"
                 
             # 添加回复标识
             if reply_to:
-                prefix += f"对{reply_to}"
-            elif is_tome:
-                prefix += "对机器人"
+                prefix += f"对{reply_to}说"
+            elif is_direct:
+                prefix += "对你说"
                 
             # 最终格式：[编号] [时间] {用户}[对{用户}]：内容
             formatted_messages.append(f"{prefix}: {msg['content']}")

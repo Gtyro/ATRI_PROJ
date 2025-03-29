@@ -177,7 +177,7 @@ class MessageQueue:
             message: 消息内容
             conv_id: 对话ID
             is_direct: 是否直接交互
-            is_me: 是否机器人发的消息
+            is_me: 是否是机器人发的消息
             reply_to: 回复的用户ID
         """
         try:
@@ -272,13 +272,13 @@ class MessageQueue:
                 # 为消息添加序号ID（仅在内部使用）
                 item["seq_id"] = idx
                 # 检查是否有直接交互标志
-                is_tome = item.get("is_tome", False)
+                is_direct = item.get("is_direct", False)
                 conv_data.append({
                     "user_id": item["user_id"],
                     "user_name": item["user_name"],
                     "content": item["content"],
                     "timestamp": item.get("created_at", time.time()),
-                    "is_tome": is_tome
+                    "is_direct": is_direct
                 })
                 
             # 批量处理对话数据
@@ -298,14 +298,14 @@ class MessageQueue:
                 message_ids = topic.get("message_ids", [])
                 
                 # 检查话题是否包含直接交互的消息
-                is_tome_topic = any(
-                    message_items[msg_id-1].get("is_tome", False) 
+                is_direct_topic = any(
+                    message_items[msg_id-1].get("is_direct", False) 
                     for msg_id in message_ids 
                     if 1 <= msg_id <= len(message_items)
                 )
                 
                 # 向话题添加直接交互的标志
-                topic["is_tome"] = is_tome_topic
+                topic["is_direct"] = is_direct_topic
                 
                 if not is_concluded:
                     # 未完结话题，需要保留相关消息ID
@@ -351,7 +351,7 @@ class MessageQueue:
             current_time = time.time()
             
             # 如果还没到处理时间，跳过
-            if current_time < self.next_process_time:
+            if current_time < self.next_process_time and logging.getLogger().getEffectiveLevel() != logging.DEBUG:
                 remaining = int(self.next_process_time - current_time)
                 logging.debug(f"距离下次定时处理还有 {remaining} 秒")
                 return 0
@@ -369,6 +369,7 @@ class MessageQueue:
                     return 0
                 
                 logging.info(f"发现 {len(distinct_convs)} 个不同对话的消息")
+                logging.info(f"对话ID: {distinct_convs}")
                 
                 # 对每个对话单独处理
                 for conv_id in distinct_convs:
@@ -386,12 +387,12 @@ class MessageQueue:
             self.next_process_time = current_time + self.batch_interval
             return total_processed_count
 
-    async def add_bot_message(self, message: str, context: str, in_reply_to: Optional[str] = None) -> Optional[str]:
+    async def add_bot_message(self, message: str, conv_id: str, in_reply_to: Optional[str] = None) -> Optional[str]:
         """添加机器人回复消息到队列
         
         Args:
             message: 消息内容
-            context: 上下文标识（如"group_123456"）
+            conv_id: 对话ID
             in_reply_to: 所回复消息的用户ID（可选）
             
         Returns:
@@ -402,7 +403,7 @@ class MessageQueue:
         bot_name = "你"
         
         # 提取分组信息（对话ID）
-        conv_id = context.split('_')[1] if '_' in context else ""
+        conv_id = conv_id.split('_')[1] if '_' in conv_id else ""
         
         try:
             # 将机器人消息加入队列
@@ -410,9 +411,7 @@ class MessageQueue:
                 user_id=bot_id,
                 user_name=bot_name,
                 message=message,
-                context=context,
                 conv_id=conv_id,
-                is_tome=False,  # 这不是发给机器人的
                 is_me=True,     # 这是机器人发的
                 reply_to=in_reply_to  # 记录回复的目标
             )

@@ -33,6 +33,7 @@ class Memory(Model):
     involved_users = fields.TextField()  # JSON 格式存储参与用户
     created_at = fields.FloatField()
     last_accessed = fields.FloatField()
+    weight = fields.FloatField(default=1.0)
     metadata = fields.TextField()  # JSON 格式存储额外元数据
     
     class Meta:
@@ -84,7 +85,7 @@ class MessageQueueItem(Model):
     user_id = fields.CharField(max_length=36)
     user_name = fields.CharField(max_length=36)
     content = fields.TextField()
-    is_tome = fields.BooleanField(default=False)  # 消息是否是发给机器人的
+    is_direct = fields.BooleanField(default=False)  # 消息是否是发给机器人的
     is_me = fields.BooleanField(default=False)    # 消息是否是机器人发的
     conv_id = fields.CharField(max_length=30, null=True, index=True)
     created_at = fields.FloatField(index=True)
@@ -162,6 +163,7 @@ class StorageManager:
                 involved_users=json.dumps(memory_data.get("involved_users", []), ensure_ascii=False),
                 created_at=memory_data.get("created_at", time.time()),
                 last_accessed=memory_data.get("last_accessed", time.time()),
+                weight=memory_data.get("weight", 1.0),
                 metadata=json.dumps(memory_data.get("metadata", {}), ensure_ascii=False)
             )
             
@@ -295,8 +297,8 @@ class StorageManager:
             
             # 将is_tome标志添加到metadata
             metadata = queue_item.get("metadata", {})
-            if "is_tome" in queue_item:
-                metadata["is_tome"] = queue_item["is_tome"]
+            if "is_direct" in queue_item:
+                metadata["is_direct"] = queue_item["is_direct"]
             
             # 创建队列项
             await MessageQueueItem.create(
@@ -307,7 +309,7 @@ class StorageManager:
                 conv_id=queue_item.get("conv_id"),
                 created_at=queue_item.get("created_at", time.time()),
                 processed=queue_item.get("processed", False),
-                is_tome=queue_item.get("is_tome", False),
+                is_direct=queue_item.get("is_direct", False),
                 is_me=queue_item.get("is_me", False),
                 metadata=json.dumps(metadata, ensure_ascii=False)
             )
@@ -332,7 +334,7 @@ class StorageManager:
                     "content": item.content,
                     "conv_id": item.conv_id,
                     "created_at": item.created_at,
-                    "is_tome": item.is_tome,
+                    "is_direct": item.is_direct,
                     "is_me": item.is_me,
                 }
                 for item in items
@@ -370,7 +372,7 @@ class StorageManager:
                     "content": item.content,
                     "conv_id": item.conv_id,
                     "created_at": item.created_at,
-                    "is_tome": item.is_tome,
+                    "is_direct": item.is_direct,
                     "is_me": item.is_me,
                     "processed": item.processed,
                 }
@@ -572,6 +574,7 @@ class StorageManager:
                     involved_users="[]",
                     created_at=timestamp,
                     last_accessed=timestamp,
+                    weight=1.0,
                     metadata="{}"
                 )
                 
@@ -664,6 +667,7 @@ class StorageManager:
                 involved_users=json.dumps(topic_data.get("involved_users", []), ensure_ascii=False),
                 created_at=current_time,
                 last_accessed=current_time,
+                weight=1.0,
                 metadata=json.dumps(metadata, ensure_ascii=False)
             )
             
