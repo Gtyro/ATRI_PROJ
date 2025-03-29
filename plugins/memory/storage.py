@@ -728,7 +728,7 @@ class StorageManager:
                 
                 return message
             else:
-                logging.warning(f"无效的消息序号ID: {seq_id}，群组 {group_id} 中只有 {len(messages)} 条消息")
+                logging.warning(f"无效的消息序号ID: {seq_id}，对话 {conv_id} 中只有 {len(messages)} 条消息")
                 return {}
         except Exception as e:
             logging.error(f"获取消息内容失败: {e}")

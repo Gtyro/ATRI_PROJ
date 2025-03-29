@@ -62,41 +62,14 @@ class AIProcessor:
             "Authorization": f"Bearer {self.api_key}"
         }
         
-        # 记忆处理提示模板
-        self.memory_prompt = """
-        请分析以下消息，并以JSON格式返回以下信息：
-        1. memory_type: 消息类型，可选值为 ["question", "fact", "event", "preference", "greeting", "farewell", "general"]
-        2. emotion: 情感分析，包含两个字段：
-           - polarity: 情感极性，范围为 [-1.0, 1.0]，负值表示消极，正值表示积极
-           - intensity: 情感强度，范围为 [0.0, 1.0]
-        3. tags: 标签列表，提取消息中的关键概念、实体、主题，最多5个标签
-        4. summary: 一句话总结消息的核心内容
-        
-        只返回JSON格式，不要有其他文字。
-        
-        消息: {message}
-        """
-        
         # 对话系统提示
-        self.chat_system_prompt = "你需要扮演指定角色，根据角色的信息，模仿她的语气进行线上的日常对话。"
+        self.chat_system_prompt = "你需要扮演指定角色，根据角色的信息，模仿她的语气进行线上的日常对话，一次回复尽量不要超过20字。"
         try:
             with open("data/prompt.txt", "r", encoding="utf-8") as f:
                 self.chat_system_prompt += f.read()
         except Exception as e:
                 logging.warning("data/prompt.txt不存在，使用默认系统提示")
                 self.chat_system_prompt += "任务 你需要扮演一个AI助手，进行线上的日常对话。"
-    
-    async def process_memory(self, message: str) -> Dict:
-        """处理消息，返回结构化的记忆信息"""
-        prompt = self.memory_prompt.format(message=message)
-        
-        try:
-            response = await self._call_api(prompt)
-            result = self._parse_response(response, message)
-            return result
-        except Exception as e:
-            logging.error(f"AI处理失败: {e}")
-            raise ValueError(f"无法处理消息: {e}")
     
     async def generate_response(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
         """生成对话响应
@@ -116,7 +89,7 @@ class AIProcessor:
             "model": self.model,
             "messages": full_messages,
             "temperature": temperature,
-            "max_tokens": 800
+            "max_tokens": 100
         }
         
         try:
@@ -224,7 +197,7 @@ class AIProcessor:
         分析群聊消息并提取以下结构化信息。需要区分已完结和未完结的话题：
         
         1. 已完结话题：时间较早、讨论告一段落的话题。对这类话题，提取详细信息。
-        2. 未完结话题：最近正在讨论、尚未结束的话题。对这类话题，返回相关消息编号并评估机器人参与必要性。
+        2. 未完结话题：最近正在讨论、尚未结束的话题。对这类话题，返回相关消息编号并评估话题延续可能性。
         
         消息格式：[编号] [时间] {用户}：内容
         
@@ -245,7 +218,7 @@ class AIProcessor:
               "topic": "未完结话题名称",
               "entities": ["相关实体1", "相关实体2"], // 捕获未完结话题的相关实体
               "message_ids": [8, 9, 10], // 相关消息的编号
-              "continuation_probability": 0.7, // 机器人应该参与讨论的概率 (0.0-1.0)
+              "continuation_probability": 0.7, // 话题延续的可能性 (0.0-1.0)
               "last_message_id": 10 // 最后一条相关消息的编号，用于追踪对话最新进展
             }
           ]
@@ -256,13 +229,13 @@ class AIProcessor:
         2. 话题已有明确结论或自然终止
         
         未完结话题的continuation_probability评估标准：
-        1. 高概率 (0.7-1.0): 话题急需机器人解答/参与；存在直接提问；话题与机器人专长相关
-        2. 中等概率 (0.3-0.7): 话题可能受益于机器人参与；存在间接提问；讨论陷入停滞
+        1. 高概率 (0.7-1.0): 话题急需人解答/参与；存在直接提问
+        2. 中等概率 (0.3-0.7): 话题可能受益于人参与；存在间接提问；讨论陷入停滞
         3. 低概率 (0.0-0.3): 人类交流顺畅；无需干预；话题即将自然结束
         
         注意：
         - 每条消息可能属于多个话题
-        - 未完结话题无需提供详细总结，但需要捕获相关实体和评估机器人参与必要性
+        - 未完结话题无需提供详细总结，但需要捕获相关实体和评估话题延续可能性
         - 确保每个话题至少关联一条消息
 
         群聊消息:

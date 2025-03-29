@@ -110,11 +110,11 @@ def UserName():
     return Depends(dependency)
 
 # 自动回复回调函数
-async def memory_callback(group_id: str, topic_data: dict) -> str:
+async def memory_callback(conv_id: str, topic_data: dict) -> str:
     """记忆系统自动回复回调函数
     
     Args:
-        group_id: 群组ID
+        conv_id: 对话ID（如"group_123456"）
         topic_data: 话题数据，包含消息历史和实体信息
         
     Returns:
@@ -125,10 +125,10 @@ async def memory_callback(group_id: str, topic_data: dict) -> str:
         logging.warning("AI处理器未初始化，无法生成自动回复")
         return None
         
-    # 获取该群组的bot信息
-    bot_info = _latest_bots.get(f"group_{group_id}")
+    # 获取该对话的bot信息
+    bot_info = _latest_bots.get(conv_id)
     if not bot_info:
-        logging.warning(f"未找到群组 {group_id} 的bot信息，无法发送自动回复")
+        logging.warning(f"未找到对话 {conv_id} 的bot信息，无法发送自动回复")
         return None
         
     bot, is_group = bot_info
@@ -171,7 +171,7 @@ async def memory_callback(group_id: str, topic_data: dict) -> str:
                 })
         
         # 添加提示信息，引导AI关注当前话题
-        prompt = f"请针对'{topic_name}'这个话题，基于上述对话生成一个自然、有帮助的回复。"
+        prompt = f"请针对'{topic_name}'这个话题，基于上述对话生成一个自然的回复。"
         if entities:
             entity_str = "、".join(entities[:3])
             prompt += f" 请特别关注这些关键概念：{entity_str}。"
@@ -191,7 +191,7 @@ async def memory_callback(group_id: str, topic_data: dict) -> str:
         logging.debug(f"生成的回复: {reply_content[:30]}...")
         
         # 发送自动回复
-        asyncio.create_task(send_auto_reply(group_id, reply_content))
+        asyncio.create_task(send_auto_reply(conv_id, reply_content))
         
         return reply_content
         
@@ -307,10 +307,10 @@ async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
         )
 
         # 判断消息是否是机器人说的
-        # 如果是，在['user_name']前添加'我对'
+        # 如果是，role为assistant
         # 判断消息是否是@机器人的
         # 如果是，在['user_name']后添加'对你'
-        history = [{"role": "user", "content": f"{item['is_me'] and '我对' or ''}[{item['user_name']}]{'对你' if item['is_direct'] else ''}说: {item['content']}"} for item in conv_messages]
+        history = [{"role": "assistant" if item['is_me'] else "user", "content": f"[{item['user_name']}]{'对你' if item['is_direct'] else ''}说: {item['content']}"} for item in conv_messages]
         
         # 生成回复
         logging.info(f"正在生成对 {user_id} 的回复，历史消息数: {len(history)}")
@@ -345,7 +345,7 @@ async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
         logging.error(f"同步回复生成失败: {e}", exc_info=True)
 
 # 处理自动回复生成的消息
-async def send_auto_reply(group_id: str, reply_content: str):
+async def send_auto_reply(conv_id: str, reply_content: str):
     """发送自动回复消息
     
     Args:
@@ -356,18 +356,17 @@ async def send_auto_reply(group_id: str, reply_content: str):
         logging.warning("自动回复内容为空，取消发送")
         return
         
-    conv_id = f"group_{group_id}"
     bot_info = _latest_bots.get(conv_id)
     
     if not bot_info:
-        logging.warning(f"未找到群组 {group_id} 的bot信息，无法发送自动回复")
+        logging.warning(f"未找到对话 {conv_id} 的bot信息，无法发送自动回复")
         return
         
     bot, is_group = bot_info
     
     try:
-        logging.info(f"开始向群组 {group_id} 发送自动回复")
-            
+        logging.info(f"开始向对话 {conv_id} 发送自动回复")
+        
         # 分段发送回复
         pattern1 = r'(\(.*?\))'
         pattern2 = r'（.*?）'
@@ -387,9 +386,9 @@ async def send_auto_reply(group_id: str, reply_content: str):
                 
             try:
                 if is_group:
-                    await bot.send_group_msg(group_id=int(group_id), message=reply)
+                    await bot.send_group_msg(group_id=int(conv_id.split("_", 1)[1]), message=reply)
                 else:
-                    await bot.send_private_msg(user_id=int(group_id), message=reply)
+                    await bot.send_private_msg(user_id=int(conv_id.split("_", 1)[1]), message=reply)
                     
                 send_count += 1
                 

@@ -105,18 +105,6 @@ class MemorySystem:
             
         self.message_queue.register_reply_callback(callback)
         logging.info("已注册自动回复回调函数")
-        
-    def set_auto_reply_threshold(self, threshold: float):
-        """设置自动回复阈值
-        
-        Args:
-            threshold: 阈值 (0.0-1.0)，当话题的continuation_probability大于此值时可能触发自动回复
-        """
-        if not hasattr(self, 'message_queue'):
-            raise RuntimeError("请先调用initialize()初始化记忆系统")
-            
-        self.message_queue.auto_reply_threshold = float(threshold)
-        logging.info(f"自动回复阈值已设为: {threshold}")
     
     async def close(self):
         """关闭记忆系统并清理资源"""
@@ -208,8 +196,5 @@ class MemorySystem:
         """
         # 设置自动回复处理器
         self.register_auto_reply_callback(callback)
-        
-        # 默认设置较低的阈值，使系统谨慎回复
-        self.set_auto_reply_threshold(0.6)
         
         logging.info("自动回复功能已激活") 

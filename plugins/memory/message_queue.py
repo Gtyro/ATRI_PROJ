@@ -6,6 +6,7 @@
 2. 普通消息：加入队列，定时批量处理
 """
 
+import random
 import time
 import asyncio
 import logging
@@ -36,16 +37,14 @@ class MessageQueue:
         
         # 回调处理器
         self.reply_callback = None
-        # 最近发送过自动回复的话题，避免重复回复
-        self.recent_replied_topics = set()
-        # 自动回复阈值 (当随机值小于话题的continuation_probability时触发回复)
+        # 自动回复阈值 (当话题的continuation_probability高于此值时触发回复)
         self.auto_reply_threshold = 0.5
         
     def register_reply_callback(self, callback):
         """注册回复回调函数
         
         Args:
-            callback: 回调函数，接收 (group_id, topic_data) 参数
+            callback: 回调函数，接收 (conv_id, topic_data) 参数
         """
         self.reply_callback = callback
         logging.info("已注册自动回复回调函数")
@@ -63,25 +62,24 @@ class MessageQueue:
         if not self.reply_callback:
             return False
             
-        # 构建话题标识符
-        topic_id = f"{conv_id}:{topic['topic']}"
+        # 计算回复概率
+        continuation_prob = topic.get("continuation_probability", 0.0)
+        topic_id = topic.get("id", "")
         
-        # 如果最近回复过，避免重复回复
-        if topic_id in self.recent_replied_topics:
-            logging.debug(f"话题 '{topic['topic']}' 最近已回复过，跳过")
+        # 检查是否为直接@机器人的话题，如果是则不进行自动回复
+        if topic.get("is_direct", False):
+            logging.info(f"话题 '{topic.get('topic', '未知话题')}' 是直接交互，由同步回复处理，跳过自动回复")
             return False
-            
-        # 计算是否应该回复 (随机值 < continuation_probability)
-        continuation_prob = float(topic.get("continuation_probability", 0))
         
+        # 判断是否回复，如果话题回复积极性低于阈值，不回复
         if continuation_prob < self.auto_reply_threshold:
-            logging.debug(f"话题 '{topic['topic']}' 继续概率 {continuation_prob} 低于阈值 {self.auto_reply_threshold}，不回复")
+            logging.debug(f"话题 '{topic.get('topic', '')}' 回复积极性低于阈值: {continuation_prob:.2f} < {self.auto_reply_threshold}")
             return False
-            
-        # 随机决定是否回复
-        import random
-        if random.random() > continuation_prob:
-            logging.debug(f"话题 '{topic['topic']}' 随机决定不回复 (概率{continuation_prob})")
+        
+        # 随机值判断是否回复，如果话题回复积极性低于随机值，不回复
+        random_value = random.random()
+        if random_value > continuation_prob:
+            logging.debug(f"话题 '{topic.get('topic', '')}' 回复积极性低于随机值: {continuation_prob:.2f} < {random_value}")
             return False
         
         try:
@@ -126,13 +124,6 @@ class MessageQueue:
             if isinstance(response, str) and response.strip():
                 # 将回复添加到消息队列
                 await self.add_bot_message(response, conv_id, last_user_id)
-            
-            # 添加到最近回复集合
-            self.recent_replied_topics.add(topic_id)
-            
-            # 为避免内存泄漏，控制集合大小
-            if len(self.recent_replied_topics) > 100:
-                self.recent_replied_topics = set(list(self.recent_replied_topics)[-50:])
                 
             return True
         except Exception as e:
@@ -291,23 +282,19 @@ class MessageQueue:
             
             # 保存话题记忆
             for topic in conv_topics:
-                is_concluded = topic.get("is_concluded", True)
+                continuation_probability = topic.get("continuation_probability", 0.0)
                 topic_id = topic.get("id")
                 
                 # 记录消息ID
                 message_ids = topic.get("message_ids", [])
                 
-                # 检查话题是否包含直接交互的消息
-                is_direct_topic = any(
-                    message_items[msg_id-1].get("is_direct", False) 
-                    for msg_id in message_ids 
-                    if 1 <= msg_id <= len(message_items)
-                )
+                # 检查话题最后是否包含直接交互的消息
+                is_direct_topic = message_items[message_ids[-1]-1].get("is_direct", False)
                 
                 # 向话题添加直接交互的标志
                 topic["is_direct"] = is_direct_topic
                 
-                if not is_concluded:
+                if continuation_probability > 0.0:
                     # 未完结话题，需要保留相关消息ID
                     for msg_id in message_ids:
                         ongoing_message_ids.add(msg_id)
@@ -399,23 +386,28 @@ class MessageQueue:
             消息队列项ID
         """
         # 机器人ID和名称（可根据实际情况配置）
-        bot_id = "12345"
-        bot_name = "你"
-        
-        # 提取分组信息（对话ID）
-        conv_id = conv_id.split('_')[1] if '_' in conv_id else ""
+        bot_id = "bot_12345"
+        bot_name = "你" # 这里用第二人称
         
         try:
+            # 构建元数据
+            metadata = {}
+            if in_reply_to:
+                metadata["reply_to"] = in_reply_to
+                
             # 将机器人消息加入队列
-            message_id = await self._enqueue_message(
-                user_id=bot_id,
-                user_name=bot_name,
-                message=message,
-                conv_id=conv_id,
-                is_me=True,     # 这是机器人发的
-                reply_to=in_reply_to  # 记录回复的目标
-            )
+            queue_item = {
+                "user_id": bot_id,
+                "user_name": bot_name,
+                "content": message,
+                "conv_id": conv_id,
+                "created_at": time.time(),
+                "is_direct": False,  # 这不是对机器人的直接交互
+                "is_me": True,     # 这是机器人发的
+                "metadata": metadata
+            }
             
+            message_id = await self.storage.add_to_queue(queue_item)
             logging.info(f"机器人回复已加入队列: {message[:30]}...")
             return message_id
         except Exception as e:
