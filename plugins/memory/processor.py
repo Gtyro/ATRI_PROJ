@@ -116,8 +116,41 @@ class MemoryProcessor:
             
             timestamp = datetime.fromtimestamp(msg.get("timestamp", time.time()))
             formatted_time = timestamp.strftime("%Y-%m-%d %H:%M") # 只保留到分钟
-            # 在消息格式中添加编号 [编号] [时间] {用户}：内容
-            formatted_messages.append(f"[{msg_id}] [{formatted_time}] {msg['user_name']}: {msg['content']}")
+            
+            # 消息格式添加更多标注
+            is_tome = msg.get("is_tome", False)  # 是否是发给机器人的
+            is_me = msg.get("is_me", False)      # 是否是机器人发的
+            user_name = msg.get("user_name", "未知用户")
+            
+            # 获取回复信息
+            metadata_str = msg.get("metadata", "{}")
+            if isinstance(metadata_str, str):
+                try:
+                    metadata = json.loads(metadata_str)
+                except:
+                    metadata = {}
+            else:
+                metadata = metadata_str
+                
+            reply_to = metadata.get("reply_to", "")
+            
+            # 构建消息前缀
+            prefix = f"[{msg_id}] [{formatted_time}] "
+            
+            # 添加用户标识
+            if is_me:
+                prefix += f"{user_name}(机器人)"
+            else:
+                prefix += f"{user_name}"
+                
+            # 添加回复标识
+            if reply_to:
+                prefix += f"对{reply_to}"
+            elif is_tome:
+                prefix += "对机器人"
+                
+            # 最终格式：[编号] [时间] {用户}[对{用户}]：内容
+            formatted_messages.append(f"{prefix}: {msg['content']}")
             message_times.append(timestamp)
         
         conversation_text = "\n".join(formatted_messages)

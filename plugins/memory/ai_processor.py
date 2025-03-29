@@ -224,7 +224,7 @@ class AIProcessor:
         分析群聊消息并提取以下结构化信息。需要区分已完结和未完结的话题：
         
         1. 已完结话题：时间较早、讨论告一段落的话题。对这类话题，提取详细信息。
-        2. 未完结话题：最近正在讨论、尚未结束的话题。对这类话题，仅返回相关消息编号。
+        2. 未完结话题：最近正在讨论、尚未结束的话题。对这类话题，返回相关消息编号并评估机器人参与必要性。
         
         消息格式：[编号] [时间] {用户}：内容
         
@@ -237,14 +237,16 @@ class AIProcessor:
               "entities": ["实体1", "对象2", "概念3"],
               "start_time": "YYYY-MM-DD HH:mm",
               "end_time": "YYYY-MM-DD HH:mm",
-              "continuation_probability": 0.1, // 话题延续可能性，已完结话题应低于0.3
               "message_ids": [1, 2, 3, 4] // 相关消息的编号
             }
           ],
           "ongoing_topics": [
             {
               "topic": "未完结话题名称",
-              "message_ids": [8, 9, 10] // 相关消息的编号
+              "entities": ["相关实体1", "相关实体2"], // 捕获未完结话题的相关实体
+              "message_ids": [8, 9, 10], // 相关消息的编号
+              "continuation_probability": 0.7, // 机器人应该参与讨论的概率 (0.0-1.0)
+              "last_message_id": 10 // 最后一条相关消息的编号，用于追踪会话最新进展
             }
           ]
         }
@@ -252,11 +254,15 @@ class AIProcessor:
         判断已完结话题标准：
         1. 最后一条相关消息已经过去较长时间（与最新消息相比）
         2. 话题已有明确结论或自然终止
-        3. 话题延续可能性较低
-
+        
+        未完结话题的continuation_probability评估标准：
+        1. 高概率 (0.7-1.0): 话题急需机器人解答/参与；存在直接提问；话题与机器人专长相关
+        2. 中等概率 (0.3-0.7): 话题可能受益于机器人参与；存在间接提问；讨论陷入停滞
+        3. 低概率 (0.0-0.3): 人类交流顺畅；无需干预；话题即将自然结束
+        
         注意：
         - 每条消息可能属于多个话题
-        - 未完结话题无需提供详细信息，仅需话题名称和相关消息编号
+        - 未完结话题无需提供详细总结，但需要捕获相关实体和评估机器人参与必要性
         - 确保每个话题至少关联一条消息
 
         群聊消息:
@@ -366,21 +372,29 @@ class AIProcessor:
         # 确保message_ids字段存在
         topic.setdefault("message_ids", [])
         
+        # 确保实体列表字段存在
+        topic.setdefault("entities", [])
+        
+        # 如果有话题名称但没有实体，添加话题名为实体
+        if topic["topic"] and topic["topic"] != "未命名话题" and not topic["entities"]:
+            topic["entities"].append(topic["topic"])
+        
         if is_completed:
             # 已完结话题需要完整的字段
             topic.setdefault("summary", "")
-            topic.setdefault("entities", [])
             topic.setdefault("start_time", "")
             topic.setdefault("end_time", "")
-            topic.setdefault("continuation_probability", 0.1)  # 已完结话题延续概率较低
         else:
-            # 未完结话题只需要基本字段
+            # 未完结话题特有字段
+            topic.setdefault("continuation_probability", 0.3)  # 默认为中低概率
+            if "message_ids" in topic and topic["message_ids"]:
+                # 如果有消息ID，尝试设置最后一条消息ID
+                topic.setdefault("last_message_id", topic["message_ids"][-1])
+            else:
+                topic.setdefault("last_message_id", 0)
+            
+            # 未完结话题的基本字段
             topic.setdefault("summary", "（未完结话题）")
-            topic.setdefault("entities", [])
-            # 如果有话题名称，添加为实体
-            if topic["topic"] and topic["topic"] != "未命名话题" and not topic["entities"]:
-                topic["entities"].append(topic["topic"])
-            topic.setdefault("continuation_probability", 0.8)  # 未完结话题延续概率较高
         
         # 确保status字段存在
         topic.setdefault("status", "completed" if is_completed else "ongoing")

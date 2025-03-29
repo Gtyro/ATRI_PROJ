@@ -88,6 +88,33 @@ class MemorySystem:
         )
         
         logging.info("记忆系统初始化完成")
+        
+    def register_auto_reply_callback(self, callback):
+        """注册自动回复回调函数
+        
+        当系统检测到需要自动回复的未完结话题时，将调用此回调函数。
+        
+        Args:
+            callback: 回调函数，需要接收两个参数：(group_id, topic_data)
+                      topic_data包含话题信息和建议回复内容
+        """
+        if not hasattr(self, 'message_queue'):
+            raise RuntimeError("请先调用initialize()初始化记忆系统")
+            
+        self.message_queue.register_reply_callback(callback)
+        logging.info("已注册自动回复回调函数")
+        
+    def set_auto_reply_threshold(self, threshold: float):
+        """设置自动回复阈值
+        
+        Args:
+            threshold: 阈值 (0.0-1.0)，当话题的continuation_probability大于此值时可能触发自动回复
+        """
+        if not hasattr(self, 'message_queue'):
+            raise RuntimeError("请先调用initialize()初始化记忆系统")
+            
+        self.message_queue.auto_reply_threshold = float(threshold)
+        logging.info(f"自动回复阈值已设为: {threshold}")
     
     async def close(self):
         """关闭记忆系统并清理资源"""
@@ -133,19 +160,19 @@ class MemorySystem:
             
         return await self.message_queue.add_message(user_id, user_name, message, context, is_priority, is_tome)
     
-    async def process_queue(self, max_items: int = None) -> int:
+    async def process_queue(self, max_items_per_group: int = None) -> int:
         """处理消息队列
         
         Args:
-            max_items: 最大处理条数，默认使用配置值
+            max_items_per_group: 每个群组最大处理条数，默认使用配置值
             
         Returns:
             处理的消息数量
         """
-        if max_items is None:
-            max_items = self.config["batch_size"]
+        if max_items_per_group is None:
+            max_items_per_group = self.config["batch_size"]
             
-        return await self.message_queue.process_queue(max_items)
+        return await self.message_queue.process_queue(max_items_per_group)
     
     async def retrieve_related_memories(self, query: str, user_id: str = None, limit: int = 5) -> List[Dict]:
         """检索相关记忆"""
@@ -173,4 +200,19 @@ class MemorySystem:
             "stats": stats,
             "next_process_in": remaining,
             "batch_interval": self.config["batch_interval"]
-        } 
+        }
+    
+    async def generate_auto_reply(self, callback) -> None:
+        """配置并启用系统的自动回复功能
+        
+        Args:
+            callback: 回调函数，用于生成回复内容。接收(group_id, topic_data)参数，
+                    应返回字符串回复或None（不回复）
+        """
+        # 设置自动回复处理器
+        self.register_auto_reply_callback(callback)
+        
+        # 默认设置较低的阈值，使系统谨慎回复
+        self.set_auto_reply_threshold(0.6)
+        
+        logging.info("自动回复功能已激活") 

@@ -83,11 +83,13 @@ class MessageQueueItem(Model):
     user_id = fields.CharField(max_length=36)
     user_name = fields.CharField(max_length=36)
     content = fields.TextField()
-    is_tome = fields.BooleanField(default=False)
+    is_tome = fields.BooleanField(default=False)  # 消息是否是发给机器人的
+    is_me = fields.BooleanField(default=False)    # 消息是否是机器人发的
     context = fields.CharField(max_length=100, null=True)
     group_id = fields.CharField(max_length=36, null=True)
     created_at = fields.FloatField(index=True)
     processed = fields.BooleanField(default=False)
+    metadata = fields.TextField(default="{}")  # 存储额外元数据，如回复关系等
 
     class Meta:
         table = "message_queue"
@@ -302,6 +304,8 @@ class StorageManager:
                 created_at=queue_item.get("created_at", time.time()),
                 processed=queue_item.get("processed", False),
                 is_tome=queue_item.get("is_tome", False),
+                is_me=queue_item.get("is_me", False),
+                metadata=json.dumps(queue_item.get("metadata", {}), ensure_ascii=False)
             )
             
             return item_id
@@ -326,6 +330,7 @@ class StorageManager:
                     "group_id": item.group_id,
                     "created_at": item.created_at,
                     "is_tome": item.is_tome,
+                    "is_me": item.is_me,
                 }
                 for item in items
             ]
@@ -333,21 +338,22 @@ class StorageManager:
             logging.error(f"获取队列项失败: {e}")
             return []
     
-    async def get_group_queue_items(self, group_id: str) -> List[Dict]:
+    async def get_group_queue_items(self, group_id: str, limit: int = 100) -> List[Dict]:
         """获取特定群组的队列消息
         
         Args:
             group_id: 群组ID或用户ID
+            limit: 最大返回条数
             
         Returns:
             该群组/用户的队列消息列表
         """
         try:
-            # 获取特定群组的消息，按创建时间排序
+            # 获取特定群组的消息，按创建时间排序，限制数量
             items = await MessageQueueItem.filter(
                 processed=False, 
                 group_id=group_id
-            ).order_by("created_at")
+            ).order_by("created_at").limit(limit)
             
             # 转换为字典列表
             return [
@@ -360,6 +366,7 @@ class StorageManager:
                     "group_id": item.group_id,
                     "created_at": item.created_at,
                     "is_tome": item.is_tome,
+                    "is_me": item.is_me,
                 }
                 for item in items
             ]
@@ -616,3 +623,60 @@ class StorageManager:
         except Exception as e:
             logging.error(f"添加会话话题失败: {e}")
             raise
+
+    async def get_message_by_seq_id(self, group_id: str, seq_id: int) -> Dict:
+        """根据消息序号ID获取消息内容
+        
+        Args:
+            group_id: 群组ID
+            seq_id: 序号ID（内部使用的顺序ID）
+            
+        Returns:
+            消息信息字典，如果未找到则返回空字典
+        """
+        try:
+            # 获取指定群组的所有消息 - 包括未处理和已处理消息
+            # 这确保即使部分消息被删除，序号仍然有效（基于创建时间排序）
+            messages = await MessageQueueItem.filter(
+                group_id=group_id
+            ).order_by('created_at').limit(500).values()
+            
+            # 确保序号ID有效
+            if 1 <= seq_id <= len(messages):
+                # 消息序号是基于1的索引，而列表是基于0的索引
+                message = messages[seq_id - 1]
+                
+                # 处理metadata
+                if 'metadata' in message and isinstance(message['metadata'], str):
+                    try:
+                        message['metadata'] = json.loads(message['metadata'])
+                    except:
+                        message['metadata'] = {}
+                
+                return message
+            else:
+                logging.warning(f"无效的消息序号ID: {seq_id}，群组 {group_id} 中只有 {len(messages)} 条消息")
+                return {}
+        except Exception as e:
+            logging.error(f"获取消息内容失败: {e}")
+            return {}
+
+    async def get_distinct_group_ids(self) -> List[str]:
+        """获取队列中所有不同的群组ID
+        
+        Returns:
+            不同群组ID的列表
+        """
+        try:
+            # 查询所有未处理消息的不同群组ID
+            query = "SELECT DISTINCT group_id FROM message_queue WHERE processed = 0"
+            conn = Tortoise.get_connection("default")
+            results = await conn.execute_query_dict(query)
+            
+            # 提取群组ID
+            group_ids = [item["group_id"] for item in results if item["group_id"]]
+            
+            return group_ids
+        except Exception as e:
+            logging.error(f"获取不同群组ID失败: {e}")
+            return []
