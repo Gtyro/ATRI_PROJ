@@ -134,7 +134,7 @@ class MemorySystem:
             except Exception as e:
                 logging.error(f"加载配置文件失败: {e}")
     
-    async def process_message(self, user_id: str, user_name: str, message: str, context: str = "chat", 
+    async def process_message(self, user_id: str, user_name: str, message: str, context: str, 
                             is_priority: bool = False, is_tome: bool = False) -> Optional[str]:
         """处理新消息并加入队列，如果是优先级消息则立即处理该群消息
         

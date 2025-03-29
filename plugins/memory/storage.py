@@ -293,6 +293,11 @@ class StorageManager:
             if len(queue_item["content"]) > 200:
                 queue_item["content"] = queue_item["content"][:100] + "..." + queue_item["content"][-100:]
             
+            # 将is_tome标志添加到metadata
+            metadata = queue_item.get("metadata", {})
+            if "is_tome" in queue_item:
+                metadata["is_tome"] = queue_item["is_tome"]
+            
             # 创建队列项
             await MessageQueueItem.create(
                 id=item_id,
@@ -305,7 +310,7 @@ class StorageManager:
                 processed=queue_item.get("processed", False),
                 is_tome=queue_item.get("is_tome", False),
                 is_me=queue_item.get("is_me", False),
-                metadata=json.dumps(queue_item.get("metadata", {}), ensure_ascii=False)
+                metadata=json.dumps(metadata, ensure_ascii=False)
             )
             
             return item_id

@@ -53,12 +53,11 @@ class MessageQueue:
         
         Args:
             group_id: 群组ID
-            topic: 话题数据，包含continuation_probability和相关实体
+            topic: 话题数据
             
         Returns:
             是否成功触发回复
         """
-        # 如果没有注册回调，无法处理
         if not self.reply_callback:
             return False
             
@@ -273,11 +272,14 @@ class MessageQueue:
             for idx, item in enumerate(message_items, 1):
                 # 为消息添加序号ID（仅在内部使用）
                 item["seq_id"] = idx
+                # 检查是否有直接交互标志
+                is_tome = item.get("is_tome", False)
                 group_data.append({
                     "user_id": item["user_id"],
                     "user_name": item["user_name"],
                     "content": item["content"],
-                    "timestamp": item.get("created_at", time.time())
+                    "timestamp": item.get("created_at", time.time()),
+                    "is_tome": is_tome
                 })
                 
             # 批量处理群组数据
@@ -291,40 +293,45 @@ class MessageQueue:
             completed_message_ids = set()
             ongoing_message_ids = set()
             
-            # 将话题记忆保存到数据库并更新实体关联
+            # 保存话题记忆
             for topic in group_topics:
-                topic_status = topic.get("status", "completed")  # 默认为已完结
-                topic_message_ids = topic.get("message_ids", [])
+                is_concluded = topic.get("is_concluded", True)
+                topic_id = topic.get("id")
                 
-                # 根据话题状态处理
-                if topic_status == "completed":
-                    # 已完结话题：保存到数据库并跟踪消息ID
-                    topic_id = await self.storage.add_conversation_topic(context, topic)
-                    logging.debug(f"已保存完结话题: {topic.get('topic')}，ID: {topic_id}")
-                    
-                    # 将该话题关联的消息ID添加到已完结集合
-                    completed_message_ids.update(topic_message_ids)
+                # 记录消息ID
+                message_ids = topic.get("message_ids", [])
+                
+                # 检查话题是否包含直接交互的消息
+                is_tome_topic = any(
+                    message_items[msg_id-1].get("is_tome", False) 
+                    for msg_id in message_ids 
+                    if 1 <= msg_id <= len(message_items)
+                )
+                
+                # 向话题添加直接交互的标志
+                topic["is_tome"] = is_tome_topic
+                
+                if not is_concluded:
+                    # 未完结话题，需要保留相关消息ID
+                    for msg_id in message_ids:
+                        ongoing_message_ids.add(msg_id)
+                        
+                    # 计算自动回复概率
+                    await self.trigger_auto_reply(group_id, topic)
                 else:
-                    # 未完结话题：不保存，但跟踪消息ID
-                    logging.debug(f"识别到未完结话题: {topic.get('topic')}")
-                    ongoing_message_ids.update(topic_message_ids)
-                    
-                    # 尝试自动回复未完结话题
-                    if self.reply_callback:
-                        # 判断此话题是否需要机器人回复
-                        await self.trigger_auto_reply(group_id, topic)
+                    # 已完结话题，可以删除消息
+                    for msg_id in message_ids:
+                        if msg_id not in ongoing_message_ids:  # 避免重复添加到不同集合
+                            completed_message_ids.add(msg_id)
+                            
+                # 保存话题
+                await self.storage.add_conversation_topic(context, topic)
+                
+            # 对集合排序，便于日志打印和调试
+            completed_ids_list = sorted(list(completed_message_ids))
+            ongoing_ids_list = sorted(list(ongoing_message_ids))
             
-            # 消息可能同时属于已完结和未完结话题，需要从已完结中排除未完结的
-            # 最终要删除的消息ID = 已完结消息 - 未完结消息
-            final_completed_ids = completed_message_ids - ongoing_message_ids
-            
-            # 转换为列表
-            completed_ids_list = list(final_completed_ids)
-            ongoing_ids_list = list(ongoing_message_ids)
-            
-            # 记录统计信息
-            logging.info(f"群组 {group_id} 批量处理完成:")
-            logging.info(f"- 总消息数: {len(message_items)}")
+            logging.info(f"话题处理结果:")
             logging.info(f"- 已完结话题消息: {len(completed_ids_list)}")
             logging.info(f"- 未完结话题消息: {len(ongoing_ids_list)}")
             

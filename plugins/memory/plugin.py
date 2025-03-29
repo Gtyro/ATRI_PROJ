@@ -140,6 +140,13 @@ async def memory_callback(group_id: str, topic_data: dict) -> str:
         messages = topic_data.get("messages", [])
         related_users = topic_data.get("related_users", [])
         last_user_id = topic_data.get("last_user_id")
+        is_tome = topic_data.get("is_tome", False)  # 是否为直接@机器人的话题
+        
+        # 如果是直接@机器人的话题，不进行自动回复
+        # 这些话题会由handle_sync_reply处理
+        if is_tome:
+            logging.info(f"话题 '{topic_name}' 是直接@机器人的对话，跳过自动回复")
+            return None
         
         logging.info(f"生成对话题 '{topic_name}' 的自动回复，实体: {entities}，相关用户: {related_users}")
         
@@ -249,12 +256,14 @@ async def record_message(bot: Bot, event: Event, state: T_State, uname: str = Us
     # 保存最近的bot和事件类型，用于后续自动回复
     _latest_bots[context] = (bot, is_group)
     
-    # 判断消息优先级
+    # 判断消息优先级和直接交互
     is_priority = False
+    is_tome = False  # 是否为直接交互（私聊或@机器人）
     
-    # 私聊消息或@机器人的消息立即处理
+    # 私聊消息或@机器人的消息立即处理，并标记为直接交互
     if not is_group or event.is_tome():
         is_priority = True
+        is_tome = True
     
     # 异步处理记忆
     try:
@@ -268,7 +277,7 @@ async def record_message(bot: Bot, event: Event, state: T_State, uname: str = Us
         )
         
         # 如果是@或私聊，使用同步回复
-        if (is_group and event.is_tome()) or not is_group:
+        if is_tome:
             await handle_sync_reply(bot, event, message, is_group)
     except Exception as e:
         logging.error(f"记忆处理异常: {e}")
