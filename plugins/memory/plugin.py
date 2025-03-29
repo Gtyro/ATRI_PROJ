@@ -187,7 +187,6 @@ async def handle_ai_reply(bot: Bot, event: Event, message: str, is_group: bool):
         return
         
     user_id = event.get_user_id()
-    user_name = event.get_user_name()
     
     # 只处理私聊消息或@机器人的群聊消息
     if not (isinstance(event, PrivateMessageEvent) or (is_group and event.is_tome())):

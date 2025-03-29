@@ -129,7 +129,7 @@ class MemorySystem:
             
         # 如果是优先消息，添加警告日志
         if is_priority:
-            logging.warning(f"正在使用优先处理单条消息: {user_id} - {message[:20]}... 这种方式不如批量处理高效")
+            logging.warning(f"正在使用优先处理: {user_id} - {message[:20]}... 这种方式不如批量处理高效")
             
         return await self.message_queue.add_message(user_id, user_name, message, context, is_priority, is_tome)
     

@@ -286,6 +286,10 @@ class StorageManager:
         try:
             # 准备数据
             item_id = queue_item.get("id") or str(uuid.uuid4())
+
+            # 对过长的内容只保留头尾
+            if len(queue_item["content"]) > 200:
+                queue_item["content"] = queue_item["content"][:100] + "..." + queue_item["content"][-100:]
             
             # 创建队列项
             await MessageQueueItem.create(
@@ -334,7 +338,6 @@ class StorageManager:
         
         Args:
             group_id: 群组ID或用户ID
-            limit: 最大获取条数
             
         Returns:
             该群组/用户的队列消息列表

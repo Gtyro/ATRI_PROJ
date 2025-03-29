@@ -102,18 +102,22 @@ class MemoryProcessor:
         # 确保消息按时间排序
         sorted_messages = sorted(messages, key=lambda x: x.get("timestamp", 0))
         
-        # # 如果消息少于2条，不进行会话分析（可能无法形成有效对话）
-        # if len(sorted_messages) < 2:
-        #     logging.debug(f"消息数量不足，跳过会话分析: {len(sorted_messages)}")
-        #     return []
-        
         # 准备提交给AI的消息格式
         formatted_messages = []
         message_times = []  # 记录所有消息的时间戳
-        for msg in sorted_messages:
+        message_map = {}    # 用于存储消息ID到原始消息的映射
+        
+        # 为每条消息分配一个简短的数字ID
+        for idx, msg in enumerate(sorted_messages, 1):
+            # 消息ID就是简单的序号
+            msg_id = idx
+            # 保存ID到原始消息的映射
+            message_map[msg_id] = msg
+            
             timestamp = datetime.fromtimestamp(msg.get("timestamp", time.time()))
             formatted_time = timestamp.strftime("%Y-%m-%d %H:%M") # 只保留到分钟
-            formatted_messages.append(f"[{formatted_time}] {msg['user_name']}: {msg['content']}")
+            # 在消息格式中添加编号 [编号] [时间] {用户}：内容
+            formatted_messages.append(f"[{msg_id}] [{formatted_time}] {msg['user_name']}: {msg['content']}")
             message_times.append(timestamp)
         
         conversation_text = "\n".join(formatted_messages)
@@ -144,7 +148,9 @@ class MemoryProcessor:
                 
                 # 确保实体列表存在且不为空
                 if not topic.get("entities"):
-                    logging.warning(f"话题缺少实体列表: {topic.get('topic')}")
+                    if topic.get("status") == "completed":
+                        logging.warning(f"已完结话题缺少实体列表: {topic.get('topic')}")
+                    
                     topic["entities"] = []
                     
                     # 尝试从话题名称提取至少一个实体
@@ -163,6 +169,10 @@ class MemoryProcessor:
                     "processed_by": "ai_processor",
                     "model": self.ai_processor.model
                 })
+                
+                # 记录消息ID (用于跟踪已处理的消息)
+                if "message_ids" not in topic:
+                    topic["message_ids"] = []
                 
                 processed_topics.append(topic)
                 

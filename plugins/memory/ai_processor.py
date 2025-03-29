@@ -214,30 +214,50 @@ class AIProcessor:
         """批量处理会话，提取话题和交互模式
         
         Args:
-            conversation_text: 格式化的会话文本
+            conversation_text: 格式化的会话文本，包含消息编号
             
         Returns:
             话题列表，每个话题包含主题、摘要、实体、时间范围等
         """
         # 会话处理提示模板 - 不使用直接的format，而是手动替换，避免花括号转义问题
         conversation_prompt = """
-        分析群聊消息并提取以下结构化信息。
-        - 话题情感倾向（positive/negative）
-        - 话题延续可能性（0.0-1.0）：根据对话结束时的情况，预测此话题在未来继续讨论的可能性
-
-        消息格式：[时间] {用户}：内容
-        返回要求：{
-        "topics": [
+        分析群聊消息并提取以下结构化信息。需要区分已完结和未完结的话题：
+        
+        1. 已完结话题：时间较早、讨论告一段落的话题。对这类话题，提取详细信息。
+        2. 未完结话题：最近正在讨论、尚未结束的话题。对这类话题，仅返回相关消息编号。
+        
+        消息格式：[编号] [时间] {用户}：内容
+        
+        返回结果格式：
+        {
+          "completed_topics": [
             {
-            "topic": "话题核心词",
-            "summary": "{用户A}讨论了X，{用户B}回应了Y",
-            "entities": ["实体1", "对象2", "概念3"], # 最少1个
-            "start_time": "YYYY-MM-DD HH:mm",
-            "end_time": "YYYY-MM-DD HH:mm",
-            "continuation_probability": 0.7  # 话题延续可能性，范围0.0-1.0
+              "topic": "已完结话题名称",
+              "summary": "{用户A}讨论了X，{用户B}回应了Y",
+              "entities": ["实体1", "对象2", "概念3"],
+              "start_time": "YYYY-MM-DD HH:mm",
+              "end_time": "YYYY-MM-DD HH:mm",
+              "continuation_probability": 0.1, // 话题延续可能性，已完结话题应低于0.3
+              "message_ids": [1, 2, 3, 4] // 相关消息的编号
             }
-        ]
+          ],
+          "ongoing_topics": [
+            {
+              "topic": "未完结话题名称",
+              "message_ids": [8, 9, 10] // 相关消息的编号
+            }
+          ]
         }
+        
+        判断已完结话题标准：
+        1. 最后一条相关消息已经过去较长时间（与最新消息相比）
+        2. 话题已有明确结论或自然终止
+        3. 话题延续可能性较低
+
+        注意：
+        - 每条消息可能属于多个话题
+        - 未完结话题无需提供详细信息，仅需话题名称和相关消息编号
+        - 确保每个话题至少关联一条消息
 
         群聊消息:
         CONVERSATION_PLACEHOLDER
@@ -284,32 +304,83 @@ class AIProcessor:
             # 解析JSON对象
             data = json.loads(content)
             
-            # 如果是对象且包含topics字段
-            if isinstance(data, dict) and "topics" in data:
-                logging.info(f"成功解析为JSON对象，包含 {len(data['topics'])} 个话题")
-                topics = data["topics"]
-                # 确保每个话题有必要字段
-                for topic in topics:
-                    self._ensure_topic_fields(topic)
-                return topics
+            result = []
             
-            # 如果得到的JSON不符合预期格式
-            logging.warning(f"API返回的JSON格式不符合预期: {type(data)}")
-            return []
+            # 处理已完结的话题
+            if isinstance(data, dict) and "completed_topics" in data:
+                completed_topics = data["completed_topics"]
+                logging.info(f"成功解析为JSON对象，包含 {len(completed_topics)} 个已完结话题")
+                
+                for topic in completed_topics:
+                    # 确保每个话题有必要字段
+                    self._ensure_topic_fields(topic, is_completed=True)
+                    # 标记为已完结话题
+                    topic["status"] = "completed"
+                    result.append(topic)
+            
+            # 处理未完结的话题
+            if isinstance(data, dict) and "ongoing_topics" in data:
+                ongoing_topics = data["ongoing_topics"]
+                logging.info(f"成功解析为JSON对象，包含 {len(ongoing_topics)} 个未完结话题")
+                
+                for topic in ongoing_topics:
+                    # 确保每个话题有必要字段
+                    self._ensure_topic_fields(topic, is_completed=False)
+                    # 标记为未完结话题
+                    topic["status"] = "ongoing"
+                    result.append(topic)
+            
+            # 兼容旧版格式
+            elif isinstance(data, dict) and "topics" in data:
+                topics = data["topics"]
+                logging.info(f"使用兼容模式，解析旧版格式，包含 {len(topics)} 个话题")
+                for topic in topics:
+                    self._ensure_topic_fields(topic, is_completed=True)
+                    topic["status"] = "completed"  # 旧版本都视为已完结
+                    # 如果没有message_ids，设置为空列表
+                    if "message_ids" not in topic:
+                        topic["message_ids"] = []
+                    result.append(topic)
+            
+            if not result:
+                # 如果得到的JSON不符合预期格式
+                logging.warning(f"API返回的JSON格式不符合预期: {type(data)}")
+                
+            return result
                 
         except Exception as e:
             logging.error(f"解析会话响应失败: {e}")
             logging.info(f"原始响应: {response}")
             return []
             
-    def _ensure_topic_fields(self, topic: Dict) -> None:
-        """确保话题对象包含所有必要字段"""
+    def _ensure_topic_fields(self, topic: Dict, is_completed: bool) -> None:
+        """确保话题对象包含所有必要字段
+        
+        Args:
+            topic: 话题字典对象
+            is_completed: 是否为已完结话题
+        """
         # 确保基本字段存在
         topic.setdefault("topic", "未命名话题")
-        topic.setdefault("summary", "")
-        topic.setdefault("entities", [])
-        topic.setdefault("start_time", "")
-        topic.setdefault("end_time", "")
-        # 确保continuation_probability字段存在
-        if "continuation_probability" not in topic:
-            topic["continuation_probability"] = 0.5
+        
+        # 确保message_ids字段存在
+        topic.setdefault("message_ids", [])
+        
+        if is_completed:
+            # 已完结话题需要完整的字段
+            topic.setdefault("summary", "")
+            topic.setdefault("entities", [])
+            topic.setdefault("start_time", "")
+            topic.setdefault("end_time", "")
+            topic.setdefault("continuation_probability", 0.1)  # 已完结话题延续概率较低
+        else:
+            # 未完结话题只需要基本字段
+            topic.setdefault("summary", "（未完结话题）")
+            topic.setdefault("entities", [])
+            # 如果有话题名称，添加为实体
+            if topic["topic"] and topic["topic"] != "未命名话题" and not topic["entities"]:
+                topic["entities"].append(topic["topic"])
+            topic.setdefault("continuation_probability", 0.8)  # 未完结话题延续概率较高
+        
+        # 确保status字段存在
+        topic.setdefault("status", "completed" if is_completed else "ongoing")
