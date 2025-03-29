@@ -12,6 +12,7 @@ import time
 import logging
 import uuid
 from typing import Dict, List, Any, Optional, Union, Tuple
+from datetime import datetime
 
 from tortoise import Tortoise, fields, run_async
 from tortoise.models import Model
@@ -340,22 +341,25 @@ class StorageManager:
             logging.error(f"获取队列项失败: {e}")
             return []
 
-    async def get_conv_queue_items(self, conv_id: str, limit: int = 100) -> List[Dict]:
+    async def get_conv_queue_items(self, conv_id: str, limit: int = 100, include_processed: bool = False) -> List[Dict]:
         """获取特定对话的队列消息
         
         Args:
             conv_id: 对话ID
             limit: 最大返回条数
+            include_processed: 是否包含已处理的消息
             
         Returns:
             该对话的队列消息列表
         """
         try:
+            # 构建过滤条件
+            query = Q(conv_id=conv_id)
+            if not include_processed:
+                query &= Q(processed=False)
+                
             # 获取特定对话的消息，按创建时间排序，限制数量
-            items = await MessageQueueItem.filter(
-                processed=False, 
-                conv_id=conv_id
-            ).order_by("created_at").limit(limit)
+            items = await MessageQueueItem.filter(query).order_by("created_at").limit(limit)
             
             # 转换为字典列表
             return [
@@ -368,6 +372,7 @@ class StorageManager:
                     "created_at": item.created_at,
                     "is_tome": item.is_tome,
                     "is_me": item.is_me,
+                    "processed": item.processed,
                 }
                 for item in items
             ]
@@ -375,8 +380,84 @@ class StorageManager:
             logging.error(f"获取对话队列项失败: {e}")
             return []
     
+    async def mark_as_processed(self, item_ids: List[str]) -> int:
+        """将消息标记为已处理（而不是删除）
+        
+        Args:
+            item_ids: 要标记的消息ID列表
+            
+        Returns:
+            成功标记的消息数量
+        """
+        if not item_ids:
+            return 0
+            
+        try:
+            # 使用 id__in 更高效地批量更新
+            updated_count = await MessageQueueItem.filter(id__in=item_ids).update(processed=True)
+            logging.debug(f"批量标记队列消息为已处理，共标记 {updated_count} 条")
+            return updated_count
+        except Exception as e:
+            logging.error(f"批量标记队列项为已处理失败: {e}")
+            return 0
+            
+    async def remove_old_processed_messages(self, conv_id: str, keep_count: int = 20) -> int:
+        """删除已处理的旧消息，保留最新的一定数量
+        
+        Args:
+            conv_id: 对话ID
+            keep_count: 保留的最新消息数量（不限于已处理消息）
+            
+        Returns:
+            删除的消息数量
+        """
+        try:
+            # 获取该对话所有消息，按时间倒序排序，找出时间截止点
+            recent_messages = await MessageQueueItem.filter(
+                conv_id=conv_id
+            ).order_by("-created_at").limit(keep_count).values("id", "created_at", "processed")
+            
+            if not recent_messages:
+                return 0  # 没有消息，不需要删除
+                
+            # 如果消息数少于保留数，不需要删除
+            if len(recent_messages) < keep_count:
+                logging.debug(f"对话 {conv_id} 的消息总数少于 {keep_count}，不需要删除")
+                return 0
+            
+            # 获取时间截止点（第keep_count条消息的时间戳）
+            cutoff_time = recent_messages[-1]["created_at"]
+            
+            # 删除早于截止时间且已处理的消息
+            deleted_count = await MessageQueueItem.filter(
+                conv_id=conv_id,
+                processed=True,
+                created_at__lt=cutoff_time
+            ).delete()
+            
+            if deleted_count > 0:
+                logging.info(f"为对话 {conv_id} 删除了 {deleted_count} 条早于 {datetime.fromtimestamp(cutoff_time).strftime('%Y-%m-%d %H:%M:%S')} 的已处理消息")
+            
+            return deleted_count
+        except Exception as e:
+            logging.error(f"删除旧的已处理消息失败: {e}")
+            return 0
+
+    async def get_queue_stats(self) -> Dict[str, int]:
+        """获取队列统计信息"""
+        try:
+            # 获取总数
+            total = await MessageQueueItem.filter(processed=False).count()
+            
+            return {
+                "total": total
+            }
+        except Exception as e:
+            logging.error(f"获取队列统计失败: {e}")
+            return {"total": 0}
+            
     async def remove_from_queue(self, item_ids: List[str]) -> int:
-        """批量从队列中移除消息
+        """批量从队列中移除消息（完全删除）
         
         Args:
             item_ids: 要删除的消息ID列表
@@ -395,20 +476,7 @@ class StorageManager:
         except Exception as e:
             logging.error(f"批量移除队列项失败: {e}")
             return 0
-    
-    async def get_queue_stats(self) -> Dict[str, int]:
-        """获取队列统计信息"""
-        try:
-            # 获取总数
-            total = await MessageQueueItem.filter(processed=False).count()
-            
-            return {
-                "total": total
-            }
-        except Exception as e:
-            logging.error(f"获取队列统计失败: {e}")
-            return {"total": 0}
-        
+
     async def _update_cooccurrences(self, entities: List[str], conv_id: str):
         """根据Hebbian规则更新共现关系（纯数据库方案）"""
         if not entities or len(entities) < 1:

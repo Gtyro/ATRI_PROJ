@@ -53,8 +53,9 @@ class MemorySystem:
             "access_boost": 0.1,
             "default_retention": 0.7,
             "batch_interval": batch_interval,
-            "batch_size": 50,  # 每次批处理的消息数量
-            "history_limit": 10  # 保留给AI回复的历史消息数量
+            "batch_size": 50,          # 每次批处理的消息数量
+            "history_limit": 10,       # 保留给AI回复的历史消息数量
+            "queue_history_size": 20   # 每个对话保留在队列中的历史消息数量
         }
         
         # 加载自定义配置
@@ -84,7 +85,8 @@ class MemorySystem:
         self.message_queue = MessageQueue(
             self.storage, 
             self.processor, 
-            batch_interval=self.config["batch_interval"]
+            batch_interval=self.config["batch_interval"],
+            queue_history_size=self.config["queue_history_size"]
         )
         
         logging.info("记忆系统初始化完成")

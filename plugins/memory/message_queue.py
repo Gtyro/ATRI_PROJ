@@ -18,17 +18,19 @@ class MessageQueue:
     """消息队列管理器"""
     
     def __init__(self, storage: StorageManager, processor: MemoryProcessor, 
-                 batch_interval: int = 3600):
+                 batch_interval: int = 3600, queue_history_size: int = 20):
         """初始化消息队列
         
         Args:
             storage: 存储管理器
             processor: 处理器
             batch_interval: 定时处理间隔（秒），默认1小时
+            queue_history_size: 每个对话保留的历史消息数量，默认20条
         """
         self.storage = storage
         self.processor = processor
         self.batch_interval = batch_interval
+        self.queue_history_size = queue_history_size
         self.next_process_time = time.time() + batch_interval
         self.processing_lock = asyncio.Lock()
         
@@ -210,8 +212,8 @@ class MessageQueue:
             处理的消息数量
         """
         try:
-            # 获取该群组/用户在队列中的消息
-            group_items = await self.storage.get_conv_queue_items(conv_id)
+            # 获取该对话在队列中的未处理消息
+            group_items = await self.storage.get_conv_queue_items(conv_id, include_processed=False)
             if not group_items:
                 logging.info(f"对话 {conv_id} 队列为空，无需处理")
                 return 0
@@ -224,14 +226,17 @@ class MessageQueue:
                 # 构建序号ID到数据库ID的映射
                 seq_to_db_id = {item.get("seq_id", 0): item["id"] for item in group_items}
                 
-                # 收集要删除的消息数据库ID
+                # 收集要标记为已处理的消息数据库ID
                 completed_db_ids = [seq_to_db_id.get(seq_id) for seq_id in completed_ids if seq_id in seq_to_db_id]
                 
-                # 只删除已完结话题的消息
+                # 只标记已完结话题的消息为已处理
                 if completed_db_ids:
-                    deleted_count = await self.storage.remove_from_queue(completed_db_ids)
-                    if deleted_count != len(completed_db_ids):
-                        logging.warning(f"队列消息删除不完全，应删除{len(completed_db_ids)}条，实际删除{deleted_count}条")
+                    marked_count = await self.storage.mark_as_processed(completed_db_ids)
+                    if marked_count != len(completed_db_ids):
+                        logging.warning(f"队列消息标记不完全，应标记{len(completed_db_ids)}条，实际标记{marked_count}条")
+                
+                # 清理旧的已处理消息，保留最新的queue_history_size条
+                await self.storage.remove_old_processed_messages(conv_id, self.queue_history_size)
                 
                 # 计算已处理的总消息数
                 processed_count = len(completed_ids)

@@ -299,9 +299,13 @@ async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
     try:
         # 从消息队列获取最近的消息（当前消息已经在process_message中添加到队列中）
         history = []
-        # 获取对话消息队列
-        group_messages = await memory_system.storage.get_conv_queue_items(conv_id, limit=10)
-        history = [{"role": "user", "content": f"[{item['user_name']}]: {item['content']}"} for item in group_messages]
+        # 获取对话消息队列，包括已处理消息以提供完整上下文
+        conv_messages = await memory_system.storage.get_conv_queue_items(
+            conv_id, 
+            limit=memory_system.config["history_limit"],
+            include_processed=True
+        )
+        history = [{"role": "user", "content": f"[{item['user_name']}]: {item['content']}"} for item in conv_messages]
         
         # 生成回复
         logging.info(f"正在生成对 {user_id} 的回复，历史消息数: {len(history)}")
