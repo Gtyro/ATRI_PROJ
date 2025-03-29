@@ -107,9 +107,11 @@ class MessageQueue:
                 # 将队列消息批量提交给处理器
                 await self._process_group_batch(group_id, group_items)
                 
-                # 处理完成后，移除所有已处理的消息
-                for item in group_items:
-                    await self.storage.remove_from_queue(item["id"])
+                # 批量删除已处理的消息
+                item_ids = [item["id"] for item in group_items]
+                deleted_count = await self.storage.remove_from_queue(item_ids)
+                if deleted_count != len(item_ids):
+                    logging.warning(f"队列消息删除不完全，应删除{len(item_ids)}条，实际删除{deleted_count}条")
                     
             logging.info(f"群组/用户 {group_id} 队列处理完成，共处理 {len(group_items)} 条消息")
             return len(group_items)
@@ -187,14 +189,23 @@ class MessageQueue:
                         group_messages[group_id] = []
                     group_messages[group_id].append(item)
                 
+                # 收集所有要删除的消息ID
+                all_item_ids = []
+                
                 # 对每个群组批量处理消息
                 for group_id, items in group_messages.items():
                     if items:
                         await self._process_group_batch(group_id, items)
-                        # 处理完成后移除消息
-                        for item in items:
-                            await self.storage.remove_from_queue(item["id"])
-                            processed_count += 1
+                        # 收集所有要删除的消息ID
+                        item_ids = [item["id"] for item in items]
+                        all_item_ids.extend(item_ids)
+                        processed_count += len(items)
+                
+                # 批量删除所有已处理的消息
+                if all_item_ids:
+                    deleted_count = await self.storage.remove_from_queue(all_item_ids)
+                    if deleted_count != len(all_item_ids):
+                        logging.warning(f"队列消息批量删除不完全，应删除{len(all_item_ids)}条，实际删除{deleted_count}条")
                 
                 logging.info(f"队列处理完成，共处理 {processed_count} 条消息，涉及 {len(group_messages)} 个群组/用户")
                 

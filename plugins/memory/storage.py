@@ -364,14 +364,26 @@ class StorageManager:
             logging.error(f"获取群组队列项失败: {e}")
             return []
     
-    async def remove_from_queue(self, item_id: str) -> bool:
-        """从队列中移除消息"""
+    async def remove_from_queue(self, item_ids: List[str]) -> int:
+        """批量从队列中移除消息
+        
+        Args:
+            item_ids: 要删除的消息ID列表
+            
+        Returns:
+            成功删除的消息数量
+        """
+        if not item_ids:
+            return 0
+            
         try:
-            deleted_count = await MessageQueueItem.filter(id=item_id).delete()
-            return deleted_count > 0
+            # 使用 id__in 更高效地批量删除
+            deleted_count = await MessageQueueItem.filter(id__in=item_ids).delete()
+            logging.debug(f"批量删除队列消息成功，共删除 {deleted_count} 条")
+            return deleted_count
         except Exception as e:
-            logging.error(f"移除队列项失败: {e}")
-            return False
+            logging.error(f"批量移除队列项失败: {e}")
+            return 0
     
     async def get_queue_stats(self) -> Dict[str, int]:
         """获取队列统计信息"""
