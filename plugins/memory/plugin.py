@@ -233,7 +233,14 @@ async def shutdown_memory_system():
 # 消息处理器 - 记录所有接收到的消息
 message_recorder = on_message(priority=10)
 @message_recorder.handle()
-async def record_message(bot: Bot, event: Event, state: T_State, uname: str = UserName()):
+async def record_message(bot: Bot, event: Event, uname: str = UserName()):
+    '''
+    记录所有接收到的消息
+
+    bot: Bot 机器人实例,用于发送消息
+    event: Event 事件实例,用于获取消息信息
+    uname: str 用户昵称
+    '''
     # 如果记忆系统未启用，跳过处理
     if not MEMORY_SYSTEM_ENABLED:
         return
@@ -243,18 +250,18 @@ async def record_message(bot: Bot, event: Event, state: T_State, uname: str = Us
     
     # 忽略空消息
     if not message.strip():
+        logging.warning(f"收到空消息，跳过处理")
         return
     
     # 正确区分群聊和私聊
     is_group = isinstance(event, GroupMessageEvent)
-    session_type = "group" if is_group else "private"
+    conv_type = "group" if is_group else "private"
     
-    # 群ID或用户ID
-    group_id = event.group_id if is_group else user_id
-    context = f"{session_type}_{group_id}"
+    # 群组ID或用户ID
+    conv_id = f"{conv_type}_{event.group_id if is_group else user_id}"
     
     # 保存最近的bot和事件类型，用于后续自动回复
-    _latest_bots[context] = (bot, is_group)
+    _latest_bots[conv_id] = (bot, is_group)
     
     # 判断消息优先级和直接交互
     is_priority = False
@@ -272,18 +279,18 @@ async def record_message(bot: Bot, event: Event, state: T_State, uname: str = Us
             user_name=uname,
             message=message,
             is_tome=event.is_tome(),
-            context=context,
+            conv_id=conv_id,
             is_priority=is_priority
         )
         
         # 如果是@或私聊，使用同步回复
         if is_tome:
-            await handle_sync_reply(bot, event, message, is_group)
+            await handle_sync_reply(bot, event, conv_id)
     except Exception as e:
         logging.error(f"记忆处理异常: {e}")
 
 # 同步回复处理（替代原handle_ai_reply，用于直接回复@和私聊）
-async def handle_sync_reply(bot: Bot, event: Event, message: str, is_group: bool):
+async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
     """处理同步回复（直接回复@和私聊消息）"""
     # 如果AI处理器未初始化，跳过回复
     if not ai_processor:
@@ -293,32 +300,11 @@ async def handle_sync_reply(bot: Bot, event: Event, message: str, is_group: bool
     user_id = event.get_user_id()
     
     try:
-        # 获取上下文和历史记录
-        if is_group:
-            context = f"group_{event.group_id}"
-        else:
-            context = f"private_{user_id}"
-            
         # 从消息队列获取最近的消息（当前消息已经在process_message中添加到队列中）
         history = []
-        if is_group:
-            # 获取群消息队列
-            group_id = event.group_id
-            group_messages = await memory_system.storage.get_group_queue_items(group_id, limit=10)
-            history = [{"role": "user", "content": f"[{item['user_name']}]: {item['content']}"} for item in group_messages]
-        else:
-            # 获取私聊消息
-            private_messages = await memory_system.storage.get_group_queue_items(user_id, limit=10)
-            history = [{"role": "user" if item["user_id"] == user_id else "assistant", "content": item["content"]} for item in private_messages]
-            
-        # 当前消息已包含在消息队列中，不需要再次添加
-        # 如果没有消息，才需要添加（保险措施）
-        if not history:
-            logging.debug("没有消息，手动添加当前消息")
-            history.append({
-                "role": "user",
-                "content": message
-            })
+        # 获取对话消息队列
+        group_messages = await memory_system.storage.get_conv_queue_items(conv_id, limit=10)
+        history = [{"role": "user", "content": f"[{item['user_name']}]: {item['content']}"} for item in group_messages]
         
         # 生成回复
         logging.info(f"正在生成对 {user_id} 的回复，历史消息数: {len(history)}")
@@ -337,23 +323,15 @@ async def handle_sync_reply(bot: Bot, event: Event, message: str, is_group: bool
             await asyncio.sleep(sleep_time)
         
         # 记录回复到消息队列
-        bot_id = bot.self_id
-        bot_name = "机器人"
         await memory_system.message_queue.add_bot_message(
             message=reply_content,
-            context=context,
+            conv_id=conv_id,
             in_reply_to=user_id
         )
         logging.info(f"已回复并记录到消息队列")
         
     except Exception as e:
         logging.error(f"同步回复生成失败: {e}", exc_info=True)
-        # 回复错误信息
-        try:
-            if not is_group:
-                await bot.send(event, "抱歉，我暂时无法正常回复，可能是AI服务出现了问题。")
-        except Exception as send_error:
-            logging.error(f"发送错误提示也失败: {send_error}")
 
 # 处理自动回复生成的消息
 async def send_auto_reply(group_id: str, reply_content: str):
@@ -367,8 +345,8 @@ async def send_auto_reply(group_id: str, reply_content: str):
         logging.warning("自动回复内容为空，取消发送")
         return
         
-    context = f"group_{group_id}"
-    bot_info = _latest_bots.get(context)
+    conv_id = f"group_{group_id}"
+    bot_info = _latest_bots.get(conv_id)
     
     if not bot_info:
         logging.warning(f"未找到群组 {group_id} 的bot信息，无法发送自动回复")
@@ -412,7 +390,7 @@ async def send_auto_reply(group_id: str, reply_content: str):
         # 记录回复到消息队列，使其能够被后续处理记住
         await memory_system.message_queue.add_bot_message(
             message=reply_content,
-            context=context
+            conv_id=conv_id
         )
         
         logging.info(f"已完成自动回复发送，共 {send_count} 条片段")
@@ -426,7 +404,6 @@ async def handle_memory_stats(bot: Bot, event: Event, state: T_State):
     # 如果记忆系统未启用，返回错误信息
     if not MEMORY_SYSTEM_ENABLED:
         await memory_stats.finish("记忆系统未启用，请检查配置和日志")
-        return
         
     try:
         # 获取队列统计

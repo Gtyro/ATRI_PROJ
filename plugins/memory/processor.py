@@ -90,7 +90,7 @@ class MemoryProcessor:
         return default_api_base
     
     async def process_conversation(self, group_id: str, messages: List[Dict]) -> List[Dict]:
-        """处理一批会话消息，提取话题和交互模式
+        """处理一批对话消息，提取话题和交互模式
         
         Args:
             group_id: 群组ID
@@ -155,8 +155,8 @@ class MemoryProcessor:
         
         conversation_text = "\n".join(formatted_messages)
         
-        # 记录会话处理开始
-        logging.info(f"开始处理群组 {group_id} 的会话，共 {len(sorted_messages)} 条消息")
+        # 记录对话处理开始
+        logging.info(f"开始处理群组 {group_id} 的对话，共 {len(sorted_messages)} 条消息")
         
         try:
             # 获取AI处理结果
@@ -164,7 +164,7 @@ class MemoryProcessor:
             
             # 如果没有提取到任何话题，返回空列表
             if not topics:
-                logging.debug(f"未从会话中提取到话题: {group_id}")
+                logging.debug(f"未从对话中提取到话题: {group_id}")
                 return []
                 
             # 处理AI返回的结果
@@ -209,10 +209,10 @@ class MemoryProcessor:
                 
                 processed_topics.append(topic)
                 
-            logging.info(f"成功从会话提取话题: {len(processed_topics)} 个")
+            logging.info(f"成功从对话提取话题: {len(processed_topics)} 个")
             return processed_topics
         except Exception as e:
-            logging.error(f"会话批处理失败: {e}")
+            logging.error(f"对话批处理失败: {e}")
             return []
         
     def find_associations(self, memory_data: Dict) -> List[Dict]:

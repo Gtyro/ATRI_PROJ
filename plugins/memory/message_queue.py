@@ -123,8 +123,8 @@ class MessageQueue:
             # 如果回调返回了回复内容，添加到队列
             if isinstance(response, str) and response.strip():
                 # 将回复添加到消息队列
-                context = f"group_{group_id}"
-                await self.add_bot_message(response, context, last_user_id)
+                conv_id = f"group_{group_id}"
+                await self.add_bot_message(response, conv_id, last_user_id)
             
             # 添加到最近回复集合
             self.recent_replied_topics.add(topic_id)
@@ -139,24 +139,24 @@ class MessageQueue:
             return False
     
     async def add_message(self, user_id: str, user_name: str, message: str, 
-                          context: str, is_priority: bool = False, is_tome: bool = False) -> Optional[str]:
+                          conv_id: str, is_priority: bool = False, is_tome: bool = False) -> Optional[str]:
         """添加消息到队列, 如果是优先消息立即处理
         
         Args:
             user_id: 用户ID
             user_name: 用户昵称
             message: 消息内容
-            context: 上下文标识（如"group_123456"）
+            conv_id: 对话ID（如"group_123456"）
             is_priority: 是否为优先消息
             is_tome: 是否为@机器人消息
         Returns:
             如果是优先消息立即处理并返回记忆ID，否则返回None
         """
         # 提取分组信息（群组ID）
-        group_id = context.split('_')[1] if '_' in context else user_id
+        group_id = conv_id.split('_')[1] if '_' in conv_id else user_id
         
         # 消息先加入队列
-        message_id = await self._enqueue_message(user_id, user_name, message, context, group_id, is_tome)
+        message_id = await self._enqueue_message(user_id, user_name, message, conv_id, group_id, is_tome)
 
         # 优先消息处理
         if is_priority or is_tome:
@@ -169,7 +169,7 @@ class MessageQueue:
         return message_id
     
     async def _enqueue_message(self, user_id: str, user_name: str, message: str, 
-                              context: str, group_id: str, is_tome: bool = False, 
+                              conv_id: str, group_id: str, is_tome: bool = False, 
                               is_me: bool = False, reply_to: Optional[str] = None) -> None:
         """将消息加入队列
         
@@ -177,7 +177,7 @@ class MessageQueue:
             user_id: 用户ID
             user_name: 用户昵称
             message: 消息内容
-            context: 上下文标识
+            conv_id: 对话ID
             group_id: 群组ID
             is_tome: 是否发给机器人的消息
             is_me: 是否机器人发的消息
@@ -193,7 +193,7 @@ class MessageQueue:
                 "user_id": user_id,
                 "user_name": user_name,
                 "content": message,
-                "context": context,
+                "conv_id": conv_id,
                 "group_id": group_id,
                 "created_at": time.time(),
                 "is_tome": is_tome,
@@ -286,8 +286,8 @@ class MessageQueue:
             group_topics = await self.processor.process_conversation(group_id, group_data)
             logging.info(f"提取的话题: {len(group_topics)}个")
             
-            # 群组上下文
-            context = f"group_{group_id}"
+            # 对话ID
+            conv_id = f"group_{group_id}"
             
             # 用于存储已完结和未完结的消息ID
             completed_message_ids = set()
@@ -325,7 +325,7 @@ class MessageQueue:
                             completed_message_ids.add(msg_id)
                             
                 # 保存话题
-                await self.storage.add_conversation_topic(context, topic)
+                await self.storage.add_conversation_topic(conv_id, topic)
                 
             # 对集合排序，便于日志打印和调试
             completed_ids_list = sorted(list(completed_message_ids))
@@ -390,12 +390,12 @@ class MessageQueue:
             self.next_process_time = current_time + self.batch_interval
             return total_processed_count
 
-    async def add_bot_message(self, message: str, context: str, in_reply_to: Optional[str] = None) -> Optional[str]:
+    async def add_bot_message(self, message: str, conv_id: str, in_reply_to: Optional[str] = None) -> Optional[str]:
         """添加机器人回复消息到队列
         
         Args:
             message: 消息内容
-            context: 上下文标识（如"group_123456"）
+            conv_id: 对话ID（如"group_123456"）
             in_reply_to: 所回复消息的用户ID（可选）
             
         Returns:
@@ -406,7 +406,7 @@ class MessageQueue:
         bot_name = "ATRI机器人"
         
         # 提取分组信息（群组ID）
-        group_id = context.split('_')[1] if '_' in context else ""
+        group_id = conv_id.split('_')[1] if '_' in conv_id else ""
         
         try:
             # 将机器人消息加入队列
@@ -414,7 +414,7 @@ class MessageQueue:
                 user_id=bot_id,
                 user_name=bot_name,
                 message=message,
-                context=context,
+                conv_id=conv_id,
                 group_id=group_id,
                 is_tome=False,  # 这不是发给机器人的
                 is_me=True,     # 这是机器人发的

@@ -130,7 +130,7 @@ class AIProcessor:
     async def _call_api(self, payload_or_prompt) -> Dict:
         """调用AI API"""
         if isinstance(payload_or_prompt, str):
-            # 为会话分析设置系统提示和较低温度
+            # 为对话分析设置系统提示和较低温度
             system_message = "你是一个专业的对话分析助手，请从群聊消息中提取结构化话题信息，严格按照指定的JSON格式返回结果。"
             
             payload = {
@@ -211,15 +211,15 @@ class AIProcessor:
             raise ValueError(f"无法解析AI响应: {e}") 
 
     async def process_conversation_batch(self, conversation_text: str) -> List[Dict]:
-        """批量处理会话，提取话题和交互模式
+        """批量处理对话，提取话题和交互模式
         
         Args:
-            conversation_text: 格式化的会话文本，包含消息编号
+            conversation_text: 格式化的对话文本，包含消息编号
             
         Returns:
             话题列表，每个话题包含主题、摘要、实体、时间范围等
         """
-        # 会话处理提示模板 - 不使用直接的format，而是手动替换，避免花括号转义问题
+        # 对话处理提示模板 - 不使用直接的format，而是手动替换，避免花括号转义问题
         conversation_prompt = """
         分析群聊消息并提取以下结构化信息。需要区分已完结和未完结的话题：
         
@@ -246,7 +246,7 @@ class AIProcessor:
               "entities": ["相关实体1", "相关实体2"], // 捕获未完结话题的相关实体
               "message_ids": [8, 9, 10], // 相关消息的编号
               "continuation_probability": 0.7, // 机器人应该参与讨论的概率 (0.0-1.0)
-              "last_message_id": 10 // 最后一条相关消息的编号，用于追踪会话最新进展
+              "last_message_id": 10 // 最后一条相关消息的编号，用于追踪对话最新进展
             }
           ]
         }
@@ -273,23 +273,23 @@ class AIProcessor:
             # 手动替换占位符，避免format函数的花括号转义问题
             prompt = conversation_prompt.replace("CONVERSATION_PLACEHOLDER", conversation_text)
         except Exception as e:
-            logging.error(f"会话处理提示生成失败: {e}")
+            logging.error(f"对话处理提示生成失败: {e}")
             return []
         
-        logging.info(f"会话处理提示: {prompt[:200]}...")  # 只记录前200个字符避免日志过长
+        logging.info(f"对话处理提示: {prompt[:200]}...")  # 只记录前200个字符避免日志过长
         
         try:
             response = await self._call_api(prompt)
-            logging.debug(f"会话处理API响应: {response}")
+            logging.debug(f"对话处理API响应: {response}")
             result = self._parse_conversation_response(response)
-            logging.debug(f"会话处理API响应解析结果: {result}")
+            logging.debug(f"对话处理API响应解析结果: {result}")
             return result
         except Exception as e:
-            logging.error(f"会话处理失败: {e}")
+            logging.error(f"对话处理失败: {e}")
             return []
         
     def _parse_conversation_response(self, response: dict) -> List[Dict]:
-        """解析会话处理API响应"""
+        """解析对话处理API响应"""
         try:
             content = response["choices"][0]["message"]["content"].strip()
             
@@ -355,7 +355,7 @@ class AIProcessor:
             return result
                 
         except Exception as e:
-            logging.error(f"解析会话响应失败: {e}")
+            logging.error(f"解析对话响应失败: {e}")
             logging.info(f"原始响应: {response}")
             return []
             
