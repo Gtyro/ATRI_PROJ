@@ -46,7 +46,7 @@ class MemoryEntity(Model):
     """记忆实体模型 - 表示记忆中的概念、对象或实体"""
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=100, unique=True, index=True)  # 实体名称，全局唯一
-    memory = fields.ForeignKeyField('models.Memory', related_name='entities')
+    memory = fields.ForeignKeyField('models.Memory', related_name='memory_entities')
     created_at = fields.FloatField(default=time.time)
     
     class Meta:

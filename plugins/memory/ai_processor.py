@@ -303,7 +303,7 @@ class AIProcessor:
                 if start_idx >= 7 and end_idx > start_idx:
                     content = content[start_idx:end_idx].strip()
                     logging.info("成功从Markdown代码块中提取JSON内容")
-                    logging.debug(f"提取的JSON内容: {content[:100]}...")
+                    logging.debug(f"提取的JSON内容: {content}")
             
             logging.info(f"原始响应内容: {content[:200]}...") # 只记录前200个字符
             
