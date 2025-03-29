@@ -204,7 +204,7 @@ async def init_memory_system():
             
             # 注册自动回复回调
             if ai_processor:
-                memory_system.generate_auto_reply(memory_callback)
+                await memory_system.generate_auto_reply(memory_callback)
                 logging.info("已注册记忆系统自动回复回调")
             
             MEMORY_SYSTEM_ENABLED = True
@@ -290,7 +290,7 @@ async def handle_sync_reply(bot: Bot, event: Event, message: str, is_group: bool
         else:
             context = f"private_{user_id}"
             
-        # 从消息队列获取最近的消息
+        # 从消息队列获取最近的消息（当前消息已经在process_message中添加到队列中）
         history = []
         if is_group:
             # 获取群消息队列
@@ -302,11 +302,14 @@ async def handle_sync_reply(bot: Bot, event: Event, message: str, is_group: bool
             private_messages = await memory_system.storage.get_group_queue_items(user_id, limit=10)
             history = [{"role": "user" if item["user_id"] == user_id else "assistant", "content": item["content"]} for item in private_messages]
             
-        # 添加当前消息
-        history.append({
-            "role": "user",
-            "content": message
-        })
+        # 当前消息已包含在消息队列中，不需要再次添加
+        # 如果没有消息，才需要添加（保险措施）
+        if not history:
+            logging.debug("没有消息，手动添加当前消息")
+            history.append({
+                "role": "user",
+                "content": message
+            })
         
         # 生成回复
         logging.info(f"正在生成对 {user_id} 的回复，历史消息数: {len(history)}")
