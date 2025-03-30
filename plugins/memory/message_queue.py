@@ -159,7 +159,7 @@ class MessageQueue:
     
     async def _enqueue_message(self, user_id: str, user_name: str, message: str, 
                               conv_id: str, is_direct: bool = False, 
-                              is_me: bool = False, reply_to: Optional[str] = None) -> None:
+                              is_me: bool = False, in_reply_to: Optional[str] = None) -> None:
         """将消息加入队列
         
         Args:
@@ -169,13 +169,13 @@ class MessageQueue:
             conv_id: 对话ID
             is_direct: 是否直接交互
             is_me: 是否是机器人发的消息
-            reply_to: 回复的用户ID
+            in_reply_to: 回复的用户ID
         """
         try:
             # 构建metadata保存额外信息
             metadata = {}
-            if reply_to:
-                metadata["reply_to"] = reply_to
+            if in_reply_to:
+                metadata["in_reply_to"] = in_reply_to
                 
             await self.storage.add_to_queue({
                 "user_id": user_id,
@@ -388,12 +388,13 @@ class MessageQueue:
         # 机器人ID和名称（可根据实际情况配置）
         bot_id = "bot_12345"
         bot_name = "你" # 这里用第二人称
-        
         try:
             # 构建元数据
             metadata = {}
             if in_reply_to:
-                metadata["reply_to"] = in_reply_to
+                metadata["in_reply_to"] = in_reply_to
+
+                
                 
             # 将机器人消息加入队列
             queue_item = {

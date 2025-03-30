@@ -132,7 +132,7 @@ class MemoryProcessor:
             else:
                 metadata = metadata_str
                 
-            reply_to = metadata.get("reply_to", "")
+            in_reply_to = metadata.get("in_reply_to", "")
             
             # 构建消息前缀
             prefix = f"[{msg_id}] [{formatted_time}] "
@@ -144,8 +144,8 @@ class MemoryProcessor:
                 prefix += f"{user_name}"
                 
             # 添加回复标识
-            if reply_to:
-                prefix += f"对{reply_to}说"
+            if in_reply_to:
+                prefix += f"对{user_name}说"
             elif is_direct:
                 prefix += "对你说"
                 
