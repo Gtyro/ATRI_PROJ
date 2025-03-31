@@ -12,8 +12,8 @@ import asyncio
 import logging
 from typing import Dict, List, Tuple, Optional, Set, Any
 
-from .storage import StorageManager
-from .processor import MemoryProcessor
+from ..storage import StorageManager
+from ..processing import MemoryProcessor
 
 class MessageQueue:
     """消息队列管理器"""
@@ -130,121 +130,45 @@ class MessageQueue:
             logging.error(f"触发自动回复失败: {e}")
             return False
     
-    async def add_message(self, user_id: str, user_name: str, message: str, 
-                          conv_id: str, is_direct: bool = False) -> Optional[str]:
-        """添加消息到队列, 如果是直接交互立即处理
-        
-        Args:
-            user_id: 用户ID
-            user_name: 用户昵称
-            message: 消息内容
-            conv_id: 对话ID（如"group_123456"）
-            is_direct: 是否为直接交互
-        Returns:
-            如果是直接交互立即处理并返回记忆ID，否则返回None
-        """
-        
-        # 消息先加入队列
-        message_id = await self._enqueue_message(user_id, user_name, message, conv_id, is_direct)
-
-        # 直接交互处理
-        if is_direct:
-            # 重置处理时间
-            self.next_process_time = time.time() + self.batch_interval
-            
-            # 先处理该对话的历史消息队列
-            await self._process_conv_queue(conv_id)
-        
-        return message_id
-    
-    async def _enqueue_message(self, user_id: str, user_name: str, message: str, 
-                              conv_id: str, is_direct: bool = False, 
-                              is_me: bool = False, in_reply_to: Optional[str] = None) -> None:
+    async def enqueue_message(self, queue_item_dict: Dict) -> None:
         """将消息加入队列
         
         Args:
-            user_id: 用户ID
-            user_name: 用户昵称
-            message: 消息内容
-            conv_id: 对话ID
-            is_direct: 是否直接交互
-            is_me: 是否是机器人发的消息
-            in_reply_to: 回复的用户ID
+            queue_item_dict: 队列项字典
         """
         try:
             # 构建metadata保存额外信息
             metadata = {}
-            if in_reply_to:
-                metadata["in_reply_to"] = in_reply_to
+            if queue_item_dict["in_reply_to"]:
+                metadata["in_reply_to"] = queue_item_dict["in_reply_to"]
                 
-            await self.storage.add_to_queue({
-                "user_id": user_id,
-                "user_name": user_name,
-                "content": message,
-                "conv_id": conv_id,
-                "created_at": time.time(),
-                "is_direct": is_direct,
-                "is_me": is_me,
-                "metadata": metadata
-            })
-            logging.debug(f"消息已加入队列: {user_id} - {message[:20]}...")
+            await self.storage.add_to_queue(queue_item_dict)
+            logging.debug(f"消息已加入队列: {queue_item_dict['user_id']} - {queue_item_dict['content'][:20]}...")
             return None
         except Exception as e:
             logging.error(f"加入队列失败: {e}")
             return None
-    
-    async def _process_conv_queue(self, conv_id: str) -> int:
-        """处理特定对话的队列消息
+
+    async def get_conv_queue_items(self, conv_id: str, include_processed: bool = False) -> List[Dict]:
+        """获取特定对话的队列消息
         
         Args:
             conv_id: 对话ID
+            include_processed: 是否包含已处理的消息
             
         Returns:
-            处理的消息数量
+            队列消息列表
         """
         try:
-            # 获取该对话在队列中的未处理消息
-            group_items = await self.storage.get_conv_queue_items(conv_id, include_processed=False)
-            if not group_items:
+            items = await self.storage.get_conv_queue_items(conv_id, include_processed=False)
+            if not items:
                 logging.info(f"对话 {conv_id} 队列为空，无需处理")
-                return 0
-            
-            # 不再逐条处理，而是批量处理整个群组的消息
-            if len(group_items) > 0:
-                # 将队列消息批量提交给处理器，并获取已完结和未完结消息ID
-                completed_ids, ongoing_ids = await self._process_conv_batch(conv_id, group_items)
-                
-                # 构建序号ID到数据库ID的映射
-                seq_to_db_id = {item.get("seq_id", 0): item["id"] for item in group_items}
-                
-                # 收集要标记为已处理的消息数据库ID
-                completed_db_ids = [seq_to_db_id.get(seq_id) for seq_id in completed_ids if seq_id in seq_to_db_id]
-                
-                # 只标记已完结话题的消息为已处理
-                if completed_db_ids:
-                    marked_count = await self.storage.mark_as_processed(completed_db_ids)
-                    if marked_count != len(completed_db_ids):
-                        logging.warning(f"队列消息标记不完全，应标记{len(completed_db_ids)}条，实际标记{marked_count}条")
-                
-                # 清理旧的已处理消息，保留最新的queue_history_size条
-                await self.storage.remove_old_processed_messages(conv_id, self.queue_history_size)
-                
-                # 计算已处理的总消息数
-                processed_count = len(completed_ids)
-                
-                # 记录处理情况
-                if ongoing_ids:
-                    ongoing_db_ids = [seq_to_db_id.get(seq_id) for seq_id in ongoing_ids if seq_id in seq_to_db_id]
-                    logging.info(f"保留 {len(ongoing_db_ids)} 条未完结话题消息在队列中")
-                    
-            else:
-                processed_count = 0
-                
-            logging.info(f"对话 {conv_id} 队列处理完成，处理 {processed_count} 条消息")
-            return processed_count
+                return []
+
+            return items
         except Exception as e:
-            logging.error(f"处理对话队列异常: {e}")
-            return 0
+            logging.error(f"获取对话队列消息失败: {e}")
+            return []
 
     async def _process_conv_batch(self, conv_id: str, message_items: List[Dict]) -> Tuple[List[int], List[int]]:
         """批量处理对话消息，提取话题和交互模式
@@ -268,7 +192,7 @@ class MessageQueue:
                     "user_id": item["user_id"],
                     "user_name": item["user_name"],
                     "content": item["content"],
-                    "timestamp": item.get("created_at", time.time()),
+                    "timestamp": item["created_at"],
                     "is_direct": is_direct
                 })
                 
@@ -362,7 +286,7 @@ class MessageQueue:
                 for conv_id in distinct_convs:
                     if conv_id:  # 确保对话ID有效
                         # 处理一个对话并获取该对话已处理的消息数
-                        processed_count = await self._process_conv_queue(conv_id)
+                        processed_count = await self.process_conv_queue(conv_id)
                         total_processed_count += processed_count
                 
                 logging.info(f"队列处理完成，共处理 {total_processed_count} 条消息，涉及 {len(distinct_convs)} 个对话")

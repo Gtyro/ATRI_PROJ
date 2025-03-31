@@ -12,7 +12,7 @@ from typing import Optional
 from tortoise.transactions import atomic
 from tortoise.expressions import F
 
-from .storage import StorageManager, Memory, MemoryAssociation
+from ..storage import StorageManager, Memory, MemoryAssociation
 
 class DecayManager:
     """负责记忆的衰减和整理"""

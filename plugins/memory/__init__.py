@@ -8,10 +8,10 @@
 
 from .core import MemorySystem
 from .storage import StorageManager, Memory, MemoryAssociation, MemoryEntity, MessageQueueItem
-from .processor import MemoryProcessor
-from .decay import DecayManager
-from .ai_processor import AIProcessor
-from .message_queue import MessageQueue
+from .processing import MemoryProcessor
+from .processing.decay import DecayManager
+from .processing.ai import AIProcessor
+from .storage.queue import MessageQueue
 
 # 导入插件入口点以确保NoneBot可以找到插件定义
 from .plugin import *

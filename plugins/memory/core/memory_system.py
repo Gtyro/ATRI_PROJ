@@ -1,31 +1,13 @@
-"""
-记忆系统核心模块 - 协调各个子系统的工作
-
-该模块包含记忆系统的主类，负责协调存储、处理、检索和维护等子系统。
-"""
-
+from typing import Dict, List, Tuple, Optional, Any
 import os
 import time
-import json
 import logging
-from datetime import datetime
-from typing import Dict, List, Tuple, Optional, Any
 
-from .storage import StorageManager
-from .processor import MemoryProcessor
-from .decay import DecayManager
-from .message_queue import MessageQueue
-
-class MemoryRetriever:
-    """负责从记忆存储中检索相关信息"""
-    
-    def __init__(self, storage: StorageManager):
-        self.storage = storage
-    
-    async def search(self, query: str, user_id: str = None, limit: int = 5) -> List[Dict]:
-        """搜索相关记忆"""
-        # 此处实现将在后续完善
-        return []
+from ..storage import StorageManager
+from ..processing import MemoryProcessor, DecayManager
+from ..storage.queue import MessageQueue
+from .retriever import MemoryRetriever
+from ...models import GroupPluginConfig
 
 class MemorySystem:
     """记忆系统主类，负责协调各个子系统"""
@@ -40,6 +22,7 @@ class MemorySystem:
             use_postgres: 是否使用PostgreSQL
             postgres_config: PostgreSQL配置，包含host, port, user, password, database
         """
+        self.plugin_name = "memory"
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db_path = db_path
         self.use_postgres = use_postgres
@@ -73,6 +56,7 @@ class MemorySystem:
             
         self.retriever = MemoryRetriever(self.storage)
         self.decay_manager = DecayManager(self.storage)
+        self.group_config = GroupPluginConfig()
         
         logging.info("记忆系统构造完成，等待数据库初始化")
     
@@ -124,26 +108,63 @@ class MemorySystem:
             except Exception as e:
                 logging.error(f"加载配置文件失败: {e}")
     
-    async def process_message(self, user_id: str, user_name: str, message: str, conv_id: str, 
-                            is_direct: bool = False) -> Optional[str]:
-        """处理新消息并加入队列，如果是优先级消息则立即处理该群消息
-        
-        注意：单条消息处理不如批量处理高效。系统会将消息加入队列，然后定期批量处理，
-        这可以节省API调用并获得更准确的上下文理解。只有在紧急情况下才应使用is_priority=True。
+    async def process_message(self, queue_item_dict: Dict) -> Optional[str]:
+        """先将新消息加入队列
+        如果是直接交互消息则立即处理该队列消息
+        如果是群交互消息则将该群的ORM插件的plugin_config字典的next_process_time设置为5分钟后
         
         Args:
-            user_id: 用户ID
-            user_name: 用户昵称
-            message: 消息内容
-            conv_id: 对话ID（如"group_123456"）
-            is_direct: 是否为直接交互（私聊或@机器人）
-        Returns:
-            处理后的队列项ID；若为优先消息，则返回处理结果ID
+            queue_item_dict: 队列项字典
         """
-        if conv_id.startswith("private_"):
-            return None  # 私聊消息暂不处理
+        await self.message_queue.enqueue_message(queue_item_dict)
+        if queue_item_dict['is_direct']:
+            await self.process_conv_queue(queue_item_dict['conv_id'])
+            if queue_item_dict['conv_id'].startswith('group_'):
+                self.group_config.update_config(queue_item_dict['conv_id'], self.plugin_name, {'next_process_time': time.time() + 300})
+
+    async def process_conv_queue(self, conv_id: str) -> int:
+        """处理特定对话的队列消息
+        
+        Args:
+            conv_id: 对话ID
+        
+        Returns:
+            处理的消息数量
+        """
+        conv_queue_items = await self.message_queue.get_conv_queue_items(conv_id)
+        if len(conv_queue_items) > 0:
+            # 将队列消息批量提交给处理器，并获取已完结和未完结消息ID
+            completed_ids, ongoing_ids = await self.message_queue._process_conv_batch(conv_id, conv_queue_items)
+
+            # 构建序号ID到数据库ID的映射
+            seq_to_db_id = {item.get("seq_id", 0): item["id"] for item in conv_queue_items}
+
+            # 收集要标记为已处理的消息数据库ID
+            completed_db_ids = [seq_to_db_id.get(seq_id) for seq_id in completed_ids if seq_id in seq_to_db_id]
             
-        return await self.message_queue.add_message(user_id, user_name, message, conv_id, is_direct)
+            # 只标记已完结话题的消息为已处理
+            if completed_db_ids:
+                marked_count = await self.storage.mark_as_processed(completed_db_ids)
+                if marked_count != len(completed_db_ids):
+                    logging.warning(f"队列消息标记不完全，应标记{len(completed_db_ids)}条，实际标记{marked_count}条")
+            
+            # 清理旧的已处理消息，保留最新的queue_history_size条
+            await self.storage.remove_old_processed_messages(conv_id, self.config["queue_history_size"])
+            
+            # 计算已处理的总消息数
+            processed_count = len(completed_ids)
+
+            if ongoing_ids:
+                ongoing_db_ids = [seq_to_db_id.get(seq_id) for seq_id in ongoing_ids if seq_id in seq_to_db_id]
+                logging.info(f"保留 {len(ongoing_db_ids)} 条未完结话题消息在队列中")
+            
+            # 记录处理情况
+            logging.info(f"对话 {conv_id} 已处理 {processed_count} 条消息")
+            
+            return processed_count
+        else:
+            logging.info(f"对话 {conv_id} 队列为空，无需处理")
+            return 0
     
     async def process_queue(self, max_items_per_group: int = None) -> int:
         """处理消息队列
@@ -154,8 +175,13 @@ class MemorySystem:
         Returns:
             处理的消息数量
         """
-        if max_items_per_group is None:
-            max_items_per_group = self.config["batch_size"]
+
+        # 获取所有需要处理的不同对话ID
+        distinct_convs = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
+
+        # 对每个对话单独处理
+        for conv_id in distinct_convs:
+            await self.process_conv_queue(conv_id)
             
         return await self.message_queue.process_queue(max_items_per_group)
     
@@ -197,4 +223,4 @@ class MemorySystem:
         # 设置自动回复处理器
         self.register_auto_reply_callback(callback)
         
-        logging.info("自动回复功能已激活") 
+        logging.info("自动回复功能已激活")

@@ -9,6 +9,7 @@
 
 import random
 import re
+import time
 from nonebot import on_message, on_command, get_driver
 from nonebot import require
 require("nonebot_plugin_apscheduler")
@@ -29,7 +30,8 @@ import yaml
 from datetime import datetime, timedelta
 
 from .core import MemorySystem
-from .ai_processor import AIProcessor
+from .processing.ai import AIProcessor
+from .utils.config import check_config
 
 # 插件元数据
 __plugin_name__ = "记忆系统"
@@ -256,7 +258,6 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
     # 正确区分群聊和私聊
     is_group = isinstance(event, GroupMessageEvent)
     conv_type = "group" if is_group else "private"
-    
     # 群组ID或用户ID
     conv_id = f"{conv_type}_{event.group_id if is_group else user_id}"
     
@@ -266,19 +267,25 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
     # 判断直接交互
     is_direct = False
     
-    # 私聊消息或@机器人的消息立即处理，并标记为直接交互
-    if not is_group or event.is_tome():
+    # @机器人或私聊的消息立即处理，并标记为直接交互
+    if event.is_tome() or not is_group:
         is_direct = True
     
+    queue_item_dict = {
+        "conv_id": conv_id,
+        "user_id": user_id,
+        "user_name": uname,
+        "content": message,
+        "is_direct": is_direct,
+        "is_me": False,
+        "created_at": time.time(),
+        "processed": False,
+        "metadata": {}
+    }
+
     # 异步处理记忆
     try:
-        await memory_system.process_message(
-            user_id=user_id, 
-            user_name=uname,
-            message=message,
-            is_direct=is_direct,
-            conv_id=conv_id
-        )
+        await memory_system.process_message(queue_item_dict)
         
         # 如果是@或私聊，使用同步回复
         if is_direct:
@@ -475,31 +482,8 @@ async def scheduled_maintenance():
 @driver.on_startup
 async def start_scheduler():
     # 检查配置文件是否存在
-    if not os.path.exists("data"):
-        os.makedirs("data")
-        
-    if not os.path.exists("data/memory_config.yaml"):
-        default_config = {
-            "api_key": "your_api_key_here",
-            "model": "deepseek-chat",
-            "api_base": "https://api.deepseek.com",
-            "use_postgres": False,
-            "postgres_config": {
-                "host": "localhost",
-                "port": 5432,
-                "user": "postgres",
-                "password": "password",
-                "database": "memories"
-            }
-        }
-        
-        try:
-            with open("data/memory_config.yaml", 'w', encoding='utf-8') as f:
-                yaml.dump(default_config, f, default_flow_style=False)
-            logging.info("已创建默认配置文件")
-        except Exception as e:
-            logging.error(f"创建配置文件失败: {e}")
-    
+    check_config()
+
     # 设置定时任务
     if MEMORY_SYSTEM_ENABLED:
         # 每30分钟执行一次维护

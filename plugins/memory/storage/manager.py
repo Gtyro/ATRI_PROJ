@@ -1,103 +1,19 @@
-"""
-记忆系统存储管理模块 - 负责记忆的持久化和检索
 
-该模块实现了记忆的数据库存储、检索和管理功能。
-使用Tortoise-ORM作为底层存储引擎，支持SQLite和PostgreSQL。
-支持记忆实体、关联和标签。
-"""
 
-import json
-import math
-import time
-import logging
-import uuid
-from typing import Dict, List, Any, Optional, Union, Tuple
+
 from datetime import datetime
+from typing import List, Dict, Optional, Any
+import json
+import time
+import uuid
+import logging
 
-from tortoise import Tortoise, fields, run_async
-from tortoise.models import Model
+from tortoise import Tortoise
 from tortoise.expressions import Q
 from tortoise.transactions import atomic
 
+from .models import Memory, MemoryEntity, MessageQueueItem, MemoryAssociation
 
-# 定义Tortoise ORM模型
-class Memory(Model):
-    """记忆模型"""
-    id = fields.CharField(max_length=36, primary_key=True)
-    conv_id = fields.CharField(max_length=20, index=True) # group_id or private_id
-    topic = fields.CharField(max_length=128)
-    summary = fields.TextField()
-    entities = fields.TextField()  # JSON 格式存储实体列表
-    start_time = fields.CharField(max_length=20)
-    end_time = fields.CharField(max_length=20)
-    involved_users = fields.TextField()  # JSON 格式存储参与用户
-    created_at = fields.FloatField()
-    last_accessed = fields.FloatField()
-    weight = fields.FloatField(default=1.0)
-    metadata = fields.TextField()  # JSON 格式存储额外元数据
-    
-    class Meta:
-        table = "memories"
-        table_description = "存储记忆的核心表"
-
-    def __str__(self):
-        return f"{self.conv_id}:{self.topic[:20]}"
-
-
-class MemoryEntity(Model):
-    """记忆实体模型 - 表示记忆中的概念、对象或实体"""
-    id = fields.IntField(pk=True)
-    name = fields.CharField(max_length=100, unique=True, index=True)  # 实体名称，全局唯一
-    memory = fields.ForeignKeyField('models.Memory', related_name='memory_entities')
-    created_at = fields.FloatField(default=time.time)
-    
-    class Meta:
-        table = "memory_entities"
-        table_description = "记忆中的实体，用于快速检索"
-
-    def __str__(self):
-        return self.name
-
-
-class MemoryAssociation(Model):
-    """记忆关联模型 - 表示实体之间的关联关系"""
-    id = fields.IntField(pk=True)
-    source = fields.ForeignKeyField('models.MemoryEntity', related_name='outgoing_associations')
-    target = fields.ForeignKeyField('models.MemoryEntity', related_name='incoming_associations')
-    source_name = fields.CharField(max_length=100, null=True)  # 源实体名称，便于直接查看
-    target_name = fields.CharField(max_length=100, null=True)  # 目标实体名称，便于直接查看
-    strength = fields.FloatField(default=0.5)  # 关联强度
-    created_at = fields.FloatField()  # 创建时间
-    updated_at = fields.FloatField()  # 最后更新时间
-
-    class Meta:
-        table = "memory_associations"
-        table_description = "实体之间的关联关系"
-        unique_together = (("source_id", "target_id"),)
-
-    def __str__(self):
-        return f"{self.source_name}->{self.target_name} ({self.strength:.2f})"
-
-
-class MessageQueueItem(Model):
-    """消息队列项模型"""
-    id = fields.CharField(pk=True, max_length=36)
-    user_id = fields.CharField(max_length=36)
-    user_name = fields.CharField(max_length=36)
-    content = fields.TextField()
-    is_direct = fields.BooleanField(default=False)  # 消息是否是发给机器人的
-    is_me = fields.BooleanField(default=False)    # 消息是否是机器人发的
-    conv_id = fields.CharField(max_length=30, null=True, index=True)
-    created_at = fields.FloatField(index=True)
-    processed = fields.BooleanField(default=False)
-    metadata = fields.TextField(default="{}")  # 存储额外元数据，如回复关系等
-
-    class Meta:
-        table = "message_queue"
-        table_description = "消息处理队列"
-
-    def __str__(self):
-        return f"{self.user_id}:{self.user_name}:{self.content[:20]}"
 
 
 class StorageManager:
@@ -285,34 +201,22 @@ class StorageManager:
             logging.error(f"获取上下文记忆失败: {e}")
             return []
     
-    async def add_to_queue(self, queue_item: Dict) -> str:
+    async def add_to_queue(self, queue_item_dict: Dict) -> str:
         """添加消息到队列"""
         try:
             # 准备数据
-            item_id = queue_item.get("id") or str(uuid.uuid4())
+            item_id = str(uuid.uuid4())
 
             # 对过长的内容只保留头尾
-            if len(queue_item["content"]) > 200:
-                queue_item["content"] = queue_item["content"][:100] + "..." + queue_item["content"][-100:]
+            if len(queue_item_dict["content"]) > 200:
+                queue_item_dict["content"] = queue_item_dict["content"][:100] + "..." + queue_item_dict["content"][-100:]
             
-            # 将is_tome标志添加到metadata
-            metadata = queue_item.get("metadata", {})
-            if "is_direct" in queue_item:
-                metadata["is_direct"] = queue_item["is_direct"]
-            
+            queue_item_dict["metadata"] = json.dumps(queue_item_dict['metadata'], ensure_ascii=False)
+            if "is_direct" in queue_item_dict:
+                queue_item_dict["metadata"]["is_direct"] = queue_item_dict["is_direct"]
+
             # 创建队列项
-            await MessageQueueItem.create(
-                id=item_id,
-                user_id=queue_item["user_id"],
-                user_name=queue_item["user_name"],
-                content=queue_item["content"],
-                conv_id=queue_item.get("conv_id"),
-                created_at=queue_item.get("created_at", time.time()),
-                processed=queue_item.get("processed", False),
-                is_direct=queue_item.get("is_direct", False),
-                is_me=queue_item.get("is_me", False),
-                metadata=json.dumps(metadata, ensure_ascii=False)
-            )
+            await MessageQueueItem.create(**queue_item_dict)
             
             return item_id
         except Exception as e:
