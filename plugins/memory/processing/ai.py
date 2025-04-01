@@ -16,7 +16,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union
 
 # 添加OpenAI客户端支持
-# from openai import AsyncOpenAI
+from openai import AsyncOpenAI
 from ..api.llm_api import LLMClient
 from .prompt import conversation_prompt
 
@@ -26,7 +26,7 @@ DEFAULT_TIMEOUT = 60.0  # 超时时间（秒）
 class AIProcessor:
     """通过AI API增强记忆处理能力"""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat", api_base: str = "https://api.deepseek.com"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat", base_url: str = "https://api.deepseek.com"):
         """初始化AI处理器
         
         Args:
@@ -34,11 +34,10 @@ class AIProcessor:
             model: 使用的模型名称
             api_base: API基础URL
         """
-        if not api_key:
-            raise ValueError("AI处理器需要API密钥才能运行")
+        self.model = model
             
         # 初始化客户端
-        self.client = LLMClient()
+        self.client = LLMClient(api_key=api_key, model=model, base_url=base_url)
         
         logging.info(f"api_base: {self.client.base_url}")
         
@@ -97,9 +96,9 @@ class AIProcessor:
         try:
             content = await self.client.call_api(prompt)
             logging.debug(f"对话处理API响应: {content}")
-            result = self._parse_conversation_response(content)
-            logging.debug(f"对话处理API响应解析结果: {result}")
-            return result
+            topics = self._parse_conversation_response(content)
+            logging.debug(f"对话处理API响应解析结果: {topics}")
+            return topics
         except Exception as e:
             logging.error(f"对话处理失败: {e}")
             return []
@@ -117,20 +116,20 @@ class AIProcessor:
             # 解析JSON对象
             data = json.loads(content)
             
-            result = []
+            topics = []
             
             topic_types = ["completed_topics", "ongoing_topics"]
             for topic_type in topic_types:
                 if topic_type in data:
                     topics = data[topic_type]
                     logging.info(f"成功解析为JSON对象，包含 {len(topics)} 个{topic_type}")
-                    result.extend(self._ensure_topic_fields(topics, is_completed=topic_type == "completed_topics"))
+                    topics.extend(self._ensure_topic_fields(topics, is_completed=topic_type == "completed_topics"))
             
-            if not result:
+            if not topics:
                 # 如果得到的JSON不符合预期格式
                 logging.warning(f"API返回的JSON格式不符合预期: {type(data)}")
                 
-            return result
+            return topics
                 
         except Exception as e:
             logging.error(f"解析对话响应失败: {e}")

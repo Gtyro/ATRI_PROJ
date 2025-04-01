@@ -1,4 +1,6 @@
-
+'''
+负责记忆数据的持久化存储与检索
+'''
 
 
 from datetime import datetime
@@ -62,114 +64,36 @@ class StorageManager:
     
     @atomic()
     async def add_memory(self, memory_data: Dict) -> str:
-        """添加一条记忆"""
+        """添加记忆、实体、关联"""
         try:
             # 准备数据
-            memory_id = memory_data.get("id") or str(uuid.uuid4())
+            memory_data.setdefault("id", str(uuid.uuid4()))
             
             # 创建记忆对象
-            memory = await Memory.create(
-                id=memory_id,
-                conv_id=memory_data.get("conv_id", "default"),
-                topic=memory_data.get("topic", ""),
-                summary=memory_data.get("summary", ""),
-                entities=json.dumps(memory_data.get("entities", []), ensure_ascii=False),
-                start_time=memory_data.get("start_time", ""),
-                end_time=memory_data.get("end_time", ""),
-                involved_users=json.dumps(memory_data.get("involved_users", []), ensure_ascii=False),
-                created_at=memory_data.get("created_at", time.time()),
-                last_accessed=memory_data.get("last_accessed", time.time()),
-                weight=memory_data.get("weight", 1.0),
-                metadata=json.dumps(memory_data.get("metadata", {}), ensure_ascii=False)
-            )
+            await Memory.create(**memory_data)
             
             # 添加实体
             entities = memory_data.get("tags", [])
             for entity_name in entities:
-                if not entity_name:
-                    continue
-                    
                 # 查找或创建实体
                 entity = await MemoryEntity.filter(name=entity_name).first()
                 if not entity:
                     entity = await MemoryEntity.create(
                         name=entity_name,
-                        memory_id=memory_id,
+                        memory_id=memory_data["id"],
                         created_at=time.time()
                     )
+            # 更新关联
+            await self._update_cooccurrences(entities, memory_data["conv_id"])
                 
-            return memory_id
+            return memory_data["id"]
             
         except Exception as e:
             logging.error(f"添加记忆失败: {e}")
             raise
-    
-    async def get_memory(self, memory_id: str) -> Optional[Dict]:
-        """获取单条记忆"""
-        try:
-            # 查询记忆
-            memory = await Memory.filter(id=memory_id).first()
-            if not memory:
-                return None
-                
-            # 转换为字典
-            result = {
-                "id": memory.id,
-                "user_id": memory.user_id,
-                "content": memory.content,
-                "conv_id": memory.conv_id,
-                "type": memory.type,
-                "created_at": memory.created_at,
-                "last_accessed": memory.last_accessed,
-                "weight": memory.weight,
-                "emotion_score": memory.emotion_score,
-                "metadata": memory.metadata,
-            }
-            
-            # 获取实体
-            entities = await MemoryEntity.filter(memory_id=memory_id).values_list("name", flat=True)
-            result["entities"] = list(entities)
-            
-            return result
-        except Exception as e:
-            logging.error(f"获取记忆失败: {e}")
-            return None
-    
-    async def get_user_memories(self, user_id: str, limit: int = 20) -> List[Dict]:
-        """获取指定用户的记忆"""
-        try:
-            # 查询记忆
-            memories = await Memory.filter(user_id=user_id).order_by("-created_at").limit(limit)
-            
-            results = []
-            for memory in memories:
-                # 转换为字典
-                memory_dict = {
-                    "id": memory.id,
-                    "user_id": memory.user_id,
-                    "content": memory.content,
-                    "conv_id": memory.conv_id,
-                    "type": memory.type,
-                    "created_at": memory.created_at,
-                    "last_accessed": memory.last_accessed,
-                    "weight": memory.weight,
-                    "emotion_score": memory.emotion_score,
-                    "metadata": memory.metadata,
-                }
-                
-                # 获取实体
-                entities = await MemoryEntity.filter(memory_id=memory.id).values_list("name", flat=True)
-                memory_dict["entities"] = list(entities)
-                
-                results.append(memory_dict)
-                
-            return results
-        except Exception as e:
-            logging.error(f"获取用户记忆失败: {e}")
-            return []
-    
+   
     async def get_conv_memories(self, conv_id: str, limit: int = 10) -> List[Dict]:
-        """获取指定上下文的记忆"""
+        """获取指定组上下文的记忆"""
         try:
             # 查询记忆
             memories = await Memory.filter(conv_id=conv_id).order_by("-created_at").limit(limit)
@@ -177,18 +101,7 @@ class StorageManager:
             results = []
             for memory in memories:
                 # 转换为字典
-                memory_dict = {
-                    "id": memory.id,
-                    "user_id": memory.user_id,
-                    "content": memory.content,
-                    "conv_id": memory.conv_id,
-                    "type": memory.type,
-                    "created_at": memory.created_at,
-                    "last_accessed": memory.last_accessed,
-                    "weight": memory.weight,
-                    "emotion_score": memory.emotion_score,
-                    "metadata": memory.metadata,
-                }
+                memory_dict = memory.model_dump()
                 
                 # 获取实体
                 entities = await MemoryEntity.filter(memory_id=memory.id).values_list("name", flat=True)
@@ -222,30 +135,6 @@ class StorageManager:
         except Exception as e:
             logging.error(f"添加队列项失败: {e}")
             raise
-    
-    async def get_queue_items(self, limit: int = 100) -> List[Dict]:
-        """获取队列中的消息"""
-        try:
-            # 按创建时间排序
-            items = await MessageQueueItem.filter(processed=False).order_by("created_at").limit(limit)
-            
-            # 转换为字典列表
-            return [
-                {
-                    "id": item.id,
-                    "user_id": item.user_id,
-                    "user_name": item.user_name,
-                    "content": item.content,
-                    "conv_id": item.conv_id,
-                    "created_at": item.created_at,
-                    "is_direct": item.is_direct,
-                    "is_me": item.is_me,
-                }
-                for item in items
-            ]
-        except Exception as e:
-            logging.error(f"获取队列项失败: {e}")
-            return []
 
     async def get_conv_queue_items(self, conv_id: str, limit: int = 100, include_processed: bool = False) -> List[Dict]:
         """获取特定对话的队列消息
@@ -361,27 +250,6 @@ class StorageManager:
         except Exception as e:
             logging.error(f"获取队列统计失败: {e}")
             return {"total": 0}
-            
-    async def remove_from_queue(self, item_ids: List[str]) -> int:
-        """批量从队列中移除消息（完全删除）
-        
-        Args:
-            item_ids: 要删除的消息ID列表
-            
-        Returns:
-            成功删除的消息数量
-        """
-        if not item_ids:
-            return 0
-            
-        try:
-            # 使用 id__in 更高效地批量删除
-            deleted_count = await MessageQueueItem.filter(id__in=item_ids).delete()
-            logging.debug(f"批量删除队列消息成功，共删除 {deleted_count} 条")
-            return deleted_count
-        except Exception as e:
-            logging.error(f"批量移除队列项失败: {e}")
-            return 0
 
     async def _update_cooccurrences(self, entities: List[str], conv_id: str):
         """根据Hebbian规则更新共现关系（纯数据库方案）"""
@@ -540,67 +408,6 @@ class StorageManager:
             logging.error(f"更新实体关联失败 ({entity_a}-{entity_b}): {e}")
             raise
 
-    @atomic()
-    async def add_conversation_topic(self, conv_id: str, topic_data: Dict) -> str:
-        """添加一个对话话题"""
-        try:
-            # 生成话题ID
-            topic_id = topic_data.get("id") or str(uuid.uuid4())
-            
-            # 准备元数据，包含更多可能变动的字段
-            metadata = topic_data.get("metadata", {})
-            
-            # 将不稳定字段或未来可能删除的字段放入metadata
-            for field in ["continuation_probability", "emotion_intensity", "emotion_polarity", 
-                         "relevance_score", "confidence", "priority"]:
-                if field in topic_data:
-                    metadata[field] = topic_data[field]
-            
-            # 当前时间戳
-            current_time = topic_data.get("created_at", time.time())
-            
-            # 创建话题记忆记录
-            memory = await Memory.create(
-                id=topic_id,
-                conv_id=conv_id,
-                topic=topic_data.get("topic", "未命名话题"),
-                summary=topic_data.get("summary", ""),
-                entities=json.dumps(topic_data.get("entities", []), ensure_ascii=False),
-                start_time=topic_data.get("start_time", ""),
-                end_time=topic_data.get("end_time", ""),
-                involved_users=json.dumps(topic_data.get("involved_users", []), ensure_ascii=False),
-                created_at=current_time,
-                last_accessed=current_time,
-                weight=1.0,
-                metadata=json.dumps(metadata, ensure_ascii=False)
-            )
-            
-            # 创建实体记录，用于快速检索
-            entities = topic_data.get("entities", [])
-            if entities:
-                # 为每个实体查找或创建记录
-                for entity_name in entities:
-                    if not entity_name:
-                        continue
-                        
-                    # 查找或创建实体记录
-                    entity = await MemoryEntity.filter(name=entity_name).first()
-                    if not entity:
-                        entity = await MemoryEntity.create(
-                            name=entity_name,
-                            memory_id=topic_id,
-                            created_at=current_time
-                        )
-                
-                # 基于Hebbian理论更新实体关联
-                await self._update_cooccurrences(entities, conv_id)
-                
-            return topic_id
-            
-        except Exception as e:
-            logging.error(f"添加对话话题失败: {e}")
-            raise
-
     async def get_message_by_seq_id(self, conv_id: str, seq_id: int) -> Dict:
         """根据消息序号ID获取消息内容
         
@@ -637,23 +444,3 @@ class StorageManager:
         except Exception as e:
             logging.error(f"获取消息内容失败: {e}")
             return {}
-
-    async def get_distinct_conv_ids(self) -> List[str]:
-        """获取队列中所有不同的对话ID
-        
-        Returns:
-            不同对话ID的列表
-        """
-        try:
-            # 查询所有未处理消息的不同对话ID
-            query = "SELECT DISTINCT conv_id FROM message_queue WHERE processed = 0"
-            conn = Tortoise.get_connection("default")
-            results = await conn.execute_query_dict(query)
-            
-            # 提取对话ID
-            conv_ids = [item["conv_id"] for item in results if item["conv_id"]]
-            
-            return conv_ids
-        except Exception as e:
-            logging.error(f"获取不同对话ID失败: {e}")
-            return []

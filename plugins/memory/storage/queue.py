@@ -13,23 +13,20 @@ import logging
 from typing import Dict, List, Tuple, Optional, Set, Any
 
 from ..storage import StorageManager
-from ..processing import MemoryProcessor
 
 class MessageQueue:
     """消息队列管理器"""
     
-    def __init__(self, storage: StorageManager, processor: MemoryProcessor, 
+    def __init__(self, storage: StorageManager, 
                  batch_interval: int = 3600, queue_history_size: int = 20):
         """初始化消息队列
         
         Args:
             storage: 存储管理器
-            processor: 处理器
             batch_interval: 定时处理间隔（秒），默认1小时
             queue_history_size: 每个对话保留的历史消息数量，默认20条
         """
         self.storage = storage
-        self.processor = processor
         self.batch_interval = batch_interval
         self.queue_history_size = queue_history_size
         self.next_process_time = time.time() + batch_interval
@@ -169,84 +166,6 @@ class MessageQueue:
         except Exception as e:
             logging.error(f"获取对话队列消息失败: {e}")
             return []
-
-    async def _process_conv_batch(self, conv_id: str, message_items: List[Dict]) -> Tuple[List[int], List[int]]:
-        """批量处理对话消息，提取话题和交互模式
-        
-        Args:
-            conv_id: 对话ID
-            message_items: 消息列表
-            
-        Returns:
-            元组 (已完结消息ID列表, 未完结消息ID列表)
-        """
-        try:
-            # 准备批量消息数据
-            conv_data = []
-            for idx, item in enumerate(message_items, 1):
-                # 为消息添加序号ID（仅在内部使用）
-                item["seq_id"] = idx
-                # 检查是否有直接交互标志
-                is_direct = item.get("is_direct", False)
-                conv_data.append({
-                    "user_id": item["user_id"],
-                    "user_name": item["user_name"],
-                    "content": item["content"],
-                    "timestamp": item["created_at"],
-                    "is_direct": is_direct
-                })
-                
-            # 批量处理对话数据
-            conv_topics = await self.processor.process_conversation(conv_id, conv_data)
-            logging.info(f"提取的话题: {len(conv_topics)}个")
-            
-            # 用于存储已完结和未完结的消息ID
-            completed_message_ids = set()
-            ongoing_message_ids = set()
-            
-            # 保存话题记忆
-            for topic in conv_topics:
-                continuation_probability = topic.get("continuation_probability", 0.0)
-                topic_id = topic.get("id")
-                
-                # 记录消息ID
-                message_ids = topic.get("message_ids", [])
-                
-                # 检查话题最后是否包含直接交互的消息
-                is_direct_topic = message_items[message_ids[-1]-1].get("is_direct", False)
-                
-                # 向话题添加直接交互的标志
-                topic["is_direct"] = is_direct_topic
-                
-                if continuation_probability > 0.0:
-                    # 未完结话题，需要保留相关消息ID
-                    for msg_id in message_ids:
-                        ongoing_message_ids.add(msg_id)
-                        
-                    # 计算自动回复概率
-                    await self.trigger_auto_reply(conv_id, topic)
-                else:
-                    # 已完结话题，可以删除消息
-                    for msg_id in message_ids:
-                        if msg_id not in ongoing_message_ids:  # 避免重复添加到不同集合
-                            completed_message_ids.add(msg_id)
-                            
-                # 保存话题
-                await self.storage.add_conversation_topic(conv_id, topic)
-                
-            # 对集合排序，便于日志打印和调试
-            completed_ids_list = sorted(list(completed_message_ids))
-            ongoing_ids_list = sorted(list(ongoing_message_ids))
-            
-            logging.info(f"话题处理结果:")
-            logging.info(f"- 已完结话题消息: {len(completed_ids_list)}")
-            logging.info(f"- 未完结话题消息: {len(ongoing_ids_list)}")
-            
-            return (completed_ids_list, ongoing_ids_list)
-        except Exception as e:
-            logging.error(f"批量处理对话异常: {e}")
-            logging.exception(e)  # 输出完整异常堆栈信息
-            return ([], [])
 
     async def process_queue(self, max_items_per_group: int = 100) -> int:
         """处理队列中的消息

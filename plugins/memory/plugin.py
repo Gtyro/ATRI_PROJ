@@ -22,6 +22,7 @@ from nonebot.exception import MatcherException
 from nonebot_plugin_apscheduler import scheduler
 from nonebot_plugin_uninfo import Uninfo
 from nonebot.internal.params import Depends
+from nonebot_plugin_alconna.uniseg import UniMessage, MsgTarget, Target, SupportScope
 
 import os
 import asyncio
@@ -30,8 +31,6 @@ import yaml
 from datetime import datetime, timedelta
 
 from .core import MemorySystem
-from .processing.ai import AIProcessor
-from .utils.config import check_config
 
 # 插件元数据
 __plugin_name__ = "记忆系统"
@@ -80,22 +79,6 @@ try:
         use_postgres=db_config.get("use_postgres", False),
         postgres_config=db_config.get("postgres_config")
     )
-    
-    # 创建AI处理器，用于生成回复
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-                ai_processor = AIProcessor(
-                    api_key=config.get("api_key"),
-                    model=config.get("model", "deepseek-chat"),
-                    api_base=config.get("api_base", "https://api.deepseek.com")
-                )
-        except Exception as e:
-            logging.error(f"AI处理器初始化失败: {e}")
-            ai_processor = None
-    else:
-        ai_processor = None
 except Exception as e:
     logging.error(f"记忆系统初始化失败: {e}")
     memory_system = None
@@ -111,8 +94,7 @@ def UserName():
 
     return Depends(dependency)
 
-# 自动回复回调函数
-async def memory_callback(conv_id: str, topic_data: dict) -> str:
+async def memory_callback(conv_id: str, message_dict: dict) -> str:
     """记忆系统自动回复回调函数
     
     Args:
@@ -122,86 +104,20 @@ async def memory_callback(conv_id: str, topic_data: dict) -> str:
     Returns:
         生成的回复内容（字符串）
     """
-    # 检查AI处理器和bot信息
-    if not ai_processor:
-        logging.warning("AI处理器未初始化，无法生成自动回复")
-        return None
-        
-    # 获取该对话的bot信息
-    bot_info = _latest_bots.get(conv_id)
-    if not bot_info:
-        logging.warning(f"未找到对话 {conv_id} 的bot信息，无法发送自动回复")
-        return None
-        
-    bot, is_group = bot_info
-    
     try:
-        # 从话题数据中提取相关信息
-        topic_name = topic_data.get("topic", "未知话题")
-        entities = topic_data.get("entities", [])
-        messages = topic_data.get("messages", [])
-        related_users = topic_data.get("related_users", [])
-        last_user_id = topic_data.get("last_user_id")
-        is_direct = topic_data.get("is_direct", False)  # 是否为直接@机器人的话题
-        
-        # 如果是直接@机器人的话题，不进行自动回复
-        # 这些话题会由handle_sync_reply处理
-        if is_direct:
-            logging.info(f"话题 '{topic_name}' 是直接@机器人的对话，跳过自动回复")
-            return None
-        
-        logging.info(f"生成对话题 '{topic_name}' 的自动回复，实体: {entities}，相关用户: {related_users}")
-        
-        # 准备历史消息 - 使用话题中的消息而不是从Memory获取
-        history_messages = []
-        
-        # 添加相关消息作为历史
-        for idx, msg in enumerate(messages):
-            # 消息格式通常是 "用户名: 内容"
-            if ":" in msg:
-                name, content = msg.split(":", 1)
-                history_messages.append({
-                    "role": "user",
-                    "content": f"[{name}]: {content.strip()}"
-                })
-                logging.debug(f"添加消息历史 {idx+1}: {name} - {content[:20]}...")
+        target = Target(id = conv_id.split("_", 1)[1])
+        if message_dict.get("reply_content"):
+            if isinstance(message_dict.get("reply_content"), list):
+                for reply in message_dict.get("reply_content"):
+                    await UniMessage(reply).send(target)
+                    sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
+                    await asyncio.sleep(sleep_time)
             else:
-                # 格式不符合预期，直接使用整个消息
-                history_messages.append({
-                    "role": "user", 
-                    "content": msg
-                })
-        
-        # 添加提示信息，引导AI关注当前话题
-        prompt = f"请针对'{topic_name}'这个话题，基于上述对话生成一个自然的回复。"
-        if entities:
-            entity_str = "、".join(entities[:3])
-            prompt += f" 请特别关注这些关键概念：{entity_str}。"
-        
-        # 如果有最后发言的用户，可以引导AI回复该用户
-        if last_user_id:
-            prompt += f" 请考虑回复最后发言的用户。"
-        
-        history_messages.append({
-            "role": "user",
-            "content": prompt
-        })
-        
-        # 生成回复
-        logging.info(f"正在生成对话题 '{topic_name}' 的回复，历史消息数: {len(history_messages)}")
-        reply_content = await ai_processor.generate_response(history_messages, temperature=0.7)
-        logging.debug(f"生成的回复: {reply_content[:30]}...")
-        
-        # 发送自动回复
-        asyncio.create_task(send_auto_reply(conv_id, reply_content))
-        
-        return reply_content
-        
+                await UniMessage(message_dict.get("reply_content")).send(target)
     except Exception as e:
         logging.error(f"生成自动回复失败: {e}", exc_info=True)
         return None
 
-# 启动时初始化数据库
 @driver.on_startup
 async def init_memory_system():
     global MEMORY_SYSTEM_ENABLED
@@ -209,12 +125,7 @@ async def init_memory_system():
     if memory_system:
         try:
             # 初始化数据库
-            await memory_system.initialize()
-            
-            # 注册自动回复回调
-            if ai_processor:
-                await memory_system.generate_auto_reply(memory_callback)
-                logging.info("已注册记忆系统自动回复回调")
+            await memory_system.initialize(reply_callback=memory_callback)
             
             MEMORY_SYSTEM_ENABLED = True
             logging.info("记忆系统数据库初始化成功")
@@ -222,7 +133,6 @@ async def init_memory_system():
             logging.error(f"记忆系统数据库初始化失败: {e}")
             MEMORY_SYSTEM_ENABLED = False
 
-# 关闭时清理资源
 @driver.on_shutdown
 async def shutdown_memory_system():
     if memory_system and MEMORY_SYSTEM_ENABLED:
@@ -232,7 +142,6 @@ async def shutdown_memory_system():
         except Exception as e:
             logging.error(f"记忆系统关闭失败: {e}")
 
-# 消息处理器 - 记录所有接收到的消息
 message_recorder = on_message(priority=10)
 @message_recorder.handle()
 async def record_message(bot: Bot, event: Event, uname: str = UserName()):
@@ -285,137 +194,18 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
 
     # 异步处理记忆
     try:
-        await memory_system.process_message(queue_item_dict)
-        
-        # 如果是@或私聊，使用同步回复
-        if is_direct:
-            await handle_sync_reply(bot, event, conv_id)
+        message_dict = await memory_system.process_message(queue_item_dict)
+        if message_dict:
+            if isinstance(message_dict.get("reply_content"), list):
+                for reply in message_dict.get("reply_content"):
+                    await bot.send(event, reply)
+                    sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
+                    await asyncio.sleep(sleep_time)
+            else:
+                await bot.send(event, message_dict.get("reply_content"))
     except Exception as e:
         logging.error(f"记忆处理异常: {e}")
 
-# 同步回复处理（替代原handle_ai_reply，用于直接回复@和私聊）
-async def handle_sync_reply(bot: Bot, event: Event, conv_id: str):
-    """处理同步回复（直接回复@和私聊消息）"""
-    # 如果AI处理器未初始化，跳过回复
-    if not ai_processor:
-        logging.warning("AI处理器未初始化，无法生成回复")
-        return
-        
-    user_id = event.get_user_id()
-    
-    try:
-        # 从消息队列获取最近的消息（当前消息已经在process_message中添加到队列中）
-        history = []
-        # 获取对话消息队列，包括已处理消息以提供完整上下文
-        conv_messages = await memory_system.storage.get_conv_queue_items(
-            conv_id, 
-            limit=memory_system.config["history_limit"],
-            include_processed=True
-        )
-
-        # 判断消息是否是机器人说的
-        # 如果是，role为assistant
-        # 判断消息是否是@机器人的
-        # 如果是，在['user_name']后添加'对你'
-        history = [{"role": "assistant" if item['is_me'] else "user", "content": f"[{item['user_name']}]{'对你' if item['is_direct'] else ''}说: {item['content']}"} for item in conv_messages]
-        
-        # 生成回复
-        logging.info(f"正在生成对 {user_id} 的回复，历史消息数: {len(history)}")
-        reply_content = await ai_processor.generate_response(history, temperature=0.7)
-        logging.debug(f"生成的回复: {reply_content[:30]}...")
-        
-        # 发送回复
-        pattern1 = r'(\(.*?\))'
-        pattern2 = r'（.*?）'
-        pattern3 = r'([^，。！？（）()\s]+\.+)'
-        pattern4 = r'([^，。！？（）()\s]+)'
-        split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
-
-
-        if logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-            split_replies = [reply_content]
-        for reply in split_replies:
-            await bot.send(event, reply)
-            sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
-            if logging.getLogger().getEffectiveLevel() != logging.DEBUG:
-                await asyncio.sleep(sleep_time)
-        
-        # 记录回复到消息队列
-        await memory_system.message_queue.add_bot_message(
-            message=reply_content,
-            conv_id=conv_id,
-            in_reply_to=user_id
-        )
-        logging.info(f"已回复并记录到消息队列")
-        
-    except Exception as e:
-        logging.error(f"同步回复生成失败: {e}", exc_info=True)
-
-# 处理自动回复生成的消息
-async def send_auto_reply(conv_id: str, reply_content: str):
-    """发送自动回复消息
-    
-    Args:
-        group_id: 群组ID
-        reply_content: 回复内容
-    """
-    if not reply_content or not reply_content.strip():
-        logging.warning("自动回复内容为空，取消发送")
-        return
-        
-    bot_info = _latest_bots.get(conv_id)
-    
-    if not bot_info:
-        logging.warning(f"未找到对话 {conv_id} 的bot信息，无法发送自动回复")
-        return
-        
-    bot, is_group = bot_info
-    
-    try:
-        logging.info(f"开始向对话 {conv_id} 发送自动回复")
-        
-        # 分段发送回复
-        pattern1 = r'(\(.*?\))'
-        pattern2 = r'（.*?）'
-        pattern3 = r'([^，。！？（）()\s]+\.+)'
-        pattern4 = r'([^，。！？（）()\s]+)'
-        split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
-        
-        
-        if not split_replies or logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-            # 如果分割失败或DEBUG模式，就直接发送整个回复
-            split_replies = [reply_content]
-            
-        send_count = 0
-        for reply in split_replies:
-            if not reply.strip():
-                continue
-                
-            try:
-                if is_group:
-                    await bot.send_group_msg(group_id=int(conv_id.split("_", 1)[1]), message=reply)
-                else:
-                    await bot.send_private_msg(user_id=int(conv_id.split("_", 1)[1]), message=reply)
-                    
-                send_count += 1
-                
-                # 模拟人类打字速度的间隔
-                sleep_time = random.uniform(0.3*len(reply), 0.8*len(reply))
-                await asyncio.sleep(sleep_time)
-            except Exception as e:
-                logging.error(f"发送自动回复片段失败: {e}")
-        
-        # 记录回复到消息队列，使其能够被后续处理记住
-        await memory_system.message_queue.add_bot_message(
-            message=reply_content,
-            conv_id=conv_id
-        )
-        
-        logging.info(f"已完成自动回复发送，共 {send_count} 条片段")
-    except Exception as e:
-        logging.error(f"发送自动回复失败: {e}", exc_info=True)
-
-# 记忆统计指令 - 查看记忆系统状态
 memory_stats = on_command("记忆统计", permission=SUPERUSER, rule=to_me(), priority=5, block=True)
 @memory_stats.handle()
 async def handle_memory_stats(bot: Bot, event: Event, state: T_State):
@@ -445,7 +235,6 @@ async def handle_memory_stats(bot: Bot, event: Event, state: T_State):
         logging.error(f"获取记忆统计异常: {e}")
         await memory_stats.finish(f"获取统计信息失败: {str(e)}")
 
-# 处理队列指令 - 立即处理消息队列
 process_queue = on_command("处理队列", permission=SUPERUSER, rule=to_me(), priority=5, block=True)
 @process_queue.handle()
 async def handle_process_queue(bot: Bot, event: Event, state: T_State):
@@ -466,7 +255,6 @@ async def handle_process_queue(bot: Bot, event: Event, state: T_State):
         logging.error(f"处理队列异常: {e}")
         await process_queue.finish(f"处理队列失败: {str(e)}")
 
-# 定时维护
 async def scheduled_maintenance():
     """定时执行维护任务"""
     if not MEMORY_SYSTEM_ENABLED or not memory_system:
@@ -474,16 +262,14 @@ async def scheduled_maintenance():
         
     try:
         await memory_system.schedule_maintenance()
-        logging.info("计划维护完成")
+    except MatcherException:
+        raise
     except Exception as e:
-        logging.error(f"计划维护失败: {e}")
+        logging.error(f"处理队列异常: {e}")
 
 # 设置定时任务
 @driver.on_startup
 async def start_scheduler():
-    # 检查配置文件是否存在
-    check_config()
-
     # 设置定时任务
     if MEMORY_SYSTEM_ENABLED:
         # 每30分钟执行一次维护
@@ -491,7 +277,6 @@ async def start_scheduler():
         async def run_maintenance():
             await scheduled_maintenance()
 
-# 回忆指令 - 让机器人回忆相关内容
 recall = on_command("记得", aliases={"回忆", "想起"}, rule=to_me(), priority=5)
 @recall.handle()
 async def handle_recall(bot: Bot, event: Event, state: T_State):

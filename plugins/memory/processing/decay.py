@@ -12,13 +12,12 @@ from typing import Optional
 from tortoise.transactions import atomic
 from tortoise.expressions import F
 
-from ..storage import StorageManager, Memory, MemoryAssociation
+from ..storage import Memory, MemoryAssociation
 
 class DecayManager:
     """负责记忆的衰减和整理"""
     
-    def __init__(self, storage: StorageManager):
-        self.storage = storage
+    def __init__(self):
         self.decay_rate = 0.05  # 默认衰减率
         self.last_decay_time = time.time()
     

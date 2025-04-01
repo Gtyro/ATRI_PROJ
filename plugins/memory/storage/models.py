@@ -18,7 +18,7 @@ class Memory(Model):
     last_accessed = fields.FloatField()
     weight = fields.FloatField(default=1.0)
     '''记忆权重，太小记忆会被遗忘'''
-    metadata = fields.TextField()
+    metadata = fields.JSONField(default={})
     class Meta:
         table = "memories"
         table_description = "存储记忆的核心表"
@@ -83,7 +83,7 @@ class MessageQueueItem(Model):
     created_at = fields.FloatField(index=True)
     processed = fields.BooleanField(default=False)
     '''是否已用api处理'''
-    metadata = fields.TextField(default="{}")
+    metadata = fields.JSONField(default={})
     '''存储额外元数据，如回复关系等'''
 
     class Meta:

@@ -18,24 +18,16 @@ from .ai import AIProcessor
 class MemoryProcessor:
     """负责将输入消息处理成结构化记忆"""
     
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
         """初始化处理器"""
         # 加载API密钥
-        api_key = self._load_api_key()
+        self.api_key = api_key
         
-        if not api_key:
-            raise ValueError("记忆处理器需要API密钥才能初始化")
-        
-        # 初始化AI处理器
-        model = self._load_model_config()
-        api_base = self._load_api_base()
         
         self.ai_processor = AIProcessor(
-            api_key=api_key,
-            model=model,
-            api_base=api_base
+            api_key=self.api_key
         )
-        logging.info(f"AI记忆处理器已启用，使用模型: {model}")
+        logging.info(f"AI记忆处理器已启用，使用模型: {self.ai_processor.model}")
     
     async def process_conversation(self, conv_id: str, messages: List[Dict]) -> List[Dict]:
         """处理一批对话消息，提取话题和交互模式
@@ -45,22 +37,25 @@ class MemoryProcessor:
             messages: 消息列表，每个消息包含user_id、user_name、content和timestamp
             
         Returns:
-            话题列表，每个话题包含主题、摘要、实体、时间范围等信息
+            话题列表
+            每个话题固定包含topic、conv_id、message_ids:list、entities:list、involved_users:list、completed_status:bool
+            完结话题额外包括summary、start_time、end_time
+            未完结话题额外包括continuation_probability
+            元数据字段包括processed_at、message_count、conversation_duration_seconds、processed_by、model
         """
         # 准备提交给AI的消息格式
         formatted_messages = []
         message_times = []  # 记录所有消息的时间戳
-        message_map = {}    # 用于存储消息ID到原始消息的映射
         
+        seq_to_db_id = {i: item["id"] for i, item in enumerate(messages)}
+
         # 为每条消息分配一个简短的数字ID
         for idx, msg in enumerate(messages, 1):
             # 消息ID就是简单的序号
             msg_id = idx
-            # 保存ID到原始消息字典的映射
-            message_map[msg_id] = msg
             
-            # 只保留到分钟
             timestamp = msg["timestamp"]
+            # 只保留到分钟
             formatted_time = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
             
             user_name = msg.get("user_name", "未知用户")
@@ -75,8 +70,6 @@ class MemoryProcessor:
             else:
                 metadata = metadata_str
                 
-            in_reply_to = metadata.get("in_reply_to", "")
-            
             # 构建消息前缀
             prefix = f"[{msg_id}] [{formatted_time}] "
             
@@ -113,7 +106,7 @@ class MemoryProcessor:
             for topic in topics:
                 # 添加基础元数据
                 topic["conv_id"] = conv_id
-                
+                topic["message_ids"] = [seq_to_db_id[i] for i in topic.get("message_ids", [])]
                 # 提取参与话题的用户
                 involved_users = set()
                 for user_ref in re.findall(r"{([^}]+)}", topic.get("summary", "")):

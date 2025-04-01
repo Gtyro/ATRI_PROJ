@@ -20,7 +20,16 @@ def check_config():
                 "user": "postgres",
                 "password": "password",
                 "database": "memories"
-            }
+            },
+            "short_term_capacity": 100,
+            "decay_rate": 0.05,
+            "emotion_weight": 0.3,
+            "access_boost": 0.1,
+            "default_retention": 0.7,
+            "batch_interval": 3600,
+            "batch_size": 50,          # 每次批处理的消息数量
+            "history_limit": 10,       # 保留给AI回复的历史消息数量
+            "queue_history_size": 20   # 每个对话保留在队列中的历史消息数量
         }
         
         try:

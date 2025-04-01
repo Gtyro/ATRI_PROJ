@@ -4,24 +4,15 @@ from typing import Optional
 
 from openai import AsyncOpenAI
 
-from ..utils.config import load_config
 
 class LLMClient:
-    def __init__(self, base_url: str = "https://api.deepseek.com"):
-        self.config = load_config()
-        self.base_url = self.config.get("base_url", base_url)
-        self.api_key = self._load_api_key()
-    
-    def _load_api_key(self) -> Optional[str]:
-        """加载API密钥"""
-        # 首先尝试从环境变量读取
-        api_key = os.environ.get("API_KEY")
-        
-        # 如果环境变量中没有，尝试从配置文件读取
-        if not api_key:
-            api_key = self.config.get("api_key")
-        
-        return api_key
+    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat", base_url: str = "https://api.deepseek.com"):
+        self.base_url = base_url
+        self.api_key = api_key
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
     
     async def call_api(self, payload_or_prompt: Optional[dict] = None) -> str:
         """调用API"""
