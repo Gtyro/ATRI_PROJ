@@ -26,7 +26,7 @@ DEFAULT_TIMEOUT = 60.0  # 超时时间（秒）
 class AIProcessor:
     """通过AI API增强记忆处理能力"""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat", base_url: str = "https://api.deepseek.com"):
+    def __init__(self, api_key:str, model: str, base_url: str):
         """初始化AI处理器
         
         Args:

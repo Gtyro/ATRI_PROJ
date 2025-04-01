@@ -20,10 +20,10 @@
 api_key: your_api_key_here
 
 # 使用的模型
-model: deepseek-chat
+model: 
 
 # API基础URL
-api_base: https://api.deepseek.com
+api_base: 
 
 # 数据库配置
 # 设置为true使用PostgreSQL，false使用SQLite

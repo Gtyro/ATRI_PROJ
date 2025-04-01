@@ -11,8 +11,8 @@ def check_config():
     if not os.path.exists("data/memory_config.yaml"):
         default_config = {
             "api_key": "your_api_key_here",
-            "model": "deepseek-chat",
-            "api_base": "https://api.deepseek.com",
+            "model": "your_model_here",
+            "api_base": "your_api_base_here",
             "use_postgres": False,
             "postgres_config": {
                 "host": "localhost",
