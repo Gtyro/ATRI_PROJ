@@ -94,9 +94,9 @@ class MessageProcessor:
             user_name = msg.get("user_name", "用户")
             content = msg.get("content", "")
             is_direct = msg.get("is_direct", False)
-            is_me = msg.get("is_me", False)
+            is_bot = msg.get("is_bot", False)
             
-            role = "assistant" if is_me else "user"
+            role = "assistant" if is_bot else "user"
             message_text = f"[{user_name}]{'对你' if is_direct else ''}说: {content}"
             
             chat_messages.append({"role": role, "content": message_text})

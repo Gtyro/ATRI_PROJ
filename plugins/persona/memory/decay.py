@@ -70,7 +70,7 @@ class DecayManager:
                     # 增加激活水平，但最大为1.0
                     node.act_lv = min(1.0, node.act_lv + boost_factor)
                     await node.save()
-                    logging.debug(f"增强节点记忆: {node.name}, 新激活水平: {node.act_lv}")
+                    logging.info(f"增强节点记忆: {node.name}, 新激活水平: {node.act_lv}")
                     return True
             return False
         except Exception as e:

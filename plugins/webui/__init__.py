@@ -43,7 +43,6 @@ webui_thread = None
 @driver.on_startup
 async def start_webui():
     
-    logger.warning(f"WebUI插件被加载 - 调用栈: {inspect.stack()[1]}")
     """启动WebUI服务"""
     global webui_thread
     logger.info("正在启动WebUI管理面板...")

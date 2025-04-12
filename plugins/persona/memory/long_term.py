@@ -76,7 +76,7 @@ class LongTermMemory:
         for node_str in nodes:
             try:
                 node = await self.repository.update_or_create_node(node_str)
-                logging.debug(f"存储节点: {node.name}")
+                logging.info(f"存储节点: {node.name}")
                 node_ids.append(str(node.id))
             except Exception as e:
                 logging.error(f"存储节点失败: {e}")

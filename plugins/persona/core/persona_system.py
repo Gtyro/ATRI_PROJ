@@ -148,7 +148,7 @@ class PersonaSystem:
         """
         message_count = 0
         topic_count = 0
-        messages = await self.short_term.get_unprocessed_messages(conv_id, 2*self.config['queue_history_size'])
+        messages: List[Dict] = await self.short_term.get_unprocessed_messages(conv_id, 2*self.config['queue_history_size'])
         if not messages:
             logging.info(f"会话 {conv_id} 没有未处理消息")
             return None
@@ -167,6 +167,11 @@ class PersonaSystem:
             
         # 判断是否需要回复
         should_reply = await self.processor.should_respond(topics)
+        # 判断messages中是否有机器人发的消息
+        bot_messages = [msg for msg in messages if msg['is_bot']]
+        if len(bot_messages) > 0:
+            logging.info(f"会话 {conv_id} 已有机器人发的消息，不回复")
+            should_reply = False
         
         if not should_reply:
             if conv_id.startswith('group_'):
@@ -196,7 +201,7 @@ class PersonaSystem:
         reply_content = reply_data.get('content', '')
         logging.info(f"会话 {conv_id} 生成回复完成")
         logging.info(f"会话 {conv_id} 回复内容: {reply_content}")
-        return # 暂时测试
+
         # 添加机器人自己的消息到历史
         if reply_content:
             await self.short_term.add_bot_message(conv_id, reply_content)
@@ -235,7 +240,7 @@ class PersonaSystem:
                 config.plugin_config = plugin_config
                 await config.save()
             else:
-                logging.debug(f"会话 {conv_id} 未到处理时间，跳过")
+                logging.info(f"会话 {conv_id} 未到处理时间，跳过")
         
         # 执行记忆衰减
         await self.decay_manager.apply_decay()

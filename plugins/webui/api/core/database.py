@@ -20,7 +20,7 @@ async def initialize_tortoise():
         
         await Tortoise.init(
             db_url=db_url,
-            modules={'models': ['plugins.memory.storage', 'plugins.webui.api.db.models']}
+            modules={'models': ['plugins.persona.storage.models', 'plugins.webui.api.db.models']}
         )
         await build_table_model_map()
         logging.info(f"Tortoise ORM已初始化: {db_url}")

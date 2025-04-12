@@ -40,7 +40,7 @@ class ShortTermMemory:
             消息ID
         """
         message = await self.repository.add_message(message_data)
-        logging.debug(f"已添加消息到队列: {message.id}")
+        logging.info(f"已添加消息到队列: {message.id}")
         return message.id
     
     async def add_bot_message(self, conv_id: str, content: str) -> int:
@@ -58,7 +58,7 @@ class ShortTermMemory:
             "user_id": "bot",
             "user_name": "你", # 使用第二人称
             "content": content,
-            "is_me": True,
+            "is_bot": True,
             "is_processed": False,
             "is_direct": False
         }

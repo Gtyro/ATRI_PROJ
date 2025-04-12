@@ -148,7 +148,7 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
         "user_name": uname,
         "content": message,
         "is_direct": is_direct,
-        "is_me": False,
+        "is_bot": False,
         "is_processed": False,
         "extra_data": {}
     }

@@ -14,7 +14,7 @@ class MessageQueue(Model):
     '''是否已用api处理'''
     is_direct = fields.BooleanField(default=False)
     '''消息是否是发给机器人的'''
-    is_me = fields.BooleanField(default=False)
+    is_bot = fields.BooleanField(default=False)
     '''消息是否是机器人发的'''
     metadata = fields.JSONField(default={})
     
@@ -31,7 +31,7 @@ class MessageQueue(Model):
             "created_at": self.created_at,
             "is_processed": self.is_processed,
             "is_direct": self.is_direct,
-            "is_me": self.is_me,
+            "is_bot": self.is_bot,
             "metadata": self.metadata
         }
 

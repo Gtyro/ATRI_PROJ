@@ -59,7 +59,7 @@ class AIProcessor:
         history_text = []
         seqid2msgid = {}
         for i, msg in enumerate(messages):
-            sender = "你" if msg.get("is_me", False) else msg.get("user_name", "用户")
+            sender = "你" if msg.get("is_bot", False) else msg.get("user_name", "用户")
             content = msg.get("content", "")
             formatted_time = msg["created_at"].strftime("%Y-%m-%d %H:%M") # 只保留到分钟
             history_text.append(f"[{i}] [{formatted_time}] [{sender}]: {content}")
@@ -79,7 +79,7 @@ class AIProcessor:
                 [{"role": "user", "content": f"消息历史:\n{history_str}"}],
                 temperature=0.2
             )
-            logging.debug(f"提取话题响应: \n{response}")
+            logging.info(f"提取话题响应: \n{response}")
             
             # 解析响应
             try:
@@ -162,7 +162,7 @@ class AIProcessor:
                 content = re.sub(r'\[.*?\]说?[:：]?\s*', '', content)
                 logging.warning(f"处理后: {content}")
                 content = "" # 如果仍然有[]，则认为回复失败，返回空字符串
-            logging.debug(f"生成回复: {content}")
+            logging.info(f"生成回复: {content}")
             return content
         except Exception as e:
             logging.error(f"生成回复失败: {e}")

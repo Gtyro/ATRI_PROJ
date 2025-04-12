@@ -10,7 +10,7 @@ from datetime import datetime
 datestr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # 设置日志级别为DEBUG，方便排查问题
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(filename)s - %(lineno)d - [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(f"logs/{datestr}.log"),
