@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     PROJECT_ROOT: str = str(Path(__file__).parent.parent.parent.parent.parent)
     
     # 数据库设置
-    DATABASE_PATH: str = str(Path(PROJECT_ROOT) / "data" / "memory.db")
+    DATABASE_PATH: str = str(Path(PROJECT_ROOT) / "data" / "persona.db")
     PUBLIC_PATH: str = str(Path(PROJECT_ROOT) / "plugins" / "webui" / "static" / "webui")
     
     # CORS设置

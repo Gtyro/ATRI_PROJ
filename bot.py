@@ -5,12 +5,17 @@ import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBot11Adapter
 import os
 import logging
+from datetime import datetime
 
+datestr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # 设置日志级别为DEBUG，方便排查问题
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    level=logging.DEBUG,
+    format="%(asctime)s - %(filename)s - %(lineno)d - [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(f"logs/{datestr}.log"),
+        logging.StreamHandler()
+    ]
 )
 
 # 加载环境变量
