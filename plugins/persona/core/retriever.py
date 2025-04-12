@@ -73,7 +73,6 @@ class MemoryRetriever:
             # 在标题、摘要和内容中搜索关键词
             if (query.lower() in memory.title.lower() or 
                 query.lower() in memory.content.lower()):
-                
                 results.append({
                     "id": str(memory.id),
                     "type": "memory",
@@ -111,15 +110,14 @@ class MemoryRetriever:
         
         # 简单关键词匹配
         results = []
-        for node in nodes:
+        for memory in all_memories:
             # 在名称中搜索关键词
-            if query.lower() in node.name.lower():
-                
+            if query.lower() in memory.name.lower():
                 results.append({
-                    "id": str(node.id),
+                    "id": str(memory.id),
                     "type": "node",
-                    "name": node.name,
-                    "weight": node.weight
+                    "name": memory.name,
+                    "weight": memory.weight
                 })
                 
                 if len(results) >= limit:

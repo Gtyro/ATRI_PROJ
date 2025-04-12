@@ -103,15 +103,8 @@ class MessageProcessor:
         
         # 生成回复
         reply_content = await self.ai_processor.generate_response(conv_id, chat_messages, temperature)
-
-        # 分割回复
-        pattern1 = r'(\(.*?\))'
-        pattern2 = r'（.*?）'
-        pattern3 = r'([^，。！？（）()\s]+\.+)'
-        pattern4 = r'([^，。！？（）()\s]+)'
-        split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
         
         return {
-            "content": split_replies,
+            "content": reply_content,
             "temperature": temperature
         } 

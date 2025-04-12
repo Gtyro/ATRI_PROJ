@@ -150,6 +150,13 @@ class Repository:
             "conversations": conv_counts
         }
         
+    async def has_bot_message(self, conv_id: str) -> bool:
+        """判断队列中是否有机器人发的消息，不论是否已处理"""
+        messages = await MessageQueue.filter(conv_id=conv_id, is_bot=True).all()
+        if len(messages) > 0:
+            return True
+        return False
+
     # === 记忆话题相关操作 ===
     
     async def store_topic(self, conv_id: str, topic_data: Dict) -> Memory:

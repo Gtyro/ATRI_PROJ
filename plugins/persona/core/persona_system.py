@@ -12,6 +12,7 @@
 - node: 节点，指会话中的关键词(概念、对象、主题、标签等含义)，用来检索长期记忆
 '''
 import os
+import re
 import time
 import logging
 import random
@@ -167,10 +168,14 @@ class PersonaSystem:
             
         # 判断是否需要回复
         should_reply = await self.processor.should_respond(topics)
-        # 判断messages中是否有机器人发的消息
-        bot_messages = [msg for msg in messages if msg['is_bot']]
-        if len(bot_messages) > 0:
+        # 判断队列中是否有机器人发的消息
+        has_bot_message = await self.repository.has_bot_message(conv_id)
+        if has_bot_message:
             logging.info(f"会话 {conv_id} 已有机器人发的消息，不回复")
+            should_reply = False
+        # 判断消息是否未处理完
+        if len(messages) > self.config['queue_history_size']:
+            logging.info(f"会话 {conv_id} 消息未处理完，不回复")
             should_reply = False
         
         if not should_reply:
@@ -206,9 +211,16 @@ class PersonaSystem:
         if reply_content:
             await self.short_term.add_bot_message(conv_id, reply_content)
             logging.info(f"会话 {conv_id} 添加机器人自己的消息到历史完成")
+
+        # 分割回复
+        pattern1 = r'(\(.*?\))'
+        pattern2 = r'（.*?）'
+        pattern3 = r'([^，。！？（）()\s]+\.+)'
+        pattern4 = r'([^，。！？（）()\s]+)'
+        split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
         # 返回回复
         return {
-            "reply_content": reply_content,
+            "reply_content": split_replies,
             "user_id": user_id
         }
     

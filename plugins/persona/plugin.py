@@ -69,20 +69,19 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
         message_dict: 消息数据，包含回复内容
     """
     try:
-        target = Target(id=conv_id.split("_", 1)[1])
+        target = Target(id=conv_id.split("_")[1])
         if message_dict.get("reply_content"):
             reply_content = message_dict.get("reply_content")
             
             # 处理回复内容（可能是字符串或列表）
             if isinstance(reply_content, list):
                 for reply in reply_content:
-                    # await UniMessage(reply).send(target)
+                    await UniMessage(reply).send(target)
                     # 多条消息之间添加随机间隔，模拟真人打字速度
                     sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
                     await asyncio.sleep(sleep_time)
             else:
-                # await UniMessage(reply_content).send(target)
-                pass
+                await UniMessage(reply_content).send(target)
     except Exception as e:
         logging.error(f"生成自动回复失败: {e}", exc_info=True)
 
@@ -99,7 +98,6 @@ async def init_persona_system():
             logging.info("人格系统初始化成功")
         except Exception as e:
             logging.error(f"人格系统初始化失败: {e}")
-            PERSONA_SYSTEM_ENABLED = False
 
 @driver.on_shutdown
 async def shutdown_persona_system():
@@ -110,8 +108,6 @@ async def shutdown_persona_system():
         except Exception as e:
             logging.error(f"人格系统关闭失败: {e}")
 
-
-logging.info("开始注册消息记录器-----------------------------------")
 # 消息记录器，处理所有接收到的消息
 message_recorder = on_message(priority=10)
 @message_recorder.handle()
@@ -135,6 +131,12 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
     conv_type = "group" if is_group else "private"
     # 群组ID或用户ID
     conv_id = f"{conv_type}_{event.group_id if is_group else user_id}"
+    # 尝试获取群组名称
+    try:
+        group_info = await bot.get_group_info(group_id=event.group_id)
+        group_name = group_info["group_name"]
+    except Exception as e:
+        logging.error(f"获取群组名称失败: {e}")
     
     # 判断直接交互（@机器人或私聊）
     is_direct = False
@@ -159,16 +161,15 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
         
         # 如果有回复内容，发送回复
         if reply_dict and reply_dict.get("reply_content"):
-            reply_content = reply_dict.get("reply_content")
+            reply_content = reply_dict["reply_content"]
             
             if isinstance(reply_content, list):
                 for reply in reply_content:
-                    # await bot.send(event, reply)
+                    await bot.send(event, reply)
                     sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
                     await asyncio.sleep(sleep_time)
             else:
-                # await bot.send(event, reply_content)
-                pass
+                await bot.send(event, reply_content)
     except Exception as e:
         logging.error(f"消息处理异常: {e}")
 
@@ -197,10 +198,10 @@ async def handle_persona_stats(bot: Bot, event: Event, state: T_State):
         db_type = "PostgreSQL" if persona_system.config.get("use_postgres") else "SQLite"
         reply += f"- 数据库类型: {db_type}\n"
         
-        await persona_stats.finish(reply)
+        await persona_stats.send(reply)
     except Exception as e:
         logging.error(f"获取系统状态异常: {e}")
-        await persona_stats.finish(f"获取状态信息失败: {str(e)}")
+        await persona_stats.send(f"获取状态信息失败: {str(e)}")
 
 # 强制处理命令
 process_now = on_command("处理队列", aliases={"处理消息", "立即处理"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)
@@ -228,37 +229,32 @@ async def handle_process_now(bot: Bot, event: Event, state: T_State):
         else:
             # 执行维护任务
             await persona_system.schedule_maintenance()
-            await process_now.finish("消息处理完成")
-    except MatcherException as e: # finish会正常报出异常
-        pass
+            await process_now.send("消息处理完成")
     except Exception as e:
         logging.error(f"处理消息异常: {e}")
-        await process_now.finish(f"处理消息失败: {str(e)}")
+        await process_now.send(f"处理消息失败: {str(e)}")
 
 # 记忆查询命令
-memories = on_command("记得", aliases={"回忆", "想起"}, rule=to_me(), priority=5)
+memories = on_command("记得", aliases={"回忆", "想起"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)
 @memories.handle()
 async def handle_memories(bot: Bot, event: Event, state: T_State):
     """查询记忆"""
     # 如果系统未启用，返回错误信息
-    if not PERSONA_SYSTEM_ENABLED:
-        await memories.finish("人格系统未启用，请检查配置和日志")
-        return
-        
-    user_id = event.get_user_id()
-    args = str(event.get_message()).strip()
-    
-    if not args:
-        await memories.finish("你想让我回忆什么呢？")
-        return
-    
     try:
+        if not PERSONA_SYSTEM_ENABLED:
+            await memories.finish("人格系统未启用，请检查配置和日志")
+            
+        user_id = event.get_user_id()
+        args = str(event.get_message()).strip()
+        
+        if not args:
+            await memories.finish("你想让我回忆什么呢？")
+    
         # 检索相关记忆
         related_memories = await persona_system.retrieve_related_memories(args, user_id)
         
         if not related_memories:
             await memories.finish("我似乎没有关于这方面的记忆...")
-            return
             
         # 格式化回复
         reply = "我记得这些内容:\n"
@@ -276,11 +272,12 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
                 attr_str = ", ".join([f"{k}: {v}" for k, v in memory.get("attributes", {}).items()])
                 reply += f"{i}. [{memory_type}] {name} - {attr_str}\n"
             
-        await memories.finish(reply)
-        
+        await memories.send(reply)
+    except MatcherException as e: # finish会正常报出异常
+        pass
     except Exception as e:
         logging.error(f"记忆查询异常: {e}")
-        await memories.finish("回忆过程出现了问题...")
+        await memories.send("回忆过程出现了问题...")
 
 # 设置定时维护任务
 @driver.on_startup
@@ -288,7 +285,7 @@ async def start_scheduler():
     if PERSONA_SYSTEM_ENABLED:
         # 每30分钟执行一次维护
         @scheduler.scheduled_job("interval", minutes=30)
-        async def run_maintenance():
+        async def _():
             """定时执行维护任务"""
             try:
                 logging.info("开始执行定时维护任务")

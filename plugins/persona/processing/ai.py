@@ -169,7 +169,7 @@ class AIProcessor:
             return ""
     
     async def _call_api(self, system_prompt: str, messages: List[Dict], 
-                        temperature: float = 0.7, max_tokens: int = 1000) -> str:
+                        temperature: float = 0.7, max_tokens: int = 1200) -> str:
         """调用OpenAI API
         
         Args:
@@ -197,6 +197,7 @@ class AIProcessor:
                 temperature=temperature,
                 max_tokens=max_tokens
             )
+            logging.info(f"API调用成功，用量信息: {response.usage.completion_tokens} tokens")
             return response.choices[0].message.content or ""
         except Exception as e:
             logging.error(f"API调用失败: {e}")
