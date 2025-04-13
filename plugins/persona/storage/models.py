@@ -1,6 +1,11 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 from tortoise import Model, fields
+import pytz
+from tzlocal import get_localzone
+
+# Get the local timezone from the system
+LOCAL_TZ = get_localzone()
 
 class MessageQueue(Model):
     """消息队列模型, 共10个字段, 5条必填, 2条自动生成, 3条可选"""
@@ -22,13 +27,16 @@ class MessageQueue(Model):
         table = "message_queue"
 
     def to_dict(self):
+        # Convert UTC time to local timezone for display
+        created_time = self.created_at.replace(tzinfo=pytz.UTC).astimezone(LOCAL_TZ) if self.created_at else None
+        
         return {
             "id": self.id,
             "conv_id": self.conv_id,
             "user_id": self.user_id,
             "user_name": self.user_name,
             "content": self.content,
-            "created_at": self.created_at,
+            "created_at": created_time,
             "is_processed": self.is_processed,
             "is_direct": self.is_direct,
             "is_bot": self.is_bot,
