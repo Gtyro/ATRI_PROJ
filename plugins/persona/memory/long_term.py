@@ -22,55 +22,55 @@ class LongTermMemory:
         self.decay_rate = self.config.get("node_decay_rate", 0.01)
         logging.info("长期记忆管理器已创建")
     
-    async def store_topics(self, conv_id: str, topics: List[Dict]) -> List[str]:
-        """存储话题列表
+    async def store_memories(self, conv_id: str, memories: List[Dict]) -> List[str]:
+        """存储记忆列表
         
         Args:
-            topics: 话题列表
+            memories: 记忆列表
             
         Returns:
-            话题ID列表
+            记忆ID列表
         """
-        async def _link_nodes_to_topic(topic, nodes: List[str]) -> None:
+        async def _link_nodes_to_memory(memory, nodes: List[str]) -> None:
             """建立话题与节点的关联关系"""  
-            self.repository._link_nodes_to_topic(topic, nodes)
-        topic_ids = []
+            self.repository._link_nodes_to_memory(memory, nodes)
+        memory_ids = []
         
-        for topic_data in topics:
-            if not topic_data.get("completed_status", True):
+        for memory_data in memories:
+            if not memory_data.get("completed_status", True):
                 continue
-            # 确保话题有ID
-            if "id" not in topic_data:
-                topic_data["id"] = uuid.uuid4()
+            # 确保记忆有ID
+            if "id" not in memory_data:
+                memory_data["id"] = uuid.uuid4()
                 
             try:
                 # 提取并存储节点
-                nodes = await self._extract_and_store_nodes(topic_data)
+                nodes = await self._extract_and_store_nodes(memory_data)
 
                 # 存储话题（此时外键约束已满足）
-                topic = await self.repository.store_topic(conv_id, topic_data)
-                topic_ids.append(str(topic.id))
+                memory = await self.repository.store_memory(conv_id, memory_data)
+                memory_ids.append(str(memory.id))
                 
                 # 建立关联关系
-                await _link_nodes_to_topic(topic, nodes)
+                await _link_nodes_to_memory(memory, nodes)
                 
             except Exception as e:
-                logging.error(f"存储话题失败: {e}")
-                logging.error(f"话题数据: \n{topic_data}")
+                logging.error(f"存储记忆失败: {e}")
+                logging.error(f"记忆数据: \n{memory_data}")
         
-        return topic_ids
+        return memory_ids
     
-    async def _extract_and_store_nodes(self, topic_data: Dict) -> List[str]:
-        """从话题数据中提取并更新节点
+    async def _extract_and_store_nodes(self, memory_data: Dict) -> List[str]:
+        """从记忆数据中提取并更新节点
         
         Args:
-            topic_data: 话题数据
+            memory_data: 记忆数据
         
         Returns:
             节点ID列表
         """
-        # 从话题中提取节点（这里简化处理）
-        nodes:list[str] = topic_data.get("nodes", [])
+        # 从记忆中提取节点（这里简化处理）
+        nodes:list[str] = memory_data.get("nodes", [])
         
         node_ids = []
         for node_str in nodes:

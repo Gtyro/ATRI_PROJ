@@ -4,9 +4,9 @@ from nonebot.params import CommandArg
 from nonebot.rule import to_me
 import httpx
 import json
-
+from nonebot.permission import SUPERUSER
 # 注册天气查询命令处理器
-weather = on_command("天气", aliases={"查天气", "weather"}, priority=5)
+weather = on_command("天气", aliases={"查天气", "weather"},permission=SUPERUSER, priority=5)
 
 @weather.handle()
 async def handle_weather(bot: Bot, event: MessageEvent, args: Message = CommandArg()):

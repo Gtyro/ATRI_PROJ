@@ -69,12 +69,12 @@ class Repository:
             messages = await MessageQueue.filter(conv_id=conv_id).order_by("created_at").limit(limit).all()
         else:
             messages = await MessageQueue.filter(
-                conv_id=conv_id, 
+                conv_id=conv_id,
                 is_processed=processed
             ).order_by("created_at").limit(limit).all()
         return [msg.to_dict() for msg in messages]
     
-    async def mark_messages_processed(self, message_ids: List[int], topic_id: Optional[str] = None) -> int:
+    async def mark_messages_processed(self, message_ids: List[int]) -> int:
         """标记消息为已处理"""
             
         update_values = {
@@ -157,23 +157,30 @@ class Repository:
             return True
         return False
 
+    async def _has_processed_message(self, conv_id: str) -> bool:
+        """判断队列中是否有已处理消息"""
+        messages = await MessageQueue.filter(conv_id=conv_id, is_processed=True).all()
+        if len(messages) > 0:
+            return True
+        return False
+
     # === 记忆话题相关操作 ===
     
-    async def store_topic(self, conv_id: str, topic_data: Dict) -> Memory:
-        """存储话题"""
-        topic_id = topic_data.get("id")
-        if topic_id:
-            topic, created = await Memory.update_or_create(
-                id=topic_id,
+    async def store_memory(self, conv_id: str, memory_data: Dict) -> Memory:
+        """存储记忆"""
+        memory_id = memory_data.get("id")
+        if memory_id:
+            memory, created = await Memory.update_or_create(
+                id=memory_id,
                 conv_id=conv_id,
-                defaults=topic_data
+                defaults=memory_data
             )
         else:
-            topic = await Memory.create(**topic_data)
-        return topic
+            memory = await Memory.create(**memory_data)
+        return memory
     
     async def get_memories_by_conv(self, conv_id: str, completed: Optional[bool] = None, limit: int = 20) -> List[Memory]:
-        """获取指定会话的话题"""
+        """获取指定会话的记忆"""
         query = Memory.filter(conv_id=conv_id)
         if completed is not None:
             query = query.filter(completed_status=completed)
@@ -192,11 +199,11 @@ class Repository:
     
     # === 认知节点相关操作 ===
 
-    async def _link_nodes_to_topic(self, topic: Memory, nodes: List[str]) -> None:
-        """建立话题与节点的关联关系"""
+    async def _link_nodes_to_memory(self, memory: Memory, nodes: List[str]) -> None:
+        """建立记忆与节点的关联关系"""
         for node_id in nodes:
             node = await CognitiveNode.get(id=node_id)
-            await topic.nodes.add(node)
+            await memory.nodes.add(node)
     
     async def update_or_create_node(self, node_str: str) -> CognitiveNode:
         """存储或更新节点

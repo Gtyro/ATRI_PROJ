@@ -3,7 +3,7 @@ from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, Me
 from nonebot.rule import to_me
 
 # 注册帮助命令处理器
-help_cmd = on_command("帮助", aliases={"help", "菜单", "功能"}, priority=1, block=True)
+help_cmd = on_command("帮助", aliases={"help", "菜单", "功能"},rule=to_me(), priority=1, block=True)
 
 @help_cmd.handle()
 async def handle_help(bot: Bot, event: MessageEvent):

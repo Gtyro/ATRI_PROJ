@@ -147,24 +147,35 @@ class PersonaSystem:
         Returns:
             可能的回复内容
         """
-        message_count = 0
-        topic_count = 0
-        messages: List[Dict] = await self.short_term.get_unprocessed_messages(conv_id, 2*self.config['queue_history_size'])
-        if not messages:
-            logging.info(f"会话 {conv_id} 没有未处理消息")
-            return None
-        message_count += len(messages)
+        # 获取待处理消息
+        try:
+            message_count = 0
+            topic_count = 0
+            while True:
+                messages: List[Dict] = await self.short_term.get_unprocessed_messages(conv_id, 2*self.config['queue_history_size'])
+                if not messages:
+                    logging.info(f"会话 {conv_id} 没有未处理消息")
+                    return None
+                message_count += len(messages)
 
-        # 处理会话
-        topics = await self.processor.extract_topics_from_messages(conv_id, messages)
-        topic_count += len(topics)
-        
-        # 存储到长期记忆
-        await self.long_term.store_topics(conv_id, topics)
+                # 处理会话
+                topics = await self.processor.extract_topics_from_messages(conv_id, messages)
+                topic_count += len(topics)
+                
+                # 将话题存储为长期记忆
+                memory_ids = await self.long_term.store_memories(conv_id, topics)
 
-        # 标记消息为已处理
-        await self.short_term.mark_processed(conv_id, topics)
-        logging.info(f"会话 {conv_id} 处理完成，有 {message_count} 条消息，{topic_count} 个话题")
+                # 标记消息为已处理
+                marked_count = await self.short_term.mark_processed(conv_id, topics)
+                if len(messages) < 2*self.config['queue_history_size']:
+                    break
+                if len(topics) == 0 or len(memory_ids) == 0 or marked_count == 0:
+                    logging.warning(f"会话 {conv_id} 处理异常，有 {len(topics)} 个话题，{len(memory_ids)} 个记忆，{marked_count} 条消息被标记为已处理")
+                    break
+            logging.info(f"会话 {conv_id} 处理完成，有 {message_count} 条消息，{topic_count} 个话题，{marked_count} 条消息被标记为已处理")
+        except Exception as e:
+            logging.error(f"会话 {conv_id} 处理失败: {e}")
+            raise e
             
         # 判断是否需要回复
         should_reply = await self.processor.should_respond(topics)
@@ -174,7 +185,7 @@ class PersonaSystem:
             logging.info(f"会话 {conv_id} 已有机器人发的消息，不回复")
             should_reply = False
         # 判断消息是否未处理完
-        if len(messages) > self.config['queue_history_size']:
+        if len(messages) >= 2*self.config['queue_history_size']:
             logging.info(f"会话 {conv_id} 消息未处理完，不回复")
             should_reply = False
         
@@ -219,10 +230,12 @@ class PersonaSystem:
         pattern4 = r'([^，。！？（）()\s]+)'
         split_replies = [''.join(t) for t in re.findall(rf'{pattern1}|{pattern2}|{pattern3}|{pattern4}', reply_content)]
         # 返回回复
-        return {
+        reply_dict = {
             "reply_content": split_replies,
             "user_id": user_id
         }
+        if reply_content and self.reply_callback:
+            await self.reply_callback(conv_id, reply_dict)
     
     async def schedule_maintenance(self) -> None:
         """定期维护任务"""
@@ -241,11 +254,7 @@ class PersonaSystem:
             next_process_time = plugin_config.get('next_process_time', 0)
             if time.time() > next_process_time or logging.getLogger().getEffectiveLevel() == logging.DEBUG:
                 # 处理该会话
-                reply_dict = await self.process_conversation(conv_id, "")
-                
-                # 如果有回复且注册了回调，则调用回调
-                if reply_dict and self.reply_callback:
-                    await self.reply_callback(conv_id, reply_dict)
+                await self.process_conversation(conv_id, "")
                     
                 # 更新下次处理时间
                 plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)

@@ -87,26 +87,25 @@ class ShortTermMemory:
         """
         return await self.repository.get_messages(conv_id)
     
-    async def mark_processed(self, conv_id: str, topics: List[Dict]) -> int:
+    async def mark_processed(self, conv_id: str, memories: List[Dict]) -> int:
         """标记消息为已处理
         
-        根据话题列表中的message_ids标记对应消息为已处理
+        根据记忆列表中的message_ids标记对应消息为已处理
         
         Args:
             conv_id: 会话ID
-            topics: 话题列表
+            memories: 记忆列表
             
         Returns:
             标记的消息数量
         """
         marked_count = 0
         
-        # 从话题中收集所有消息ID
-        for topic in topics:
-            topic_id = str(topic.get("id", ""))
-            message_ids = topic.get("message_ids", [])
+        # 从记忆中收集所有消息ID
+        for memory in memories:
+            message_ids = memory.get("message_ids", [])
             if message_ids:
-                count = await self.repository.mark_messages_processed(message_ids, topic_id)
+                count = await self.repository.mark_messages_processed(message_ids)
                 marked_count += count
         logging.info(f"标记消息为已处理: {marked_count} 条")
         

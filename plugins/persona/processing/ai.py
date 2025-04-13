@@ -65,6 +65,7 @@ class AIProcessor:
             history_text.append(f"[{i}] [{formatted_time}] [{sender}]: {content}")
             seqid2msgid[i] = msg['id']
         history_str = "\n".join(history_text)
+        logging.info(f"消息历史: \n{history_str}")
         
         # 构建系统提示词
         system_prompt = TOPIC_EXTRACTION_PROMPT
