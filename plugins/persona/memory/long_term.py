@@ -33,11 +33,11 @@ class LongTermMemory:
         """
         async def _link_nodes_to_memory(memory, nodes: List[str]) -> None:
             """建立话题与节点的关联关系"""  
-            self.repository._link_nodes_to_memory(memory, nodes)
+            await self.repository._link_nodes_to_memory(memory, nodes)
         memory_ids = []
         
         for memory_data in memories:
-            if not memory_data.get("completed_status", True):
+            if not memory_data["completed_status"]:
                 continue
             # 确保记忆有ID
             if "id" not in memory_data:
@@ -46,6 +46,7 @@ class LongTermMemory:
             try:
                 # 提取并存储节点
                 nodes = await self._extract_and_store_nodes(memory_data)
+                memory_data.pop("nodes")
 
                 # 存储话题（此时外键约束已满足）
                 memory = await self.repository.store_memory(conv_id, memory_data)
@@ -70,7 +71,7 @@ class LongTermMemory:
             节点ID列表
         """
         # 从记忆中提取节点（这里简化处理）
-        nodes:list[str] = memory_data.get("nodes", [])
+        nodes:list[str] = memory_data["nodes"]
         
         node_ids = []
         for node_str in nodes:

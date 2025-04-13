@@ -75,12 +75,11 @@ class ShortTermMemory:
         """
         return await self.repository.get_messages(conv_id, processed=False, limit=limit)
     
-    async def get_all_messages(self, conv_id: str, limit: int = 20) -> List[Dict]:
+    async def get_all_messages(self, conv_id: str) -> List[Dict]:
         """获取所有消息
         
         Args:
             conv_id: 会话ID
-            limit: 限制数量
             
         Returns:
             已处理消息列表
@@ -103,7 +102,9 @@ class ShortTermMemory:
         
         # 从记忆中收集所有消息ID
         for memory in memories:
-            message_ids = memory.get("message_ids", [])
+            if not memory["completed_status"]:
+                continue
+            message_ids = memory["message_ids"]
             if message_ids:
                 count = await self.repository.mark_messages_processed(message_ids)
                 marked_count += count

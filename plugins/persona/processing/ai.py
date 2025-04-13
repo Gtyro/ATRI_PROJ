@@ -116,6 +116,7 @@ class AIProcessor:
                 # 将seqid2msgid添加到topics中
                 for topic in topics:
                     topic['message_ids'] = [seqid2msgid[msg_id] for msg_id in topic['message_ids']]
+                    topic['nodes'] = topic.pop('keywords')
                 return topics
             except json.JSONDecodeError as e:
                 logging.error(f"解析话题失败: {e}, 响应内容: {response}...")

@@ -70,8 +70,8 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
     """
     try:
         target = Target(id=conv_id.split("_")[1])
-        if message_dict.get("reply_content"):
-            reply_content = message_dict.get("reply_content")
+        if message_dict:
+            reply_content = message_dict["reply_content"]
             
             # 处理回复内容（可能是字符串或列表）
             if isinstance(reply_content, list):
@@ -160,7 +160,7 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
         reply_dict = await persona_system.process_message(message_data)
         
         # 如果有回复内容，发送回复
-        if reply_dict and reply_dict.get("reply_content"):
+        if reply_dict:
             reply_content = reply_dict["reply_content"]
             
             if isinstance(reply_content, list):

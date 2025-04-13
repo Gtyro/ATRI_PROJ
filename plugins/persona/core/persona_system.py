@@ -126,7 +126,7 @@ class PersonaSystem:
         
         # 如果是直接对话，立即处理
         try:
-            if message_data.get('is_direct', False):
+            if message_data["is_direct"]:
                 return await self.process_conversation(
                     message_data['conv_id'], 
                     message_data['user_id'],
@@ -162,9 +162,13 @@ class PersonaSystem:
                 # 处理会话
                 topics = await self.processor.extract_topics_from_messages(conv_id, messages)
                 topic_count += len(topics)
+                if len(topics) == 0:
+                    break
                 
                 # 将话题存储为长期记忆
                 memory_ids = await self.long_term.store_memories(conv_id, topics)
+                if len(memory_ids) == 0:
+                    break
 
                 # 标记消息为已处理
                 marked_count = await self.short_term.mark_processed(conv_id, topics)
@@ -173,7 +177,6 @@ class PersonaSystem:
                 if len(topics) == 0 or len(memory_ids) == 0 or marked_count == 0:
                     logging.warning(f"会话 {conv_id} 处理异常，有 {len(topics)} 个话题，{len(memory_ids)} 个记忆，{marked_count} 条消息被标记为已处理")
                     break
-            logging.info(f"会话 {conv_id} 处理完成，有 {message_count} 条消息，{topic_count} 个话题，{marked_count} 条消息被标记为已处理")
         except Exception as e:
             logging.error(f"会话 {conv_id} 处理失败: {e}")
             raise e
@@ -203,7 +206,7 @@ class PersonaSystem:
         logging.info(f"会话 {conv_id} 需要回复")
         
         # 获取最近消息历史（包括已处理的）
-        recent_messages = await self.short_term.get_all_messages(conv_id, self.config['queue_history_size'])
+        recent_messages = await self.short_term.get_all_messages(conv_id)
         logging.info(f"会话 {conv_id} 获取最近消息历史完成")
         # 调整下次处理时间（如果是群组）
         try:
@@ -217,7 +220,7 @@ class PersonaSystem:
             raise e
         # 生成回复
         reply_data = await self.processor.generate_reply(conv_id, recent_messages, temperature=0.7)
-        reply_content = reply_data.get('content', '')
+        reply_content = reply_data["content"]
         logging.info(f"会话 {conv_id} 生成回复完成")
         logging.info(f"会话 {conv_id} 回复内容: {reply_content}")
 

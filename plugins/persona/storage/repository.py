@@ -63,9 +63,11 @@ class Repository:
         message = await MessageQueue.create(**message_data)
         return message
     
-    async def get_messages(self, conv_id: str, processed: Optional[bool] = None, limit: int = 20) -> List[Dict]:
+    async def get_messages(self, conv_id: str, processed: Optional[bool] = None, limit: int = None) -> List[Dict]:
         """获取指定会话的消息"""
-        if processed is None:
+        if not limit:
+            messages = await MessageQueue.filter(conv_id=conv_id).order_by("created_at").all()
+        elif processed is None:
             messages = await MessageQueue.filter(conv_id=conv_id).order_by("created_at").limit(limit).all()
         else:
             messages = await MessageQueue.filter(
