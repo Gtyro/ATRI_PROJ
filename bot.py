@@ -7,7 +7,7 @@ import os
 import logging
 from datetime import datetime
 
-datestr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+datestr = datetime.now().strftime("%Y-%m-%d %H:%M")
 # 设置日志级别为DEBUG，方便排查问题
 logging.basicConfig(
     level=logging.INFO,
