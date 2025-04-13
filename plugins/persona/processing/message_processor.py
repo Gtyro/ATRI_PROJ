@@ -101,6 +101,7 @@ class MessageProcessor:
             message_text = f"[{user_name}]{'对你' if is_direct else ''}说: {content}"
             
             chat_messages.append({"role": role, "content": message_text})
+        logging.info(f"消息历史: \n{chat_messages}")
         
         # 生成回复
         reply_content = await self.ai_processor.generate_response(conv_id, chat_messages, temperature)
