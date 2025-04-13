@@ -151,8 +151,11 @@ class PersonaSystem:
         # 获取待处理消息
         try:
             message_count = 0
-            topic_count = 0
+            memory_count = 0
+            marked_count_total = 0
+            loop_count = 0
             while True:
+                loop_count += 1
                 messages: List[Dict] = await self.short_term.get_unprocessed_messages(conv_id, 2*self.config['queue_history_size'])
                 if not messages:
                     logging.info(f"会话 {conv_id} 没有未处理消息")
@@ -161,22 +164,27 @@ class PersonaSystem:
 
                 # 处理会话
                 topics = await self.processor.extract_topics_from_messages(conv_id, messages)
-                topic_count += len(topics)
                 if len(topics) == 0:
                     break
                 
                 # 将话题存储为长期记忆
                 memory_ids = await self.long_term.store_memories(conv_id, topics)
+                memory_count += len(memory_ids)
                 if len(memory_ids) == 0:
                     break
 
                 # 标记消息为已处理
                 marked_count = await self.short_term.mark_processed(conv_id, topics)
+                marked_count_total += marked_count
+                
                 if len(messages) < 2*self.config['queue_history_size']:
                     break
                 if len(topics) == 0 or len(memory_ids) == 0 or marked_count == 0:
                     logging.warning(f"会话 {conv_id} 处理异常，有 {len(topics)} 个话题，{len(memory_ids)} 个记忆，{marked_count} 条消息被标记为已处理")
                     break
+                logging.info(f"会话 {conv_id} 第{loop_count}次循环: 处理了 {len(messages)} 条消息，存储了 {len(memory_ids)} 个记忆，标记了 {marked_count} 条消息为已处理")
+            
+            logging.info(f"会话 {conv_id} 处理完成: 共 {loop_count} 次循环，处理了 {message_count} 条消息，存储了 {memory_count} 个记忆，标记了 {marked_count_total} 条消息为已处理")
         except Exception as e:
             logging.error(f"会话 {conv_id} 处理失败: {e}")
             raise e
