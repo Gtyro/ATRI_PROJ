@@ -91,46 +91,63 @@ class Repository:
             return 0
     
     async def remove_old_messages(self, conv_id: str, keep_count: int = 40) -> int:
-        """移除旧的已处理消息，基于未处理消息的数量动态调整保留数量
+        """移除旧消息，基于时间戳的清理策略
         
-        假如未处理的消息有m条，已处理的消息有n条:
-        若m>=40，则移除所有n条已处理消息
-        若m<40，则移除n-(40-m)条已处理消息
+        1. 找到最新一条已处理消息的时间
+        2. 计算晚于这个时间的未处理消息数量
+        3. 如果数量超过40，则清理所有早于最新已处理消息时间的消息（不管是否已处理）
+        4. 如果数量不超过40，则只保留最新的keep_count条消息（不管是否已处理）
         """
-        # 获取未处理消息数量 m
-        unprocessed_count = await MessageQueue.filter(conv_id=conv_id, is_processed=False).count()
-        
-        # 获取已处理消息数量 n
-        processed_count = await MessageQueue.filter(conv_id=conv_id, is_processed=True).count()
-        
-        # 根据规则确定要保留的已处理消息数量
-        messages_to_keep = 0
-        if unprocessed_count >= keep_count:
-            # 如果未处理消息已经达到或超过keep_count，则删除所有已处理消息
-            messages_to_keep = 0
-        else:
-            # 否则保留(keep_count-unprocessed_count)条已处理消息
-            messages_to_keep = keep_count - unprocessed_count
-        
-        # 如果已处理消息数量小于等于需要保留的数量，则不需要删除
-        if processed_count <= messages_to_keep:
-            return 0
-            
-        # 计算需要删除的消息数量
-        to_delete = processed_count - messages_to_keep
-        
-        # 获取要删除的消息（按创建时间排序，删除最早的）
-        messages = await MessageQueue.filter(
+        # 获取最新一条已处理消息
+        latest_processed = await MessageQueue.filter(
             conv_id=conv_id, 
             is_processed=True
-        ).order_by("created_at").limit(to_delete).all()
+        ).order_by("-created_at").first()
         
-        # 执行删除
+        # 如果没有已处理消息，则无需清理
+        if not latest_processed:
+            return 0
+        
+        # 获取晚于最新已处理消息时间的未处理消息数量
+        newer_unprocessed_count = await MessageQueue.filter(
+            conv_id=conv_id,
+            is_processed=False,
+            created_at__gt=latest_processed.created_at
+        ).count()
+        
         deleted = 0
-        for msg in messages:
-            await msg.delete()
-            deleted += 1
-        logging.info(f"移除旧的已处理消息: {deleted} 条，保留: {messages_to_keep} 条")
+        
+        # 如果晚于最新已处理消息时间的未处理消息数量超过40
+        if newer_unprocessed_count >= 40:
+            # 清理所有早于最新已处理消息时间的消息（不管是否已处理）
+            messages_to_delete = await MessageQueue.filter(
+                conv_id=conv_id,
+                created_at__lt=latest_processed.created_at
+            ).all()
+            
+            for msg in messages_to_delete:
+                await msg.delete()
+                deleted += 1
+        else:
+            # 只保留最新的keep_count条消息
+            # 首先获取总消息数
+            total_messages = await MessageQueue.filter(conv_id=conv_id).count()
+            
+            # 如果总消息数超过keep_count，则需要清理
+            if total_messages > keep_count:
+                # 计算需要删除的消息数量
+                to_delete = total_messages - keep_count
+                
+                # 获取要删除的消息（按创建时间排序，删除最早的）
+                messages_to_delete = await MessageQueue.filter(
+                    conv_id=conv_id
+                ).order_by("created_at").limit(to_delete).all()
+                
+                for msg in messages_to_delete:
+                    await msg.delete()
+                    deleted += 1
+        
+        logging.info(f"移除旧消息: {deleted} 条，基于新的时间戳清理策略")
         
         return deleted
     
