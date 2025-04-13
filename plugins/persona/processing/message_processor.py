@@ -50,7 +50,7 @@ class MessageProcessor:
         except Exception as e:
             logging.error(f"处理对话失败: {e}")
     
-    async def should_respond(self, topics: List[Dict]) -> bool:
+    async def should_respond(self, conv_id: str, topics: List[Dict]) -> bool:
         """判断是否应该回复
         
         Args:
@@ -61,6 +61,7 @@ class MessageProcessor:
         """
         # 无话题或全部已完结
         if not topics or all(topic.get("completed_status", True) for topic in topics):
+            logging.info(f"会话 {conv_id} 无话题或全部已完结，不回复")
             return False
             
         # 从未完结的话题中选择是否回复

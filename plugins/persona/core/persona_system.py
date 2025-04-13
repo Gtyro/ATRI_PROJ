@@ -129,7 +129,8 @@ class PersonaSystem:
             if message_data.get('is_direct', False):
                 return await self.process_conversation(
                     message_data['conv_id'], 
-                    message_data['user_id']
+                    message_data['user_id'],
+                    message_data['is_direct']
                 )
         except Exception as e:
             logging.error(f"persona_system.process_message:处理消息失败: {e}")
@@ -137,13 +138,13 @@ class PersonaSystem:
         
         return None
     
-    async def process_conversation(self, conv_id: str, user_id: str) -> Optional[Dict]:
+    async def process_conversation(self, conv_id: str, user_id: str, is_direct: bool = False) -> Optional[Dict]:
         """处理特定会话的消息
         
         Args:
             conv_id: 会话ID
             user_id: 用户ID
-            
+            is_direct: 是否是直接对话
         Returns:
             可能的回复内容
         """
@@ -178,7 +179,7 @@ class PersonaSystem:
             raise e
             
         # 判断是否需要回复
-        should_reply = await self.processor.should_respond(topics)
+        should_reply = await self.processor.should_respond(conv_id, topics)
         # 判断队列中是否有机器人发的消息
         has_bot_message = await self.repository.has_bot_message(conv_id)
         if has_bot_message:
@@ -188,6 +189,8 @@ class PersonaSystem:
         if len(messages) >= 2*self.config['queue_history_size']:
             logging.info(f"会话 {conv_id} 消息未处理完，不回复")
             should_reply = False
+        if is_direct: # 如果是直接对话，则必须回复
+            should_reply = True
         
         if not should_reply:
             if conv_id.startswith('group_'):

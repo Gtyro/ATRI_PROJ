@@ -60,9 +60,13 @@ class AIProcessor:
         seqid2msgid = {}
         for i, msg in enumerate(messages):
             sender = "你" if msg.get("is_bot", False) else msg.get("user_name", "用户")
+            receiver = "你" if msg['is_direct'] else None
             content = msg.get("content", "")
             formatted_time = msg["created_at"].strftime("%Y-%m-%d %H:%M") # 只保留到分钟
-            history_text.append(f"[{i}] [{formatted_time}] [{sender}]: {content}")
+            if receiver:
+                history_text.append(f"[{i}] [{formatted_time}] [{sender}]对{receiver}说: {content}")
+            else:
+                history_text.append(f"[{i}] [{formatted_time}] [{sender}]说: {content}")
             seqid2msgid[i] = msg['id']
         history_str = "\n".join(history_text)
         logging.info(f"消息历史: \n{history_str}")
