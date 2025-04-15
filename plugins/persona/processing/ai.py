@@ -162,14 +162,13 @@ class AIProcessor:
                 temperature=temperature
             )
             # 这里需要对content进行处理，去除[xx]说:部分
-            content = re.sub(r'.*?说:[:：]\s*', '', content)
+            content = re.sub(r'.*?说[:：]\s*', '', content, count=1)
 
             # 对可能的错误进行处理，如果content中仍然有[]，则去除[], 并log
             if re.search(r'\[.*?\]', content):
                 logging.warning(f"生成回复中仍然有[]，进行处理: {content}")
-                content = re.sub(r'\[.*?\]说?[:：]?\s*', '', content)
+                content = re.sub(r'\[.*?\]说?[:：]?.*', '', content, flags=re.DOTALL) # 如果出现第2个[xx]说，说明回复异常，之后的内容都删除
                 logging.warning(f"处理后: {content}")
-                content = "" # 如果仍然有[]，则认为回复失败，返回空字符串
             logging.info(f"生成回复: {content}")
             return content
         except Exception as e:
