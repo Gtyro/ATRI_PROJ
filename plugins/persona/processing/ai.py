@@ -128,7 +128,7 @@ class AIProcessor:
             # 出错也返回一个简单的话题
             return []
 
-    async def generate_response(self, conv_id: str, messages: List[Dict], temperature: float = 0.7) -> str:
+    async def generate_response(self, conv_id: str, messages: List[Dict], temperature: float = 0.7, long_memory_promt: str = "") -> str:
         """生成回复
         
         Args:
@@ -152,6 +152,8 @@ class AIProcessor:
             logging.error(f"读取角色信息失败: {e}")
             logging.error(f"角色信息: {self.group_character}")
             return ""
+        if long_memory_promt:
+            system_prompt += f"\n{long_memory_promt}"
         
         try:
             content = await self._call_api(

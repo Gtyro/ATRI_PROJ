@@ -204,7 +204,7 @@ class Repository:
         if completed is not None:
             query = query.filter(completed_status=completed)
         
-        return await query.order_by("-updated_at").limit(limit).all()
+        return await query.order_by("-last_accessed").limit(limit).all()
     
     async def get_distinct_conv_ids(self) -> List[str]:
         """获取所有不同的会话ID
@@ -281,7 +281,10 @@ class Repository:
         # 获取关联的节点
         nodes = []
         for assoc in await query.order_by("-strength").limit(4).all():
-            nodes.append(assoc.target)
+            # 确保获取完整的CognitiveNode实例
+            target_node = await CognitiveNode.get_or_none(id=assoc.target_id)
+            if target_node:
+                nodes.append(target_node)
         return nodes
     
     async def apply_decay(self, node_id: str, decay_rate: float) -> bool:

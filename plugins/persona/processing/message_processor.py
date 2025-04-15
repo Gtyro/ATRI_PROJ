@@ -79,7 +79,7 @@ class MessageProcessor:
                 
         return False
     
-    async def generate_reply(self, conv_id: str, messages: List[Dict], temperature: float = 0.7) -> Dict:
+    async def generate_reply(self, conv_id: str, messages: List[Dict], temperature: float = 0.7, long_memory_promt: str = "") -> Dict:
         """生成回复
         
         Args:
@@ -98,13 +98,13 @@ class MessageProcessor:
             is_bot = msg.get("is_bot", False)
             
             role = "assistant" if is_bot else "user"
-            message_text = f"[{user_name}]{'对你' if is_direct else ''}说: {content}"
+            message_text = f"[{user_name}]{'对你' if is_direct else ''}说: {content}" if not is_bot else content
             
             chat_messages.append({"role": role, "content": message_text})
-        logging.info(f"消息历史: \n{chat_messages}")
+        logging.info(f"消息历史: \n{'\n'.join([f'[{msg["role"]}] {msg["content"]}' for msg in chat_messages])}")
         
         # 生成回复
-        reply_content = await self.ai_processor.generate_response(conv_id, chat_messages, temperature)
+        reply_content = await self.ai_processor.generate_response(conv_id, chat_messages, temperature, long_memory_promt)
         
         return {
             "content": reply_content,

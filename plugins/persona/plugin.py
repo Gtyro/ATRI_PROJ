@@ -338,20 +338,19 @@ async def handle_test_persona(bot: Bot, event: Event):
     # 如果系统未启用，返回错误信息
     if not PERSONA_SYSTEM_ENABLED:
         await test_persona.finish("人格系统未启用，请检查配置和日志")
-        return
 
-    # 获取用户ID
-    user_id = event.get_user_id()
-    group_id = event.get_group_id()
+    args = str(event.get_plaintext()).strip().split()
+    if len(args) != 2:
+        await test_persona.finish("格式错误，正确格式：测试 [群号]")
 
-    # 获取群组配置
-    config = await persona_system.group_config.get_config(
-        gid=f"group_{group_id}",
-        plugin_name="persona"
-    )
-    if not config:
-        await test_persona.finish("群组配置不存在，请检查配置和日志")
-        return
+    group_id = args[1]
+    if not group_id.isdigit():
+        await test_persona.finish("群号格式不正确")
+    conv_id = f"group_{group_id}"
 
-    # 获取群组人格提示文件
-    prompt_file = config.plugin_config.get("prompt_file")
+    reply_data = await persona_system.simulate_reply(conv_id)
+    if reply_data:
+        reply_content = reply_data["reply_content"]
+        await test_persona.send(reply_content)
+    else:
+        await test_persona.finish("模拟回复失败，请检查日志")

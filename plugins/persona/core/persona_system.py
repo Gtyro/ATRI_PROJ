@@ -206,6 +206,7 @@ class PersonaSystem:
         if not should_reply:
             if conv_id.startswith('group_'):
                 # 如果群组不需要回复，下次处理时间设置为30分钟
+                logging.info(f"会话 {conv_id} 不需要回复，下次处理时间设置为30分钟")
                 config = await self.group_config.get_config(conv_id, self.plugin_name)
                 config.plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)
                 await config.save()
@@ -318,7 +319,7 @@ class PersonaSystem:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
             
         # 获取未处理消息
-        messages = await self.short_term.get_unprocessed_messages(conv_id)
+        messages = await self.short_term.get_unprocessed_messages(conv_id, self.config['queue_history_size'])
         if not messages:
             logging.info(f"会话 {conv_id} 没有未处理消息")
             return None
@@ -330,7 +331,18 @@ class PersonaSystem:
         related_memories = []
         for topic in topics:
             if topic['completed_status'] == False:
-                related_memories.extend(await self.retriever.search_for_memories(topic['content'], None, 5))
+                for node in topic['nodes']:
+                    related_memories.extend(await self.retriever.search_for_memories(node, None, 5))
         logging.info(f"会话 {conv_id} 从长期记忆中获取相关记忆完成")
+        long_memory_promt = ["你记得:\n"]
+        for memory in related_memories:
+            long_memory_promt.append(f"{memory['content']}，")
+        long_memory_promt.append("，请根据这些记忆生成回复")
+        long_memory_promt = "".join(long_memory_promt)
+        logging.info(f"会话 {conv_id} 长期记忆提示: \n{long_memory_promt}")
         # 使用AI生成回复
-        reply_data = await self.processor.generate_reply(conv_id, related_memories, temperature=0.7)
+        reply_data = await self.processor.generate_reply(conv_id, related_memories, temperature=0.7, long_memory_promt=long_memory_promt)
+        reply_dict = {
+            "reply_content": reply_data["content"]
+        }
+        return reply_dict
