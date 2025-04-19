@@ -135,7 +135,7 @@ class AIProcessor:
             conv_id: 会话ID
             messages: 消息列表
             temperature: 温度
-            
+            long_memory_promt: 长期记忆提示
         Returns:
             生成的回复
         """
@@ -168,6 +168,12 @@ class AIProcessor:
             if re.search(r'\[.*?\]', content):
                 logging.warning(f"生成回复中仍然有[]，进行处理: {content}")
                 content = re.sub(r'\[.*?\]说?[:：]?.*', '', content, flags=re.DOTALL) # 如果出现第2个[xx]说，说明回复异常，之后的内容都删除
+                logging.warning(f"处理后: {content}")
+
+            # 如果content中包含"笑死"，则删除
+            if "笑死" in content:
+                logging.warning(f"生成回复中包含'笑死'，进行处理: {content}")
+                content = re.sub(r'^笑死', '', content)
                 logging.warning(f"处理后: {content}")
             logging.info(f"生成回复: {content}")
             return content
