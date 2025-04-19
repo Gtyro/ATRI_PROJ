@@ -2,7 +2,7 @@
   <div class="result-table" v-if="columns.length">
     <h3>查询结果 ({{ rows.length }} 行)</h3>
     <el-table
-      :data="rows"
+      :data="displayedRows"
       border
       style="width: 100%"
       v-loading="loading"
@@ -51,14 +51,22 @@ const pageSize = ref(10)
 const currentPage = ref(1)
 const hasQueried = ref(false)
 
+const displayedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return rows.value.slice(start, end)
+})
+
 watch(() => props.data, () => {
   if (props.data.columns?.length || props.data.rows?.length) {
     hasQueried.value = true
+    currentPage.value = 1 // 重置为第一页
   }
 }, { deep: true })
 
 const handleSizeChange = (val) => {
   pageSize.value = val
+  currentPage.value = 1 // 改变每页大小时重置为第一页
 }
 
 const handleCurrentChange = (val) => {
