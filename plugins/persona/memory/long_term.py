@@ -45,7 +45,7 @@ class LongTermMemory:
                 
             try:
                 # 提取并存储节点
-                nodes = await self._extract_and_store_nodes(memory_data)
+                nodes = await self._extract_and_store_nodes(conv_id, memory_data)
                 memory_data.pop("nodes")
 
                 # 存储话题（此时外键约束已满足）
@@ -61,10 +61,11 @@ class LongTermMemory:
         
         return memory_ids
     
-    async def _extract_and_store_nodes(self, memory_data: Dict) -> List[str]:
+    async def _extract_and_store_nodes(self, conv_id: str, memory_data: Dict) -> List[str]:
         """从记忆数据中提取并更新节点
         
         Args:
+            conv_id: 会话ID
             memory_data: 记忆数据
         
         Returns:
@@ -76,7 +77,7 @@ class LongTermMemory:
         node_ids = []
         for node_str in nodes:
             try:
-                node = await self.repository.update_or_create_node(node_str)
+                node = await self.repository.update_or_create_node(conv_id, node_str)
                 logging.info(f"存储节点: {node.name}")
                 node_ids.append(str(node.id))
             except Exception as e:

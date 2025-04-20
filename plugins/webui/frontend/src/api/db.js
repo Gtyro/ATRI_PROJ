@@ -28,4 +28,55 @@ export function updateRecord(tableName, id, data) {
 // 删除记录
 export function deleteRecord(tableName, id) {
   return axios.delete(`/db/table/${tableName}/delete?id=${encodeURIComponent(id)}`)
+}
+
+// 获取认知节点数据
+export function getCognitiveNodes(convId = '', limit = 50) {
+  let url = '/db/memory/nodes';
+  const params = new URLSearchParams();
+  
+  if (convId) {
+    params.append('conv_id', convId);
+  }
+  
+  if (limit) {
+    params.append('limit', limit);
+  }
+  
+  const queryString = params.toString();
+  if (queryString) {
+    url += `?${queryString}`;
+  }
+  
+  return axios.get(url);
+}
+
+// 获取节点关联数据
+export function getAssociations(convId = '', nodeIds = null, limit = 200) {
+  let url = '/db/memory/associations';
+  const params = new URLSearchParams();
+  
+  if (convId) {
+    params.append('conv_id', convId);
+  }
+  
+  if (nodeIds) {
+    params.append('node_ids', nodeIds);
+  }
+  
+  if (limit) {
+    params.append('limit', limit);
+  }
+  
+  const queryString = params.toString();
+  if (queryString) {
+    url += `?${queryString}`;
+  }
+  
+  return axios.get(url);
+}
+
+// 获取所有可用的会话ID
+export function getConversations() {
+  return axios.get('/db/memory/conversations');
 } 

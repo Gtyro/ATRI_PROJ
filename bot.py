@@ -11,7 +11,7 @@ datestr = datetime.now().strftime("%Y-%m-%d %H:%M")
 # 设置日志级别为DEBUG，方便排查问题
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(filename)s - %(lineno)d - [%(levelname)s] %(message)s",
+    format="%(asctime)s - [%(levelname)s] - %(filename)s - %(lineno)d %(message)s",
     handlers=[
         logging.FileHandler(f"logs/{datestr}.log"),
         logging.StreamHandler()

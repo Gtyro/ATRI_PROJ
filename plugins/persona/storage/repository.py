@@ -224,19 +224,18 @@ class Repository:
             node = await CognitiveNode.get(id=node_id)
             await memory.nodes.add(node)
     
-    async def update_or_create_node(self, node_str: str) -> CognitiveNode:
+    async def update_or_create_node(self, conv_id: str, node_str: str) -> CognitiveNode:
         """存储或更新节点
         如果节点不存在，则创建，否则weight+0.3
         """
         node, created = await CognitiveNode.update_or_create(
+            conv_id=conv_id,
             name=node_str
         )
-        # 如果节点不存在，则创建
+        # 如果节点不存在，则创建，weight为默认值
         # 如果节点存在，则weight+0.3
-        # 这里的created是根据name是否存在来判断的
-        # 如果name存在，则不创建，否则创建
-        # 所以created为True时，weight+0.3，否则不加
-        if created:
+        if not created:
+            logging.info(f"增强节点: {conv_id}-{node_str}")
             node.act_lv += 0.3
             await node.save()
         return node
@@ -269,11 +268,13 @@ class Repository:
             assoc, created = await Association.update_or_create(
                 source=source,
                 target=target,
-                defaults={'strength': 0.3}  # 新创建时初始强度
             )
             if not created:
+                logging.info(f"增强关联: {node_id_a}-{node_id_b}")
                 assoc.strength += 0.3
                 await assoc.save()
+            else:
+                logging.info(f"创建关联: {node_id_a}-{node_id_b}")
     
     async def get_related_nodes(self, node_id: str) -> List[CognitiveNode]:
         """获取与指定节点相关联的所有节点"""

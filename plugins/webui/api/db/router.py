@@ -74,3 +74,81 @@ async def delete_data(
     # 验证ID
     validate_id(id)
     return await execute_delete_query(table_name, id)
+
+@router.get("/memory/nodes")
+async def get_cognitive_nodes(conv_id: str = '', limit: int = 50, current_user: User = Depends(get_current_active_user)):
+    """获取认知节点数据，用于知识图谱可视化
+    
+    Args:
+        conv_id: 可选，如果提供则获取特定会话的节点，否则获取公共节点(空conv_id)
+        limit: 返回的最大节点数量，默认50个
+    """
+    query = "SELECT id, name, conv_id, act_lv FROM nodes"
+    
+    if conv_id:  # 非空字符串
+        query += f" WHERE conv_id = '{conv_id}'"
+    else:  # 空字符串，获取公共图谱
+        query += " WHERE conv_id = ''"
+    
+    # 按激活水平降序排序，限制数量    
+    query += f" ORDER BY act_lv DESC LIMIT {limit}"
+        
+    result = await execute_select_query(query)
+    return result
+
+@router.get("/memory/associations")
+async def get_associations(conv_id: str = '', node_ids: str = None, limit: int = 200, current_user: User = Depends(get_current_active_user)):
+    """获取节点之间的关联数据
+    
+    Args:
+        conv_id: 可选，如果提供则获取特定会话的关联，否则获取公共关联
+        node_ids: 可选，逗号分隔的节点ID列表，如果提供则只获取这些节点之间的关联
+        limit: 返回的最大关联数量，默认200个
+    """
+    # 基本查询
+    query = """
+    SELECT a.id, a.source_id, a.target_id, a.strength,
+           s.name as source_name, t.name as target_name
+    FROM associations a
+    JOIN nodes s ON a.source_id = s.id
+    JOIN nodes t ON a.target_id = t.id
+    """
+    
+    # 条件部分
+    conditions = []
+    
+    # 会话ID条件
+    if conv_id:  # 非空字符串
+        conditions.append(f"s.conv_id = '{conv_id}' AND t.conv_id = '{conv_id}'")
+    else:  # 空字符串，获取公共图谱
+        conditions.append("s.conv_id = '' AND t.conv_id = ''")
+    
+    # 节点ID条件
+    if node_ids:
+        ids = node_ids.split(',')
+        if ids:
+            node_ids_str = "','".join(ids)
+            conditions.append(f"a.source_id IN ('{node_ids_str}') AND a.target_id IN ('{node_ids_str}')")
+    
+    # 添加WHERE子句
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    
+    # 添加排序和限制
+    query += f" ORDER BY a.strength DESC LIMIT {limit}"
+        
+    result = await execute_select_query(query)
+    return result
+
+@router.get("/memory/conversations")
+async def get_conversations(current_user: User = Depends(get_current_active_user)):
+    """获取所有可用的会话ID（从GroupPluginConfig表获取）"""
+    # 从group_plugin_configs表获取所有不同的gid
+    query = """
+    SELECT DISTINCT gid, name
+    FROM group_plugin_configs
+    ORDER BY gid
+    """
+    
+    result = await execute_select_query(query)
+    return result
