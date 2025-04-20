@@ -8,61 +8,15 @@
       </template>
       
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="数据浏览器" name="browser">
-          <el-row :gutter="20">
-            <el-col :span="5">
-              <el-card shadow="never" class="tables-list">
-                <template #header>
-                  <div class="card-header">
-                    <h4>数据库表</h4>
-                    <el-button type="primary" size="small" @click="refreshTables">
-                      刷新
-                    </el-button>
-                  </div>
-                </template>
-                
-                <el-input
-                  v-model="tableFilter"
-                  placeholder="搜索表"
-                  clearable
-                  style="margin-bottom: 10px"
-                />
-                
-                <el-menu @select="handleTableSelect">
-                  <el-menu-item v-for="table in filteredTables" :key="table" :index="table">
-                    {{ table }}
-                  </el-menu-item>
-                </el-menu>
-              </el-card>
-            </el-col>
-            
-            <el-col :span="19">
-              <el-tabs v-model="dataViewTab" v-if="selectedTable">
-                <el-tab-pane label="表数据" name="data">
-                  <TableViewer 
-                    :tableName="selectedTable" 
-                    :onResult="handleQueryResult" 
-                  />
-                </el-tab-pane>
-                <el-tab-pane label="表结构" name="structure">
-                  <TableStructure :structureData="tableStructure" />
-                </el-tab-pane>
-              </el-tabs>
-              <el-empty description="请选择一个表" v-else></el-empty>
-            </el-col>
-          </el-row>
+        <el-tab-pane label="数据管理" name="manager">
+          <TableManager 
+            :tables="tables" 
+            :onResult="handleQueryResult" 
+          />
         </el-tab-pane>
         
         <el-tab-pane label="SQL查询" name="query">
           <SqlEditor :onResult="handleQueryResult" />
-          <DataTable :data="queryResult" :loading="loading" />
-        </el-tab-pane>
-        
-        <el-tab-pane label="图形化查询" name="builder">
-          <QueryBuilder 
-            :tables="tables" 
-            :onResult="handleQueryResult" 
-          />
           <DataTable :data="queryResult" :loading="loading" />
         </el-tab-pane>
         
@@ -119,17 +73,11 @@ import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import SqlEditor from '@/components/SqlEditor.vue'
 import DataTable from '@/components/DataTable.vue'
-import TableStructure from '@/components/TableStructure.vue'
-import TableViewer from '@/components/TableViewer.vue'
-import QueryBuilder from '@/components/QueryBuilder.vue'
+import TableManager from '@/components/TableManager.vue'
 
-const activeTab = ref('browser')
-const dataViewTab = ref('data')
+const activeTab = ref('manager')
 const loading = ref(false)
 const tables = ref([])
-const tableFilter = ref('')
-const selectedTable = ref('')
-const tableStructure = ref(null)
 const queryResult = ref({ columns: [], rows: [] })
 const showSqlPreview = ref(false)
 const sqlPreview = ref('')
@@ -178,14 +126,6 @@ const presetQueries = ref({
   }
 })
 
-// 筛选表
-const filteredTables = computed(() => {
-  if (!tableFilter.value) return tables.value
-  return tables.value.filter(table => 
-    table.toLowerCase().includes(tableFilter.value.toLowerCase())
-  )
-})
-
 // 获取数据库表列表
 const fetchTables = () => {
   loading.value = true
@@ -199,32 +139,6 @@ const fetchTables = () => {
     .finally(() => {
       loading.value = false
     })
-}
-
-// 刷新表列表
-const refreshTables = () => {
-  fetchTables()
-}
-
-// 获取表结构
-const fetchTableStructure = (tableName) => {
-  loading.value = true
-  axios.get(`/db/table/${tableName}`)
-    .then(response => {
-      tableStructure.value = response.data
-    })
-    .catch(error => {
-      ElMessage.error('获取表结构失败: ' + error.message)
-    })
-    .finally(() => {
-      loading.value = false
-    })
-}
-
-// 处理表选择
-const handleTableSelect = (tableName) => {
-  selectedTable.value = tableName
-  fetchTableStructure(tableName)
 }
 
 // 处理查询结果
@@ -291,15 +205,6 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.tables-list {
-  max-height: 600px;
-  overflow-y: auto;
-}
-
-.tables-list .el-menu {
-  border-right: none;
 }
 
 .sql-preview {
