@@ -133,49 +133,26 @@ class LongTermMemory:
             "continuation_probability": topic.continuation_probability
         }
     
-    async def get_node_by_name(self, name: str) -> Optional[Dict]:
+    async def get_node_by_name(self, name: str, conv_id: Optional[str] = None) -> Optional[Dict]:
         """根据名称获取节点
         
         Args:
             name: 节点名称
+            conv_id: 可选的会话ID过滤
             
         Returns:
-            节点字典
+            节点字典，未找到则返回None
         """
-        nodes = await self.repository.get_nodes()
-        for node in nodes:
-            if node.name.lower() == name.lower():
-                return self._node_to_dict(node)
+        node = await self.repository.get_node_by_name(name, conv_id)
+        if node:
+            return self._node_to_dict(node)
         return None
     
     def _node_to_dict(self, node) -> Dict:
-        """将节点模型转换为字典
-        
-        Args:
-            node: 节点模型
-            
-        Returns:
-            节点字典
-        """
+        """将节点对象转换为字典"""
         return {
             "id": str(node.id),
             "name": node.name,
-            "weight": node.weight,
-            "topic_ids": node.topic_ids
-        }
-    
-    async def apply_decay(self) -> int:
-        """应用记忆衰减
-        
-        Returns:
-            处理的节点数量
-        """
-        nodes = await self.repository.get_nodes()
-        count = 0
-        
-        for node in nodes:
-            if await self.repository.apply_decay(str(node.id), self.decay_rate):
-                count += 1
-                
-        logging.info(f"应用记忆衰减完成，处理了 {count} 个节点")
-        return count 
+            "conv_id": node.conv_id,
+            "act_lv": node.act_lv
+        } 

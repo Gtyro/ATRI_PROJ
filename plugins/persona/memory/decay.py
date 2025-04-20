@@ -3,6 +3,7 @@ import time
 from typing import Dict, List, Optional
 
 from ..storage.repository import Repository
+from ...models import GroupPluginConfig
 
 class DecayManager:
     """记忆衰减管理器
@@ -20,6 +21,8 @@ class DecayManager:
         self.repository = repository
         self.decay_rate = decay_rate
         self.last_decay_time = time.time()
+        self.plugin_name = "persona"  # 插件名称
+        self.max_nodes_per_conv = 1000  # 每个会话保留的最大节点数
         logging.info(f"记忆衰减管理器已创建，衰减率: {decay_rate}")
     
     async def apply_decay(self, force: bool = False) -> int:
@@ -32,71 +35,92 @@ class DecayManager:
             处理的节点数量
         """
         current_time = time.time()
-        # 默认每天执行一次衰减（24*60*60=86400秒）
-        if not force and (current_time - self.last_decay_time) < 86400:
+        # 默认每4h执行一次衰减（4*60*60=14400秒）
+        if not force and (current_time - self.last_decay_time) < 14400:
             logging.info("记忆衰减间隔未到，跳过")
             return 0
             
-        nodes = await self.repository.get_nodes()
+        nodes = await self.repository.get_nodes(limit=None)  # 不限制数量，获取所有节点
         processed = 0
         
         for node in nodes:
-            # 跳过激活水平很高的节点
-            if node.act_lv > 0.8:
-                continue
-                
-            # 应用衰减
+            # 应用衰减到所有节点，不再跳过高激活水平的节点
             if await self.repository.apply_decay(str(node.id), self.decay_rate):
                 processed += 1
         
+        # 应用关联关系的衰减
+        associations_processed = await self.repository.apply_association_decay(self.decay_rate)
+        logging.info(f"关联关系衰减完成，处理了 {associations_processed} 个关联")
+        
         self.last_decay_time = current_time
-        logging.info(f"记忆衰减完成，处理了 {processed} 个节点")
+        logging.info(f"记忆衰减完成，处理了 {processed} 个节点和 {associations_processed} 个关联")
+        
+        # 执行完衰减后，检查是否需要清理过多的节点
+        await self.cleanup_old_nodes()
+        
         return processed
     
-    async def strengthen_memory(self, node_id: str, boost_factor: float = 0.1) -> bool:
-        """增强特定节点的记忆强度
+    async def cleanup_old_nodes(self) -> int:
+        """清理旧节点，为每个会话只保留指定数量的节点
         
-        Args:
-            node_id: 节点ID
-            boost_factor: 增强因子
-            
         Returns:
-            是否成功
+            清理的节点数量
         """
+        # 获取所有使用 persona 插件的会话 ID
         try:
-            nodes = await self.repository.get_nodes()
-            for node in nodes:
-                if str(node.id) == node_id:
-                    # 增加激活水平，但最大为1.0
-                    node.act_lv = min(1.0, node.act_lv + boost_factor)
-                    await node.save()
-                    logging.info(f"增强节点记忆: {node.name}, 新激活水平: {node.act_lv}")
-                    return True
-            return False
+            conv_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
+            total_cleaned = 0
+            
+            # 对每个会话进行清理
+            for conv_id in conv_ids:
+                cleaned = await self.forget_node_by_conv(conv_id)
+                total_cleaned += cleaned
+                
+            if total_cleaned > 0:
+                logging.info(f"记忆清理完成，共清理 {total_cleaned} 个节点")
+            return total_cleaned
+            
         except Exception as e:
-            logging.error(f"增强记忆失败: {e}")
-            return False
+            logging.error(f"清理旧节点失败: {e}")
+            return 0
     
-    async def forget_node(self, node_id: str) -> bool:
-        """强制遗忘某个节点
-        
-        实际上只是将其激活水平设为很低的值
+    async def forget_node_by_conv(self, conv_id: str) -> int:
+        """为指定会话保留一定数量的节点，删除多余节点
         
         Args:
-            node_id: 节点ID
+            conv_id: 会话ID
             
         Returns:
-            是否成功
+            清理的节点数量
         """
         try:
-            nodes = await self.repository.get_nodes()
-            for node in nodes:
-                if str(node.id) == node_id:
-                    node.act_lv = 0.1
-                    await node.save()
-                    logging.info(f"已强制降低节点激活水平: {node.name}")
-                    return True
-            return False
+            # 获取该会话的节点总数
+            all_nodes = await self.repository.get_nodes_by_conv_id(conv_id)
+            total_nodes = len(all_nodes)
+            
+            # 如果节点数超过限制，删除多余的节点（从激活水平最低的开始删除）
+            if total_nodes > self.max_nodes_per_conv:
+                # 计算需要删除的数量
+                to_delete_count = total_nodes - self.max_nodes_per_conv
+                
+                # 直接获取激活水平最低的节点
+                nodes_to_delete = await self.repository.get_nodes_by_conv_id(
+                    conv_id=conv_id,
+                    order_by="act_lv",  # 按激活水平升序（从低到高）
+                    limit=to_delete_count
+                )
+                
+                # 删除这些节点
+                deleted_count = 0
+                for node in nodes_to_delete:
+                    success = await self.repository.delete_node(str(node.id))
+                    if success:
+                        deleted_count += 1
+                
+                logging.info(f"会话 {conv_id} 清理了 {deleted_count} 个节点，保留了 {self.max_nodes_per_conv} 个")
+                return deleted_count
+            
+            return 0  # 不需要清理
         except Exception as e:
-            logging.error(f"强制遗忘节点失败: {e}")
-            return False 
+            logging.error(f"清理会话 {conv_id} 的节点失败: {e}")
+            return 0 

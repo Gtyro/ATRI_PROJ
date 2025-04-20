@@ -70,12 +70,11 @@ class PersonaSystem:
         # 初始化记忆管理
         self.short_term = ShortTermMemory(self.repository, self.config)
         self.long_term = LongTermMemory(self.repository, self.config)
-        if self.config.get("decay_system_enabled", False):
-            logging.info("启用记忆衰减系统")
-            self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
-        else:
-            logging.info("记忆衰减系统未启用")
-
+        
+        # 默认启用记忆衰减系统，无需检查配置
+        logging.info("启用记忆衰减系统")
+        self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
+        
         # 初始化群组人格字典
         group_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
         for group_id in group_ids:

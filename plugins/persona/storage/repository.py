@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple, Union
 from tortoise import Tortoise
 from tortoise.exceptions import OperationalError
 
@@ -240,21 +240,42 @@ class Repository:
             await node.save()
         return node
     
-    async def get_nodes(self, limit: int = 100) -> List[CognitiveNode]:
-        """获取节点列表"""
-        query = CognitiveNode.all()
+    async def get_nodes(self, limit: int = None) -> List[CognitiveNode]:
+        """获取节点列表
         
-        return await query.order_by("-act_lv").limit(limit).all()
-    
-    async def get_node_by_name(self, name: str, conv_id: Optional[str] = None) -> CognitiveNode:
-        """根据名称获取节点
-        如果指定了conv_id，则返回指定会话的节点和conv_id为NULL的节点
-        如果未指定conv_id，则返回所有conv_id为NULL的节点
+        Args:
+            limit: 限制返回的节点数量，None表示返回所有节点
+            
+        Returns:
+            节点列表，按激活水平降序排序
         """
+        query = CognitiveNode.all().order_by("-act_lv")
+        
+        if limit is not None:
+            return await query.limit(limit).all()
+        return await query.all()
+    
+    async def get_node_by_name(self, name: str, conv_id: Optional[str] = None) -> Optional[CognitiveNode]:
+        """根据名称获取节点，不区分大小写
+        
+        Args:
+            name: 节点名称
+            conv_id: 会话ID，如果提供则查找特定会话的节点，否则查找所有会话的节点
+            
+        Returns:
+            找到的节点，未找到则返回None
+        """
+        from tortoise.expressions import Q
+        
+        # 创建一个基本查询
+        query = CognitiveNode.filter(name__iexact=name)  # 使用iexact进行不区分大小写的匹配
+        
+        # 如果指定了conv_id，则添加会话过滤条件
         if conv_id:
-            return await CognitiveNode.filter(conv_id=conv_id, name=name).first()
-        else:
-            return await CognitiveNode.get(name=name, conv_id=None)
+            query = query.filter(conv_id=conv_id)
+            
+        # 查询并返回结果
+        return await query.first()
     
     # === 记忆关联相关操作 ===
     
@@ -293,9 +314,91 @@ class Repository:
         try:
             node = await CognitiveNode.filter(id=node_id).first()
             if node:
-                node.act_lv *= (1 - decay_rate/10)  # 重要性衰减较慢
+                node.act_lv *= (1 - decay_rate)  # 应用完整的衰减率
                 await node.save()
                 return True
         except Exception as e:
             logging.error(f"应用记忆衰减失败: {e}")
-        return False 
+        return False
+    
+    async def apply_association_decay(self, decay_rate: float) -> int:
+        """应用关联关系衰减
+        
+        Args:
+            decay_rate: 衰减率
+            
+        Returns:
+            处理的关联数量
+        """
+        try:
+            # 获取所有关联关系
+            associations = await Association.all()
+            processed = 0
+            
+            for assoc in associations:
+                # 应用衰减
+                assoc.strength *= (1 - decay_rate)
+                await assoc.save()
+                processed += 1
+                
+            return processed
+        except Exception as e:
+            logging.error(f"应用关联关系衰减失败: {e}")
+            return 0
+        
+    async def get_nodes_by_conv_id(self, conv_id: str, order_by: str = "-act_lv", limit: Optional[int] = None) -> List[CognitiveNode]:
+        """获取指定会话ID的所有认知节点
+        
+        Args:
+            conv_id: 会话ID
+            order_by: 排序字段，默认按激活水平降序排序，可选值：
+                      "-act_lv" - 按激活水平降序（高到低）
+                      "act_lv" - 按激活水平升序（低到高）
+                      "-created_at" - 按创建时间降序（新到旧）
+                      "created_at" - 按创建时间升序（旧到新）
+            limit: 限制返回的数量，None表示不限制
+            
+        Returns:
+            认知节点列表
+        """
+        try:
+            query = CognitiveNode.filter(conv_id=conv_id).order_by(order_by)
+            
+            if limit is not None:
+                return await query.limit(limit).all()
+            return await query.all()
+        except Exception as e:
+            logging.error(f"获取会话 {conv_id} 的节点失败: {e}")
+            return []
+            
+    async def delete_node(self, node_id: str) -> bool:
+        """删除指定ID的节点
+        
+        Args:
+            node_id: 节点ID
+            
+        Returns:
+            是否成功删除
+        """
+        try:
+            node = await CognitiveNode.filter(id=node_id).first()
+            if not node:
+                return False
+                
+            # 获取与该节点关联的所有记忆
+            memories = await node.memories.all()
+            
+            # 删除节点（关联关系会自动删除，因为设置了 on_delete=fields.CASCADE）
+            await node.delete()
+            
+            # 检查每个记忆是否还有其他关联节点，如果没有，则删除该记忆
+            for memory in memories:
+                remaining_nodes_count = await memory.nodes.all().count()
+                if remaining_nodes_count == 0:
+                    logging.info(f"删除没有关联节点的记忆: {memory.id}")
+                    await memory.delete()
+                    
+            return True
+        except Exception as e:
+            logging.error(f"删除节点 {node_id} 失败: {e}")
+            return False 
