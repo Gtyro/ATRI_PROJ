@@ -10,7 +10,8 @@ async def build_table_model_map():
     models = Tortoise.apps.get("models", {})
     for model_name, model in models.items():
         table_name = model._meta.db_table  # 获取模型对应的真实表名
-        table_to_model_map[table_name] = model_name
+        table_to_model_map[table_name] = model  # 直接存储模型类对象而不是模型名称
+    logging.info(f"构建表名到模型的映射完成，共 {len(table_to_model_map)} 个表")
 
 async def initialize_tortoise():
     """初始化Tortoise ORM"""

@@ -63,3 +63,116 @@ async def get_table_structure(table_name: str):
     except Exception as e:
         logging.error(f"获取表结构错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"数据库错误: {str(e)}")
+
+async def execute_insert_query(table_name: str, data: dict):
+    """执行INSERT操作"""
+    try:
+        # 获取表对应的模型
+        model_class = get_model_for_table(table_name)
+        if not model_class:
+            raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在或未映射")
+        
+        # 创建并保存新记录
+        instance = model_class(**data)
+        await instance.save()
+        return {"success": True, "message": "数据添加成功", "id": instance.pk}
+    except Exception as e:
+        logging.error(f"插入操作错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"插入操作错误: {str(e)}")
+
+async def execute_update_query(table_name: str, id_value: any, data: dict):
+    """执行UPDATE操作"""
+    try:
+        # 获取表对应的模型
+        model_class = get_model_for_table(table_name)
+        if not model_class:
+            raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在或未映射")
+            
+        # 查找主键字段
+        pk_field = get_primary_key_field(model_class)
+        if not pk_field:
+            raise HTTPException(status_code=400, detail=f"无法确定表 {table_name} 的主键")
+            
+        # 尝试根据主键类型转换id值
+        id_value = convert_id_value(id_value, pk_field)
+
+        # 查找并更新记录
+        try:
+            instance = await model_class.get(**{pk_field: id_value})
+            for key, value in data.items():
+                setattr(instance, key, value)
+            await instance.save()
+            return {"success": True, "message": "数据更新成功"}
+        except Exception:
+            raise HTTPException(status_code=404, detail=f"未找到ID为 {id_value} 的记录")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"更新操作错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"更新操作错误: {str(e)}")
+
+async def execute_delete_query(table_name: str, id_value: any):
+    """执行DELETE操作"""
+    try:
+        # 获取表对应的模型
+        model_class = get_model_for_table(table_name)
+        if not model_class:
+            raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在或未映射")
+            
+        # 查找主键字段
+        pk_field = get_primary_key_field(model_class)
+        if not pk_field:
+            raise HTTPException(status_code=400, detail=f"无法确定表 {table_name} 的主键")
+            
+        # 尝试根据主键类型转换id值
+        id_value = convert_id_value(id_value, pk_field)
+
+        # 查找并删除记录
+        try:
+            instance = await model_class.get(**{pk_field: id_value})
+            await instance.delete()
+            return {"success": True, "message": "数据删除成功"}
+        except Exception:
+            raise HTTPException(status_code=404, detail=f"未找到ID为 {id_value} 的记录")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"删除操作错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"删除操作错误: {str(e)}")
+
+def get_primary_key_field(model_class):
+    """获取模型的主键字段名"""
+    try:
+        for field_name, field_obj in model_class._meta.fields_map.items():
+            if field_obj.pk:
+                return field_name
+        return "id"  # 默认返回id
+    except Exception as e:
+        logging.error(f"获取主键字段错误: {str(e)}")
+        return "id"  # 出错时默认返回id
+
+def convert_id_value(id_value, pk_field):
+    """根据字段名转换ID值为正确的类型"""
+    try:
+        from uuid import UUID
+        # 如果id字段名包含uuid，尝试将其转换为UUID对象
+        if "uuid" in pk_field.lower() and isinstance(id_value, str):
+            return UUID(id_value)
+        # 否则根据类型转换为整数
+        elif isinstance(id_value, str) and id_value.isdigit():
+            return int(id_value)
+        return id_value
+    except Exception as e:
+        logging.error(f"转换ID值错误: {str(e)}")
+        return id_value
+
+def get_model_for_table(table_name: str):
+    """根据表名获取对应的模型类"""
+    model = table_to_model_map.get(table_name)
+    
+    # 检查获取到的是否是有效的模型类
+    if model and hasattr(model, 'get') and callable(getattr(model, 'get')):
+        return model
+    
+    logging.error(f"找不到表 {table_name} 对应的有效模型类")
+    return None

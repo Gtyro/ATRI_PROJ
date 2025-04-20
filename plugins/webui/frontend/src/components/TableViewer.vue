@@ -4,6 +4,7 @@
       <el-button type="primary" @click="fetchTableData">刷新</el-button>
       <el-button @click="showGeneratedSql = true">查看SQL</el-button>
       <el-button v-if="isFiltered" @click="clearFilters" type="warning">清除筛选</el-button>
+      <el-button type="success" @click="showAddForm = true">添加记录</el-button>
       <el-input
         v-model="searchKeyword"
         placeholder="全局搜索"
@@ -67,6 +68,19 @@
           </div>
         </template>
       </el-table-column>
+      <el-table-column label="操作" width="160" fixed="right">
+        <template #default="scope">
+          <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+          <el-popconfirm 
+            title="确定删除这条记录吗？" 
+            @confirm="handleDelete(scope.row)"
+          >
+            <template #reference>
+              <el-button size="small" type="danger">删除</el-button>
+            </template>
+          </el-popconfirm>
+        </template>
+      </el-table-column>
     </el-table>
     
     <div class="pagination" v-if="rows.length > 10">
@@ -88,6 +102,48 @@
         </span>
       </template>
     </el-dialog>
+    
+    <!-- 添加记录对话框 -->
+    <el-dialog title="添加记录" v-model="showAddForm" width="50%">
+      <el-form :model="formData" label-width="120px">
+        <el-form-item 
+          v-for="col in tableColumns" 
+          :key="col.name" 
+          :label="col.name"
+          :prop="col.name"
+        >
+          <el-input v-model="formData[col.name]" v-if="!isPrimaryKey(col.name)"></el-input>
+          <el-tag v-else>自动生成</el-tag>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showAddForm = false">取消</el-button>
+          <el-button type="primary" @click="handleAdd">提交</el-button>
+        </span>
+      </template>
+    </el-dialog>
+    
+    <!-- 编辑记录对话框 -->
+    <el-dialog title="编辑记录" v-model="showEditForm" width="50%">
+      <el-form :model="formData" label-width="120px">
+        <el-form-item 
+          v-for="col in tableColumns" 
+          :key="col.name" 
+          :label="col.name"
+          :prop="col.name"
+        >
+          <el-input v-model="formData[col.name]" v-if="!isPrimaryKey(col.name)"></el-input>
+          <el-tag v-else>{{ formData[col.name] }}</el-tag>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showEditForm = false">取消</el-button>
+          <el-button type="primary" @click="handleUpdate">提交</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -95,6 +151,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import { addRecord, updateRecord, deleteRecord } from '@/api/db'
 
 const props = defineProps({
   tableName: {
@@ -120,6 +177,11 @@ const columnFilters = ref({})
 const limitResults = ref(true)
 const rowLimit = ref(100)
 const sortConfig = ref({ prop: '', order: '' })
+const showAddForm = ref(false)
+const showEditForm = ref(false)
+const formData = ref({})
+const tableColumns = ref([])
+const editingId = ref(null)
 
 const isFiltered = computed(() => {
   return searchKeyword.value !== '' || 
@@ -161,6 +223,9 @@ const fetchTableData = () => {
       allRows.value = response.data.rows || []
       rows.value = [...allRows.value]
       
+      // 获取表结构
+      fetchTableStructure()
+      
       // 初始化列筛选
       if (columns.value.length > 0) {
         const newFilters = {}
@@ -178,10 +243,186 @@ const fetchTableData = () => {
       ElMessage.success(`成功加载 ${props.tableName} 表数据`)
     })
     .catch(error => {
-      ElMessage.error('获取表数据失败: ' + (error.response?.data?.detail || error.message))
+      console.error('获取表数据失败:', error);
+      let errorMessage = '获取表数据失败';
+      
+      // 处理不同类型的错误响应
+      if (error.response) {
+        // 服务器返回了错误响应
+        const detail = error.response.data?.detail;
+        if (detail) {
+          errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail);
+        } else {
+          errorMessage += ': ' + error.response.status;
+        }
+      } else if (error.message) {
+        // 请求被中断或其他客户端错误
+        errorMessage += ': ' + error.message;
+      }
+      
+      ElMessage.error(errorMessage);
     })
     .finally(() => {
       loading.value = false
+    })
+}
+
+// 获取表结构
+const fetchTableStructure = () => {
+  axios.get(`/db/table/${props.tableName}`)
+    .then(response => {
+      tableColumns.value = response.data.columns || []
+    })
+    .catch(error => {
+      console.error('获取表结构失败:', error);
+      let errorMessage = '获取表结构失败';
+      
+      if (error.response) {
+        const detail = error.response.data?.detail;
+        if (detail) {
+          errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail);
+        } else {
+          errorMessage += ': ' + error.response.status;
+        }
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      }
+      
+      ElMessage.error(errorMessage);
+    })
+}
+
+// 判断字段是否为主键
+const isPrimaryKey = (columnName) => {
+  const column = tableColumns.value.find(col => col.name === columnName)
+  return column && column.pk === 1
+}
+
+// 获取主键名和值
+const getPrimaryKey = () => {
+  const pkColumn = tableColumns.value.find(col => col.pk === 1)
+  return pkColumn ? pkColumn.name : 'id'
+}
+
+// 获取行的主键值
+const getRowPrimaryKeyValue = (row) => {
+  const pkName = getPrimaryKey()
+  return row[pkName]
+}
+
+// 处理添加记录
+const handleAdd = () => {
+  // 过滤掉主键字段
+  const primaryKey = getPrimaryKey()
+  const data = { ...formData.value }
+  if (primaryKey in data) {
+    delete data[primaryKey]
+  }
+  
+  addRecord(props.tableName, data)
+    .then(response => {
+      ElMessage.success(response.data.message || '添加成功')
+      showAddForm.value = false
+      fetchTableData() // 刷新数据
+      formData.value = {} // 清空表单
+    })
+    .catch(error => {
+      console.error('添加记录失败:', error);
+      let errorMessage = '添加记录失败';
+      
+      if (error.response) {
+        const detail = error.response.data?.detail;
+        if (detail) {
+          errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail);
+        } else {
+          errorMessage += ': ' + error.response.status;
+        }
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      }
+      
+      ElMessage.error(errorMessage);
+    })
+}
+
+// 处理编辑记录
+const handleEdit = (row) => {
+  formData.value = { ...row }
+  editingId.value = getRowPrimaryKeyValue(row)
+  showEditForm.value = true
+}
+
+// 处理更新记录
+const handleUpdate = () => {
+  const primaryKey = getPrimaryKey()
+  const id = editingId.value
+  const data = { ...formData.value }
+  
+  // 移除主键字段
+  if (primaryKey in data) {
+    delete data[primaryKey]
+  }
+  
+  updateRecord(props.tableName, id, data)
+    .then(response => {
+      ElMessage.success(response.data.message || '更新成功')
+      showEditForm.value = false
+      fetchTableData() // 刷新数据
+    })
+    .catch(error => {
+      console.error('更新记录失败:', error);
+      let errorMessage = '更新记录失败';
+      
+      if (error.response) {
+        const detail = error.response.data?.detail;
+        if (detail) {
+          errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail);
+        } else {
+          errorMessage += ': ' + error.response.status;
+        }
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      }
+      
+      ElMessage.error(errorMessage);
+    })
+}
+
+// 处理删除记录
+const handleDelete = (row) => {
+  const id = getRowPrimaryKeyValue(row)
+  
+  if (id === undefined) {
+    ElMessage.error('无法获取记录ID')
+    return
+  }
+  
+  console.log('删除ID:', id)
+  
+  deleteRecord(props.tableName, id)
+    .then(response => {
+      ElMessage.success(response.data.message || '删除成功')
+      fetchTableData() // 刷新数据
+    })
+    .catch(error => {
+      console.error('删除错误详情:', error);
+      let errorMessage = '删除记录失败';
+      
+      // 处理不同类型的错误响应
+      if (error.response) {
+        // 服务器返回了错误响应
+        const detail = error.response.data?.detail;
+        if (detail) {
+          errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail);
+        } else {
+          errorMessage += ': ' + error.response.status;
+        }
+      } else if (error.message) {
+        // 请求被中断或其他客户端错误
+        errorMessage += ': ' + error.message;
+      }
+      
+      ElMessage.error(errorMessage);
     })
 }
 

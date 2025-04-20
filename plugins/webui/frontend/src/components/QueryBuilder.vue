@@ -219,7 +219,7 @@ const clearBuilder = () => {
   selectedColumns.value = []
   conditions.value = []
   orderBy.value = { column: '', direction: 'ASC' }
-  limit.value = 100
+  limit.value = 1000
 }
 
 // 复制SQL到剪贴板
