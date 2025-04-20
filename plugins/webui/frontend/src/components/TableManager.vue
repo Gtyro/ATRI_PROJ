@@ -54,7 +54,7 @@
       </el-form-item>
       
       <el-form-item label="限制结果数">
-        <el-input-number v-model="limit" :min="1" :max="1000"></el-input-number>
+        <el-input-number v-model="limit" :min="1" :max="1000" :step="10"></el-input-number>
       </el-form-item>
       
       <el-form-item>

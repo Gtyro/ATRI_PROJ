@@ -71,7 +71,7 @@ class CognitiveNode(Model):
     conv_id = fields.CharField(max_length=20, default='', null=False, index=True)
     '''会话id
     当conv_id存在时, (conv_id, name)唯一
-    当conv_id为空时, name仍然唯一
+    当conv_id为空字符串时, ('', name)仍然唯一
     '''
     act_lv = fields.FloatField(default=1.0)
     '''激活水平'''
