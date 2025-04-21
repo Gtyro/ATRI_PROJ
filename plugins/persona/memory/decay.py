@@ -20,7 +20,6 @@ class DecayManager:
         """
         self.repository = repository
         self.decay_rate = decay_rate
-        self.last_decay_time = time.time()
         self.plugin_name = "persona"  # 插件名称
         self.max_nodes_per_conv = 1000  # 每个会话保留的最大节点数
         logging.info(f"记忆衰减管理器已创建，衰减率: {decay_rate}")
@@ -34,11 +33,6 @@ class DecayManager:
         Returns:
             处理的节点数量
         """
-        current_time = time.time()
-        # 默认每4h执行一次衰减（4*60*60=14400秒）
-        if not force and (current_time - self.last_decay_time) < 14400:
-            logging.info("记忆衰减间隔未到，跳过")
-            return 0
             
         nodes = await self.repository.get_nodes(limit=None)  # 不限制数量，获取所有节点
         processed = 0
@@ -52,7 +46,6 @@ class DecayManager:
         associations_processed = await self.repository.apply_association_decay(self.decay_rate)
         logging.info(f"关联关系衰减完成，处理了 {associations_processed} 个关联")
         
-        self.last_decay_time = current_time
         logging.info(f"记忆衰减完成，处理了 {processed} 个节点和 {associations_processed} 个关联")
         
         # 执行完衰减后，检查是否需要清理过多的节点

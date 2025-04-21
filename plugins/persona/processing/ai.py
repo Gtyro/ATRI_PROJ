@@ -213,5 +213,23 @@ class AIProcessor:
             logging.info(f"API调用成功，用量信息: {response.usage.completion_tokens} tokens")
             return response.choices[0].message.content or ""
         except Exception as e:
-            logging.error(f"API调用失败: {e}")
+            import traceback
+            error_type = type(e).__name__
+            error_details = str(e)
+            stack_trace = traceback.format_exc()
+            
+            # 记录详细错误信息
+            logging.error(f"API调用失败 - 错误类型: {error_type}")
+            logging.error(f"错误详情: {error_details}")
+            logging.error(f"堆栈跟踪: {stack_trace}")
+            
+            # 尝试记录请求信息（不含敏感内容）
+            try:
+                logging.error(f"请求模型: {self.model}")
+                logging.error(f"消息数量: {len(full_messages)}")
+                logging.error(f"温度参数: {temperature}")
+                logging.error(f"最大token数: {max_tokens}")
+            except Exception as log_err:
+                logging.error(f"记录请求信息失败: {log_err}")
+                
             raise 

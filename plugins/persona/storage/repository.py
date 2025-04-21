@@ -1,5 +1,6 @@
 import logging
 import time
+import random
 from typing import Dict, List, Optional, Any, Tuple, Union
 from tortoise import Tortoise
 from tortoise.exceptions import OperationalError
@@ -314,7 +315,7 @@ class Repository:
         try:
             node = await CognitiveNode.filter(id=node_id).first()
             if node:
-                node.act_lv *= (1 - decay_rate)  # 应用完整的衰减率
+                node.act_lv *= (1 - decay_rate*(random.random()*0.5+0.5))  # 应用完整的衰减率
                 await node.save()
                 return True
         except Exception as e:
@@ -337,7 +338,7 @@ class Repository:
             
             for assoc in associations:
                 # 应用衰减
-                assoc.strength *= (1 - decay_rate)
+                assoc.strength *= (1 - decay_rate*(random.random()*0.5+0.5))
                 await assoc.save()
                 processed += 1
                 
