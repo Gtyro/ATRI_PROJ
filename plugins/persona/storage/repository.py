@@ -292,11 +292,11 @@ class Repository:
                 target=target,
             )
             if not created:
-                logging.info(f"增强关联: {node_id_a}-{node_id_b}")
+                logging.info(f"增强关联: {assoc.source.name}-{assoc.target.name}")
                 assoc.strength += 0.3
                 await assoc.save()
             else:
-                logging.info(f"创建关联: {node_id_a}-{node_id_b}")
+                logging.info(f"创建关联: {assoc.source.name}-{assoc.target.name}")
     
     async def get_related_nodes(self, node_id: str) -> List[CognitiveNode]:
         """获取与指定节点相关联的所有节点"""
