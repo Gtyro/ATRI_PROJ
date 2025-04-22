@@ -241,17 +241,22 @@ class Repository:
             await node.save()
         return node
     
-    async def get_nodes(self, limit: int = None) -> List[CognitiveNode]:
+    async def get_nodes(self, limit: int = None, conv_id: Optional[str] = None) -> List[CognitiveNode]:
         """获取节点列表
         
         Args:
             limit: 限制返回的节点数量，None表示返回所有节点
+            conv_id: 会话ID，用于限制搜索范围
             
         Returns:
             节点列表，按激活水平降序排序
         """
         query = CognitiveNode.all().order_by("-act_lv")
         
+        # 如果指定了会话ID，则只查询该会话的节点
+        if conv_id:
+            query = query.filter(conv_id=conv_id)
+            
         if limit is not None:
             return await query.limit(limit).all()
         return await query.all()

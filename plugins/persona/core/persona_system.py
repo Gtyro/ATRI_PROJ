@@ -280,13 +280,14 @@ class PersonaSystem:
         # 执行记忆衰减
         await self.decay_manager.apply_decay()
     
-    async def retrieve_related_memories(self, query: str, user_id: str = None, limit: int = 5) -> List[Dict]:
+    async def retrieve_related_memories(self, query: str, user_id: str = None, limit: int = 5, conv_id: str = None) -> List[Dict]:
         """检索相关记忆
         
         Args:
             query: 查询内容
             user_id: 用户ID（可选）
             limit: 结果数量限制
+            conv_id: 会话ID（可选），用于限制查询范围
             
         Returns:
             相关记忆列表
@@ -294,7 +295,7 @@ class PersonaSystem:
         if not self.retriever:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
             
-        return await self.retriever.search_for_memories(query, user_id, limit)
+        return await self.retriever.search_for_memories(query, user_id, limit, conv_id)
     
     async def get_queue_status(self) -> Dict:
         """获取队列状态

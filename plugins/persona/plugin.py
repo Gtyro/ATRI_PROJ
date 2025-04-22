@@ -245,13 +245,25 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
             await memories.finish("人格系统未启用，请检查配置和日志")
             
         user_id = event.get_user_id()
-        args = str(event.get_message()).strip()
+        args = str(event.get_message()).strip().split()
         
-        if not args:
-            await memories.finish("你想让我回忆什么呢？")
-    
+        # 格式: 记得 [conv_id] [query]
+        if len(args) < 3:
+            await memories.finish("命令格式: 记得 [群号/私聊ID] [查询内容]")
+            
+        cmd, conv_id, *query_parts = args
+        query = " ".join(query_parts)
+        
+        # 构建conv_id的格式
+        if conv_id.isdigit():
+            # 判断是群聊还是私聊
+            if await bot.get_group_info(group_id=int(conv_id)):
+                conv_id = f"group_{conv_id}"
+            else:
+                conv_id = f"private_{conv_id}"
+        
         # 检索相关记忆
-        related_memories = await persona_system.retrieve_related_memories(args, user_id)
+        related_memories = await persona_system.retrieve_related_memories(query, user_id, conv_id=conv_id)
         
         if not related_memories:
             await memories.finish("我似乎没有关于这方面的记忆...")
@@ -259,18 +271,11 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
         # 格式化回复
         reply = "我记得这些内容:\n"
         for i, memory in enumerate(related_memories, 1):
-            memory_type = memory.get("type", "未知")
-            
-            if memory_type == "topic":
-                title = memory.get("title", "无标题")
-                content = memory.get("content", "无内容")
-                time_str = datetime.fromtimestamp(memory.get("created_at", 0)).strftime("%Y-%m-%d %H:%M")
-                reply += f"{i}. 【{title}】{content} ({time_str})\n"
-            
-            elif memory_type == "node":
-                name = memory.get("name", "无名称")
-                attr_str = ", ".join([f"{k}: {v}" for k, v in memory.get("attributes", {}).items()])
-                reply += f"{i}. [{memory_type}] {name} - {attr_str}\n"
+            memory_source = memory.get("source", "未知")
+            title = memory.get("title", "无标题")
+            content = memory.get("content", "无内容")
+            time_str = datetime.fromtimestamp(memory.get("created_at", 0)).strftime("%Y-%m-%d %H:%M")
+            reply += f"{i}. [{memory_source}]【{title}】{content} ({time_str})\n"
             
         await memories.send(reply)
     except MatcherException as e: # finish会正常报出异常
