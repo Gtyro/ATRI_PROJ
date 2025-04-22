@@ -297,7 +297,8 @@ class Repository:
                 target=target,
             )
             if not created:
-                logging.info(f"增强关联: {assoc.source.name}-{assoc.target.name}")
+                # 需要await获取关联对象
+                logging.info(f"增强关联: {(await assoc.source).name}-{(await assoc.target).name}")
                 assoc.strength += 0.3
                 await assoc.save()
             else:

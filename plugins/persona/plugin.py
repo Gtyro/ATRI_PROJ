@@ -317,7 +317,7 @@ async def handle_remember_permanent(bot: Bot, event: Event):
             conv_id, node_name, memory_title, memory_content
         )
         
-        await remember_permanent.send(f"已创建常驻节点-记忆对:\n节点: {node_name}\n记忆标题: {memory_title}\n记忆内容: {memory_content}")
+        await remember_permanent.send(f"已创建常驻节点-记忆对:\n节点: {node_name}\n记忆标题: {memory_title}\n记忆内容: {memory_content[:10]}...")
     except Exception as e:
         logging.error(f"创建常驻节点-记忆对异常: {e}")
         await remember_permanent.send("创建常驻节点-记忆对失败，请检查日志")
