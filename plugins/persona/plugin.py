@@ -284,6 +284,44 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
         logging.error(f"记忆查询异常: {e}")
         await memories.send("回忆过程出现了问题...")
 
+# 添加常驻记忆命令
+remember_permanent = on_command("牢记", permission=SUPERUSER, priority=5, block=True)
+@remember_permanent.handle()
+async def handle_remember_permanent(bot: Bot, event: Event):
+    """创建常驻节点和记忆对"""
+    if not PERSONA_SYSTEM_ENABLED:
+        await remember_permanent.finish("人格系统未启用，请检查配置和日志")
+        
+    command_text = str(event.get_plaintext()).strip()
+    parts = command_text.split(maxsplit=4)
+    
+    if len(parts) < 4:
+        await remember_permanent.finish("命令格式: 牢记 [群号/私聊ID] [节点名称] [记忆标题] [记忆内容]")
+        
+    _, group_id, node_name, memory_title, memory_content = parts
+    
+    # 构建conv_id的格式
+    if group_id.isdigit():
+        # 判断是群聊还是私聊
+        try:
+            if await bot.get_group_info(group_id=int(group_id)):
+                conv_id = f"group_{group_id}"
+            else:
+                await remember_permanent.finish("群号格式不正确")
+        except Exception:
+            await remember_permanent.finish("群号格式不正确")
+    
+    try:
+        # 直接使用persona_system的方法创建常驻节点和记忆对
+        result = await persona_system.create_permanent_memory(
+            conv_id, node_name, memory_title, memory_content
+        )
+        
+        await remember_permanent.send(f"已创建常驻节点-记忆对:\n节点: {node_name}\n记忆标题: {memory_title}\n记忆内容: {memory_content}")
+    except Exception as e:
+        logging.error(f"创建常驻节点-记忆对异常: {e}")
+        await remember_permanent.send("创建常驻节点-记忆对失败，请检查日志")
+
 # 设置定时维护任务
 @driver.on_startup
 async def start_scheduler():

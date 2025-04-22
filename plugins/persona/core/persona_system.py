@@ -346,3 +346,44 @@ class PersonaSystem:
             "reply_content": reply_data["content"]
         }
         return reply_dict
+        
+    async def create_permanent_memory(self, conv_id: str, node_name: str, memory_title: str, memory_content: str) -> Dict:
+        """创建常驻节点和记忆对
+            
+        Returns:
+            包含节点和记忆信息的字典
+        """
+        try:
+            # 创建常驻节点
+            node = await self.repository.update_or_create_node(conv_id, node_name, is_permanent=True)
+            
+            # 创建常驻记忆
+            memory_data = {
+                "conv_id": conv_id,
+                "title": memory_title,
+                "content": memory_content,
+                "is_permanent": True
+            }
+            memory = await self.repository.store_memory(conv_id, memory_data)
+            
+            # 使用现有的_link_nodes_to_memory函数建立关联
+            await self.repository._link_nodes_to_memory(memory, [str(node.id)])
+            
+            logging.info(f"创建常驻节点-记忆对: 节点[{node_name}], 记忆[{memory_title}]")
+            
+            return {
+                "node": {
+                    "id": str(node.id),
+                    "name": node.name,
+                    "is_permanent": node.is_permanent
+                },
+                "memory": {
+                    "id": str(memory.id),
+                    "title": memory.title,
+                    "content": memory.content,
+                    "is_permanent": memory.is_permanent
+                }
+            }
+        except Exception as e:
+            logging.error(f"创建常驻节点-记忆对失败: {e}")
+            raise

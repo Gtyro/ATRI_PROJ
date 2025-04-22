@@ -79,28 +79,27 @@ class DecayManager:
     
     async def forget_node_by_conv(self, conv_id: str) -> int:
         """为指定会话保留一定数量的节点，删除多余节点
-        
-        Args:
-            conv_id: 会话ID
             
         Returns:
             清理的节点数量
         """
         try:
-            # 获取该会话的节点总数
-            all_nodes = await self.repository.get_nodes_by_conv_id(conv_id)
-            total_nodes = len(all_nodes)
+            # 只获取非常驻节点，常驻节点不会被计入限制
+            non_permanent_nodes = await self.repository.get_nodes_by_conv_id(conv_id, is_permanent=False)
+            non_permanent_count = len(non_permanent_nodes)
             
-            # 如果节点数超过限制，删除多余的节点（从激活水平最低的开始删除）
-            if total_nodes > self.max_nodes_per_conv:
+            # 如果非常驻节点数量超过了允许的限制
+            # 常驻节点不计入限制，所以直接与max_nodes_per_conv比较
+            if non_permanent_count > self.max_nodes_per_conv:
                 # 计算需要删除的数量
-                to_delete_count = total_nodes - self.max_nodes_per_conv
+                to_delete_count = non_permanent_count - self.max_nodes_per_conv
                 
-                # 直接获取激活水平最低的节点
+                # 获取激活水平最低的非常驻节点
                 nodes_to_delete = await self.repository.get_nodes_by_conv_id(
                     conv_id=conv_id,
                     order_by="act_lv",  # 按激活水平升序（从低到高）
-                    limit=to_delete_count
+                    limit=to_delete_count,
+                    is_permanent=False  # 只获取非常驻节点
                 )
                 
                 # 删除这些节点
@@ -110,7 +109,7 @@ class DecayManager:
                     if success:
                         deleted_count += 1
                 
-                logging.info(f"会话 {conv_id} 清理了 {deleted_count} 个节点，保留了 {self.max_nodes_per_conv} 个")
+                logging.info(f"会话 {conv_id} 清理了 {deleted_count} 个非常驻节点，保留了非常驻节点 {self.max_nodes_per_conv} 个")
                 return deleted_count
             
             return 0  # 不需要清理

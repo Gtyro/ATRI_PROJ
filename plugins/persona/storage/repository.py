@@ -198,7 +198,7 @@ class Repository:
         else:
             memory = await Memory.create(**memory_data)
         return memory
-    
+
     async def get_memories_by_conv(self, conv_id: str, completed: Optional[bool] = None, limit: int = 20) -> List[Memory]:
         """获取指定会话的记忆"""
         query = Memory.filter(conv_id=conv_id)
@@ -215,19 +215,29 @@ class Repository:
             node = await CognitiveNode.get(id=node_id)
             await memory.nodes.add(node)
     
-    async def update_or_create_node(self, conv_id: str, node_str: str) -> CognitiveNode:
+    async def update_or_create_node(self, conv_id: str, node_str: str, is_permanent: bool = False) -> CognitiveNode:
         """存储或更新节点
         如果节点不存在，则创建，否则weight+0.3
+        
+        Args:
+            conv_id: 会话ID
+            node_str: 节点名称
+            is_permanent: 是否为常驻节点，常驻节点不会被遗忘(删除)，但仍会被衰减
         """
         node, created = await CognitiveNode.update_or_create(
             conv_id=conv_id,
-            name=node_str
+            name=node_str,
+            defaults={"is_permanent": is_permanent}
         )
         # 如果节点不存在，则创建，weight为默认值
         # 如果节点存在，则weight+0.3
         if not created:
             logging.info(f"增强节点: {conv_id}-{node_str}")
             node.act_lv += 0.3
+            # 如果更新时指定了常驻属性为True，则更新节点的常驻属性
+            if is_permanent and not node.is_permanent:
+                node.is_permanent = True
+                logging.info(f"节点设为常驻: {conv_id}-{node_str}")
             await node.save()
         return node
     
@@ -342,7 +352,7 @@ class Repository:
             logging.error(f"应用关联关系衰减失败: {e}")
             return 0
         
-    async def get_nodes_by_conv_id(self, conv_id: str, order_by: str = "-act_lv", limit: Optional[int] = None) -> List[CognitiveNode]:
+    async def get_nodes_by_conv_id(self, conv_id: str, order_by: str = "-act_lv", limit: Optional[int] = None, is_permanent: Optional[bool] = None) -> List[CognitiveNode]:
         """获取指定会话ID的所有认知节点
         
         Args:
@@ -353,12 +363,20 @@ class Repository:
                       "-created_at" - 按创建时间降序（新到旧）
                       "created_at" - 按创建时间升序（旧到新）
             limit: 限制返回的数量，None表示不限制
+            is_permanent: 是否只返回常驻节点，None表示不过滤
             
         Returns:
             认知节点列表
         """
         try:
-            query = CognitiveNode.filter(conv_id=conv_id).order_by(order_by)
+            query = CognitiveNode.filter(conv_id=conv_id)
+            
+            # 如果指定了is_permanent，则添加过滤条件
+            if is_permanent is not None:
+                query = query.filter(is_permanent=is_permanent)
+                
+            # 添加排序
+            query = query.order_by(order_by)
             
             if limit is not None:
                 return await query.limit(limit).all()
@@ -381,6 +399,11 @@ class Repository:
             if not node:
                 return False
                 
+            # 如果是常驻节点，不允许删除
+            if node.is_permanent:
+                logging.warning(f"尝试删除常驻节点 {node_id}（{node.name}）被拒绝")
+                return False
+                
             # 获取与该节点关联的所有记忆
             memories = await node.memories.all()
             
@@ -389,6 +412,10 @@ class Repository:
             
             # 检查每个记忆是否还有其他关联节点，如果没有，则删除该记忆
             for memory in memories:
+                # 如果记忆是常驻的，则不删除
+                if memory.is_permanent:
+                    continue
+                    
                 remaining_nodes_count = await memory.nodes.all().count()
                 if remaining_nodes_count == 0:
                     logging.info(f"删除没有关联节点的记忆: {memory.id}")
