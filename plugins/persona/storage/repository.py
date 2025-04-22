@@ -206,17 +206,7 @@ class Repository:
             query = query.filter(completed_status=completed)
         
         return await query.order_by("-last_accessed").limit(limit).all()
-    
-    async def get_distinct_conv_ids(self) -> List[str]:
-        """获取所有不同的会话ID
-        
-        Returns:
-            会话ID列表
-        """
-        # 从话题表中获取唯一的conv_id
-        conversations = await Memory.all().distinct().values_list('conv_id', flat=True)
-        return conversations
-    
+
     # === 认知节点相关操作 ===
 
     async def _link_nodes_to_memory(self, memory: Memory, nodes: List[str]) -> None:

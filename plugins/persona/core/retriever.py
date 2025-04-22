@@ -55,7 +55,7 @@ class MemoryRetriever:
         # 4. 限制结果数量
         return results[:limit]
     
-    async def _search_topics(self, query: str, limit: int, conv_id: Optional[str] = None) -> List[Dict]:
+    async def _search_topics(self, query: str, limit: int, conv_id: str) -> List[Dict]:
         """搜索相关话题
         
         Args:
@@ -69,16 +69,9 @@ class MemoryRetriever:
         # 简单实现，后续可以改进
         all_memories = []
         
-        # 如果指定了conv_id，只查询该会话的记忆
-        if conv_id:
-            memories = await self.repository.get_memories_by_conv(conv_id)
-            all_memories.extend(memories)
-        else:
-            # 否则查询所有会话的记忆
-            distinct_conv_ids = await self.repository.get_distinct_conv_ids()
-            for conv_id in distinct_conv_ids:
-                memories = await self.repository.get_memories_by_conv(conv_id)
-                all_memories.extend(memories)
+        # 只查询当前会话的记忆
+        memories = await self.repository.get_memories_by_conv(conv_id)
+        all_memories.extend(memories)
         
         # 简单关键词匹配
         results = []
