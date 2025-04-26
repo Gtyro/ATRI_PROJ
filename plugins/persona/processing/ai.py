@@ -140,7 +140,7 @@ class AIProcessor:
             生成的回复
         """
         # 构建系统提示词
-        system_prompt = "你需要扮演指定角色，根据角色的信息，模仿ta的语气进行线上的日常对话，一次回复不要包含太多内容，直接说话，不要带上\"[角色]说\"。\n"
+        system_prompt = "你需要扮演一位指定角色，根据角色的信息，模仿ta的语气进行线上的日常对话，一次回复不要包含太多内容，直接说话，不要带上\"[角色]说\"。\n"
         try:
             if conv_id.startswith('group_'):
                 with open(f"{self.group_character[conv_id]}", "r", encoding="utf-8") as f:
@@ -169,7 +169,11 @@ class AIProcessor:
                 logging.warning(f"生成回复中仍然有[]，进行处理: {content}")
                 content = re.sub(r'\[.*?\]说?[:：]?.*', '', content, flags=re.DOTALL) # 如果出现第2个[xx]说，说明回复异常，之后的内容都删除
                 logging.warning(f"处理后: {content}")
-
+            # 对换行符进行处理，如果content中包含\n，则删除包括\n之后的内容
+            if "\n" in content:
+                logging.warning(f"生成回复中包含\n，进行处理: {content}")
+                content = content.split("\n")[0]
+                logging.warning(f"处理后: {content}")
             # 如果content中包含"笑死"，则删除
             if "笑死" in content:
                 logging.warning(f"生成回复中包含'笑死'，进行处理: {content}")
