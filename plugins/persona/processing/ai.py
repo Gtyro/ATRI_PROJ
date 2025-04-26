@@ -156,11 +156,85 @@ class AIProcessor:
             system_prompt += f"\n{long_memory_promt}"
         
         try:
+            # 定义工具函数
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "retrieve_memories",
+                        "description": "从数据库中检索与当前对话相关的记忆",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "要查询的关键词或短语",
+                                }
+                            },
+                            "required": ["query"]
+                        },
+                    }
+                },
+            ]
+            
+            # 构造用户最新消息内容
+            latest_user_messages = [msg for msg in messages if not msg.get("is_bot", False)]
+            latest_message = latest_user_messages[-1]["content"] if latest_user_messages else ""
+            
+            # 第一步：发送用户查询和工具定义，调用API
+            api_messages = [{"role": "system", "content": system_prompt}]
+            api_messages.append({"role": "user", "content": latest_message})
+            
+            # 第一次调用API，可能会触发函数调用
+            response = await self._client.chat.completions.create(
+                model=self.model,
+                messages=[{
+                    "role": msg["role"],
+                    "content": msg["content"]
+                } for msg in api_messages],
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.2,
+                max_tokens=1200
+            )
+            
+            response_message = response.choices[0].message
+            
+            # 检查是否有函数调用
+            memory_context = ""
+            if hasattr(response_message, "tool_calls") and response_message.tool_calls:
+                for tool_call in response_message.tool_calls:
+                    # 只处理检索记忆的工具调用
+                    if tool_call.function.name == "retrieve_memories":
+                        try:
+                            # 解析参数
+                            function_args = json.loads(tool_call.function.arguments)
+                            query = function_args.get("query", "")
+                            logging.info(f"检索记忆: {query}")
+                            
+                            # 调用format_memories直接获取格式化的记忆文本
+                            if hasattr(self, "memory_retrieval_callback") and self.memory_retrieval_callback:
+                                memory_context = await self.memory_retrieval_callback(query, user_id=None, conv_id=conv_id)
+                                if memory_context and not memory_context.startswith("我似乎没有关于这方面的记忆"):
+                                    # 不需要再次构造记忆上下文，直接使用format_memories的输出
+                                    pass
+                                else:
+                                    memory_context = ""
+                        except Exception as e:
+                            logging.error(f"处理记忆检索工具调用失败: {e}")
+                            memory_context = ""
+            
+            # 将检索到的记忆添加到系统提示中
+            if memory_context:
+                messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": memory_context})
+            
+            # 使用完整消息历史和增强后的系统提示生成最终回复
             content = await self._call_api(
                 system_prompt,
                 messages,
                 temperature=temperature
             )
+            
             # 这里需要对content进行处理，去除[xx]说:部分
             content = re.sub(r'.*?说[:：]\s*', '', content, count=1)
 

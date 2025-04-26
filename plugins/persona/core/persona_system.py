@@ -84,6 +84,9 @@ class PersonaSystem:
         # 初始化处理器
         try:
             self.processor = MessageProcessor(self.config, self.group_character, self.config['queue_history_size'])
+            # 设置处理器的记忆检索回调函数
+            if hasattr(self.processor.ai_processor, "memory_retrieval_callback"):
+                self.processor.ai_processor.memory_retrieval_callback = self.format_memories
             logging.info("消息处理器初始化成功")
         except Exception as e:
             logging.error(f"消息处理器初始化失败: {e}")

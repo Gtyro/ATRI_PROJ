@@ -1,97 +1,118 @@
+"""消息处理器，负责处理消息并生成回复"""
+
 import logging
+import time
 import random
-import re
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 from .ai import AIProcessor
+from plugins.models import GroupPluginConfig
 
 class MessageProcessor:
-    """消息处理器
-    
-    负责处理消息并转换为话题
+    """
+    消息处理器，负责处理消息并生成回复
     """
     
-    def __init__(self, config: Dict[str, Any], group_character: Dict[str, str], queue_history_size: int):
+    def __init__(self, config: Dict, group_character: Dict[str, str] = {}, queue_history_size: int = 40):
         """初始化消息处理器
         
         Args:
-            config: 配置字典
-            group_character: 群组人格字典
+            config: 配置信息
+            group_character: 群组人格配置
             queue_history_size: 队列历史消息保留数量
         """
+        # 配置
         self.config = config
-        api_key = config.get("api_key", "")
-        if not api_key:
-            raise ValueError("API密钥未设置")
-            
-        self.ai_processor = AIProcessor(api_key, group_character = group_character, queue_history_size = queue_history_size)
-        self.autoresponse_threshold = config.get("autoresponse_threshold", 0.5)
-        logging.info("消息处理器已创建")
+        self.queue_history_size = queue_history_size
+        
+        # 初始化AI处理器
+        try:
+            self.ai_processor = AIProcessor(
+                api_key=config.get("openai_api_key", ""),
+                model=config.get("model", "deepseek-chat"),
+                base_url=config.get("base_url", "https://api.deepseek.com"),
+                group_character=group_character,
+                queue_history_size=queue_history_size
+            )
+        except Exception as e:
+            logging.error(f"初始化AI处理器失败: {e}")
+            raise
+        
+        # 群组配置
+        self.group_config = GroupPluginConfig
+        
+        logging.info("消息处理器初始化成功")
     
     async def extract_topics_from_messages(self, conv_id: str, messages: List[Dict]) -> List[Dict]:
-        """从消息列表中提取话题
+        """从消息中提取话题
         
         Args:
             conv_id: 会话ID
             messages: 消息列表
             
         Returns:
-            话题列表(completed_status)
+            话题列表
         """
-        if not messages:
-            logging.warning(f"罕见！会话 {conv_id} 没有消息")
-            return []
-            
-        # 提取话题
-        try:
-            topics = await self.ai_processor.extract_topics(conv_id, messages)
-            
-            return topics
-        except Exception as e:
-            logging.error(f"处理对话失败: {e}")
+        return await self.ai_processor.extract_topics(conv_id, messages)
     
     async def should_respond(self, conv_id: str, topics: List[Dict]) -> bool:
         """判断是否应该回复
         
         Args:
+            conv_id: 会话ID
             topics: 话题列表
             
         Returns:
             是否应该回复
         """
-        # 无话题或全部已完结
-        if not topics or all(topic.get("completed_status", True) for topic in topics):
-            logging.info(f"会话 {conv_id} 无话题或全部已完结，不回复")
+        # 如果是私聊，总是回复
+        if conv_id.startswith("private_"):
+            return True
+            
+        # 如果没有话题，不回复
+        if not topics:
             return False
             
-        # 从未完结的话题中选择是否回复
-        for topic in topics:
-            if topic.get("completed_status", True):
-                continue
+        # 如果有未完结话题，判断是否应该回复
+        unfinished_topics = [t for t in topics if t["completed_status"] == False]
+        
+        if unfinished_topics:
+            # 获取群组的回复概率
+            try:
+                response_rate = 0.3  # 默认回复概率
+                config = await self.group_config.get_config(conv_id, "persona")
+                if config and config.plugin_config:
+                    response_rate = config.plugin_config.get("response_rate", 0.3)
                 
-            continuation_prob = topic.get("continuation_probability", 0.0)
-            if continuation_prob < self.autoresponse_threshold:
-                continue
+                # 基于最高的话题概率和群组概率决定是否回复
+                max_prob = max([t.get("continuation_probability", 0) for t in unfinished_topics])
+                should_reply = random.random() < (response_rate * max_prob)
                 
-            # 根据概率决定是否回复
-            if random.random() <= continuation_prob or logging.getLogger().getEffectiveLevel() == logging.DEBUG:
-                return True
-                
+                if should_reply and len(topics) > 0:
+                    return True
+            except Exception as e:
+                logging.error(f"获取群组回复概率失败: {e}")
+                return False
+        
         return False
     
-    async def generate_reply(self, conv_id: str, messages: List[Dict], temperature: float = 0.7, long_memory_promt: str = "") -> Dict:
+    async def generate_reply(self, conv_id: str, messages: List[Dict], temperature: float = 0.7, long_memory_promt: str = "") -> Dict[str, str]:
         """生成回复
         
         Args:
-            messages: 消息历史
-            temperature: 生成温度
+            conv_id: 会话ID
+            messages: 消息列表
+            temperature: 温度
             
         Returns:
-            回复内容字典
+            生成的回复
         """
         # 准备消息格式
         chat_messages = []
         for msg in messages:
+            if not isinstance(msg, Dict): # 如果是记忆数据，则直接插入到消息历史中
+                continue
+                
             user_name = msg.get("user_name", "用户")
             content = msg.get("content", "")
             is_direct = msg.get("is_direct", False)
@@ -101,12 +122,14 @@ class MessageProcessor:
             message_text = f"[{user_name}]{'对你' if is_direct else ''}说: {content}" if not is_bot else content
             
             chat_messages.append({"role": role, "content": message_text})
-        logging.info(f"消息历史: \n{'\n'.join([f'[{msg["role"]}] {msg["content"]}' for msg in chat_messages])}")
-        
+        logging.info(f"消息历史: \n{'\n'.join([f'[{msg['role']}] {msg['content']}' for msg in chat_messages])}")
+                
         # 生成回复
-        reply_content = await self.ai_processor.generate_response(conv_id, chat_messages, temperature, long_memory_promt)
+        response = await self.ai_processor.generate_response(
+            conv_id=conv_id,
+            messages=chat_messages,
+            temperature=temperature,
+            long_memory_promt=long_memory_promt
+        )
         
-        return {
-            "content": reply_content,
-            "temperature": temperature
-        } 
+        return {"content": response} 
