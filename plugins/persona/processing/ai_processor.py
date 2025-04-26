@@ -30,6 +30,7 @@ class AIProcessor:
         self._init_client()
         self.group_character = group_character
         self.queue_history_size = queue_history_size
+        self.memory_retrieval_callback = None
         logging.info(f"AI处理器已创建，使用模型: {model}")
     
     def _init_client(self):
@@ -177,21 +178,16 @@ class AIProcessor:
                 },
             ]
             
-            # 构造用户最新消息内容
-            latest_user_messages = [msg for msg in messages if not msg.get("is_bot", False)]
-            latest_message = latest_user_messages[-1]["content"] if latest_user_messages else ""
-            
-            # 第一步：发送用户查询和工具定义，调用API
+            # 将消息转换为API格式
             api_messages = [{"role": "system", "content": system_prompt}]
-            api_messages.append({"role": "user", "content": latest_message})
+            for msg in messages:
+                role = "assistant" if msg.get("is_bot", False) else "user"
+                api_messages.append({"role": role, "content": msg.get("content", "")})
             
             # 第一次调用API，可能会触发函数调用
             response = await self._client.chat.completions.create(
                 model=self.model,
-                messages=[{
-                    "role": msg["role"],
-                    "content": msg["content"]
-                } for msg in api_messages],
+                messages=api_messages,
                 tools=tools,
                 tool_choice="auto",
                 temperature=0.2,
@@ -199,10 +195,27 @@ class AIProcessor:
             )
             
             response_message = response.choices[0].message
+            final_messages = api_messages.copy()
             
             # 检查是否有函数调用
             memory_context = ""
             if hasattr(response_message, "tool_calls") and response_message.tool_calls:
+                # 添加助手消息
+                final_messages.append({
+                    "role": "assistant", 
+                    "content": response_message.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": tool_call.function.arguments
+                            }
+                        } for tool_call in response_message.tool_calls
+                    ]
+                })
+                
                 for tool_call in response_message.tool_calls:
                     # 只处理检索记忆的工具调用
                     if tool_call.function.name == "retrieve_memories":
@@ -216,26 +229,30 @@ class AIProcessor:
                             if hasattr(self, "memory_retrieval_callback") and self.memory_retrieval_callback:
                                 memory_context = await self.memory_retrieval_callback(query, user_id=None, conv_id=conv_id)
                                 if memory_context and not memory_context.startswith("我似乎没有关于这方面的记忆"):
-                                    # 不需要再次构造记忆上下文，直接使用format_memories的输出
-                                    pass
-                                else:
-                                    memory_context = ""
+                                    # 将记忆文本添加到消息中
+                                    final_messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "content": memory_context
+                                    })
                         except Exception as e:
                             logging.error(f"处理记忆检索工具调用失败: {e}")
-                            memory_context = ""
             
-            # 将检索到的记忆添加到系统提示中
+            # 使用完整消息历史生成最终回复
             if memory_context:
-                messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": memory_context})
+                # 如果有记忆上下文，使用更新后的消息列表生成最终回复
+                final_response = await self._client.chat.completions.create(
+                    model=self.model,
+                    messages=final_messages,
+                    temperature=temperature,
+                    max_tokens=1200
+                )
+                content = final_response.choices[0].message.content or ""
+            else:
+                # 如果没有记忆上下文，直接使用第一次调用的结果
+                content = response_message.content or ""
             
-            # 使用完整消息历史和增强后的系统提示生成最终回复
-            content = await self._call_api(
-                system_prompt,
-                messages,
-                temperature=temperature
-            )
-            
-            # 这里需要对content进行处理，去除[xx]说:部分
+            # 对回复内容进行处理
             content = re.sub(r'.*?说[:：]\s*', '', content, count=1)
 
             # 对可能的错误进行处理，如果content中仍然有[]，则去除[], 并log
@@ -311,3 +328,12 @@ class AIProcessor:
                 logging.error(f"记录请求信息失败: {log_err}")
                 
             raise 
+
+    def set_memory_retrieval_callback(self, callback):
+        """设置记忆检索回调函数
+        
+        Args:
+            callback: 回调函数，需要接受query, user_id, conv_id参数
+        """
+        self.memory_retrieval_callback = callback
+        logging.info("已设置记忆检索回调函数") 

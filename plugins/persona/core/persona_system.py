@@ -17,6 +17,7 @@ import time
 import logging
 import random
 from typing import Dict, List, Optional, Any, Callable
+import yaml
 
 from ..utils.config import check_config, load_config
 from ..storage.repository import Repository
@@ -24,8 +25,9 @@ from ..memory.short_term import ShortTermMemory
 from ..memory.long_term import LongTermMemory
 from ..memory.decay import DecayManager
 from ..processing.message_processor import MessageProcessor
-from ..core.retriever import MemoryRetriever
+from .memory_retriever import LongTermRetriever
 from plugins.models import GroupPluginConfig
+from ..processing.ai_processor import AIProcessor
 
 class PersonaSystem:
     """人格系统主类，负责协调各个子系统"""
@@ -62,43 +64,68 @@ class PersonaSystem:
         logging.info("人格系统构造完成，等待初始化")
     
     async def initialize(self, reply_callback: Callable = None):
-        """异步初始化所有组件"""
-        # 初始化存储仓库
-        self.repository = Repository(self.config)
-        await self.repository.initialize()
+        """初始化人格系统
         
-        # 初始化记忆管理
-        self.short_term = ShortTermMemory(self.repository, self.config)
-        self.long_term = LongTermMemory(self.repository, self.config)
+        包括:
+        1. 初始化数据库连接
+        2. 初始化各个组件
+        3. 设置回调函数
         
-        # 默认启用记忆衰减系统，无需检查配置
-        logging.info("启用记忆衰减系统")
-        self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
-        
-        # 初始化群组人格字典
-        group_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
-        for group_id in group_ids:
-            config = await GroupPluginConfig.get_config(group_id, self.plugin_name)
-            self.group_character[group_id] = config.plugin_config.get("prompt_file", "")
-        
-        # 初始化处理器
+        Args:
+            reply_callback: 回复回调函数
+        """
         try:
-            self.processor = MessageProcessor(self.config, self.group_character, self.config['queue_history_size'])
-            # 设置处理器的记忆检索回调函数
-            if hasattr(self.processor.ai_processor, "memory_retrieval_callback"):
-                self.processor.ai_processor.memory_retrieval_callback = self.format_memories
-            logging.info("消息处理器初始化成功")
+            # 初始化仓库
+            self.repository = Repository(self.config)
+            await self.repository.initialize()
+            
+            # 初始化组件
+            self.short_term = ShortTermMemory(
+                self.repository,
+                self.config
+            )
+            
+            # 初始化群组配置
+            group_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
+            group_character = {}
+            for group_id in group_ids:
+                try:
+                    config = await GroupPluginConfig.get_config(group_id, self.plugin_name)
+                    prompt_file = config.plugin_config.get("prompt_file", None)
+                    if prompt_file and os.path.exists(prompt_file):
+                        group_character[group_id] = prompt_file
+                except Exception as e:
+                    logging.error(f"读取群组配置失败[{group_id}]: {e}")
+            
+            # 初始化AI处理器
+            api_key = self.config.get('api_key', '') or os.getenv('OPENAI_API_KEY', '')
+            base_url = self.config.get('base_url', '') or os.getenv('OPENAI_BASE_URL', '')
+            
+            self.processor = AIProcessor(
+                api_key=api_key,
+                model=self.config.get('model', 'deepseek-chat'),
+                base_url=base_url or "https://api.deepseek.com",
+                group_character=group_character,
+                queue_history_size=self.config.get('queue_history_size', 40)
+            )
+            
+            # 设置记忆检索回调
+            self.processor.set_memory_retrieval_callback(self.format_memories)
+            
+            # 初始化长期记忆组件
+            self.long_term = LongTermMemory(self.repository, self.config)
+            self.retriever = LongTermRetriever(self.repository)
+            self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
+            
+            # 设置回调函数
+            self.reply_callback = reply_callback
+            
+            # 标记系统已初始化
+            logging.info("人格系统初始化成功")
+            return True
         except Exception as e:
-            logging.error(f"消息处理器初始化失败: {e}")
-            raise ValueError(f"无法初始化人格系统，原因: {e}")
-        
-        # 初始化检索器
-        self.retriever = MemoryRetriever(self.repository)
-        
-        # 设置回调
-        self.reply_callback = reply_callback
-        
-        logging.info("人格系统初始化完成")
+            logging.error(f"人格系统初始化失败: {e}")
+            raise
     
     async def close(self):
         """关闭系统并清理资源"""
@@ -313,42 +340,44 @@ class PersonaSystem:
 
     async def simulate_reply(self, conv_id: str) -> Dict:
         """模拟回复
-        从短期记忆中获取未处理消息，并提取关键信息
-        从长期记忆中获取相关记忆
-        使用AI生成回复
-        返回回复内容
+        使用function calling功能生成回复
+        
+        Args:
+            conv_id: 会话ID
+            
+        Returns:
+            回复内容字典
         """
-        if not self.short_term:
+        if not self.processor:
+            logging.error("人格系统尚未初始化，simulate_reply调用失败")
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
             
-        # 获取未处理消息
-        messages = await self.short_term.get_unprocessed_messages(conv_id, self.config['queue_history_size'])
-        if not messages:
-            logging.info(f"会话 {conv_id} 没有未处理消息")
+        try:
+            # 获取会话最近消息
+            messages = await self.short_term.get_recent_messages(conv_id, self.config.get('queue_history_size', 40))
+            if not messages:
+                logging.info(f"会话 {conv_id} 没有历史消息")
+                return None
+                
+            # 日志记录消息数量
+            logging.info(f"开始为会话 {conv_id} 生成模拟回复，获取到 {len(messages)} 条历史消息")
+            
+            # 直接使用AI处理器的function calling能力生成回复
+            reply_content = await self.processor.generate_response(conv_id, messages, temperature=0.7)
+            
+            # 判断回复状态
+            if reply_content:
+                logging.info(f"会话 {conv_id} 生成模拟回复成功: {reply_content[:30]}...")
+                reply_dict = {
+                    "reply_content": reply_content
+                }
+                return reply_dict
+            else:
+                logging.error(f"会话 {conv_id} 模拟回复内容为空")
+                return None
+        except Exception as e:
+            logging.error(f"会话 {conv_id} 模拟回复异常: {e}")
             return None
-        
-        # 提取关键信息
-        topics: List[Dict] = await self.processor.extract_topics_from_messages(conv_id, messages)
-        logging.info(f"会话 {conv_id} 提取关键信息完成")
-        # 从长期记忆中获取相关记忆
-        related_memories = []
-        for topic in topics:
-            if topic['completed_status'] == False:
-                for node in topic['nodes']:
-                    related_memories.extend(await self.retriever.search_for_memories(node, None, 5))
-        logging.info(f"会话 {conv_id} 从长期记忆中获取相关记忆完成")
-        long_memory_promt = ["你记得:\n"]
-        for memory in related_memories:
-            long_memory_promt.append(f"{memory['content']}，")
-        long_memory_promt.append("，请根据这些记忆生成回复")
-        long_memory_promt = "".join(long_memory_promt)
-        logging.info(f"会话 {conv_id} 长期记忆提示: \n{long_memory_promt}")
-        # 使用AI生成回复
-        reply_data = await self.processor.generate_reply(conv_id, related_memories, temperature=0.7, long_memory_promt=long_memory_promt)
-        reply_dict = {
-            "reply_content": reply_data["content"]
-        }
-        return reply_dict
         
     async def create_permanent_memory(self, conv_id: str, node_name: str, memory_title: str, memory_content: str) -> Dict:
         """创建常驻节点和记忆对

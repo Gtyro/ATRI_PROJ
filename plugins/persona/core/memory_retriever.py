@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Any
 
 from ..storage.repository import Repository
 
-class MemoryRetriever:
+class LongTermRetriever:
     """记忆检索器
     
     负责从长期记忆中检索相关内容

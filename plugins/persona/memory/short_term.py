@@ -86,6 +86,10 @@ class ShortTermMemory:
         """
         return await self.repository.get_messages(conv_id)
     
+    async def get_recent_messages(self, conv_id: str, limit: int = 40) -> List[Dict]:
+        """获取最近的消息，按时间从前往后排序"""
+        return await self.repository.get_recent_messages(conv_id, limit)
+    
     async def mark_processed(self, conv_id: str, memories: List[Dict]) -> int:
         """标记消息为已处理
         

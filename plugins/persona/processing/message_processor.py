@@ -5,7 +5,7 @@ import time
 import random
 from typing import Dict, List, Optional, Any, Tuple
 
-from .ai import AIProcessor
+from .ai_processor import AIProcessor
 from plugins.models import GroupPluginConfig
 
 class MessageProcessor:

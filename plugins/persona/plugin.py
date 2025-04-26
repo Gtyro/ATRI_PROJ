@@ -369,6 +369,7 @@ async def handle_test_persona(bot: Bot, event: Event):
     if not PERSONA_SYSTEM_ENABLED:
         await test_persona.finish("人格系统未启用，请检查配置和日志")
 
+    # 解析参数获取群号
     args = str(event.get_plaintext()).strip().split()
     if len(args) != 2:
         await test_persona.finish("格式错误，正确格式：测试 [群号]")
@@ -376,11 +377,24 @@ async def handle_test_persona(bot: Bot, event: Event):
     group_id = args[1]
     if not group_id.isdigit():
         await test_persona.finish("群号格式不正确")
+    
+    # 构造会话ID
     conv_id = f"group_{group_id}"
-
-    reply_data = await persona_system.simulate_reply(conv_id)
-    if reply_data:
-        reply_content = reply_data["reply_content"]
-        await test_persona.send(reply_content)
-    else:
-        await test_persona.finish("模拟回复失败，请检查日志")
+    
+    try:
+        # 调用simulate_reply生成回复
+        await test_persona.send(f"正在为群 {group_id} 生成模拟回复...")
+        reply_data = await persona_system.simulate_reply(conv_id)
+        
+        # 处理回复结果
+        if reply_data and "reply_content" in reply_data:
+            reply_content = reply_data["reply_content"]
+            if reply_content:
+                await test_persona.send(reply_content)
+            else:
+                await test_persona.finish("生成的回复内容为空")
+        else:
+            await test_persona.finish("模拟回复失败，请检查日志")
+    except Exception as e:
+        logging.error(f"测试人格回复异常: {e}")
+        await test_persona.finish(f"模拟回复出错: {str(e)}")

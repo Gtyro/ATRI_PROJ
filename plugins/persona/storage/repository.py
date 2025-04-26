@@ -77,6 +77,16 @@ class Repository:
             ).order_by("created_at").limit(limit).all()
         return [msg.to_dict() for msg in messages]
     
+    async def get_recent_messages(self, conv_id: str, limit: int = 40) -> List[Dict]:
+        """按照创建时间升序返回指定会话最近的limit条消息"""
+        # 直接获取最近的limit条消息（按时间倒序）
+        messages = await MessageQueue.filter(
+            conv_id=conv_id
+        ).order_by("-created_at").limit(limit).all()
+        
+        # 反转列表得到正确的时间顺序
+        return [msg.to_dict() for msg in reversed(messages)]
+    
     async def mark_messages_processed(self, message_ids: List[int]) -> int:
         """标记消息为已处理"""
             
