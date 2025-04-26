@@ -262,21 +262,8 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
             else:
                 conv_id = f"private_{conv_id}"
         
-        # 检索相关记忆
-        related_memories = await persona_system.retrieve_related_memories(query, user_id, conv_id=conv_id)
-        
-        if not related_memories:
-            await memories.finish("我似乎没有关于这方面的记忆...")
-            
-        # 格式化回复
-        reply = "我记得这些内容:\n"
-        for i, memory in enumerate(related_memories, 1):
-            memory_source = memory.get("source", "未知")
-            title = memory.get("title", "无标题")
-            content = memory.get("content", "无内容")
-            time_str = datetime.fromtimestamp(memory.get("created_at", 0)).strftime("%Y-%m-%d %H:%M")
-            reply += f"{i}. [{memory_source}]【{title}】{content} ({time_str})\n"
-            
+        # 使用persona_system的format_memories方法获取格式化的记忆回复
+        reply = await persona_system.format_memories(query, user_id, conv_id)
         await memories.send(reply)
     except MatcherException as e: # finish会正常报出异常
         pass

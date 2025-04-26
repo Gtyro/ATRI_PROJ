@@ -387,3 +387,33 @@ class PersonaSystem:
         except Exception as e:
             logging.error(f"创建常驻节点-记忆对失败: {e}")
             raise
+            
+    async def format_memories(self, query: str, user_id: str, conv_id: str) -> str:
+        """检索相关记忆并格式化为可读文本
+        
+        Args:
+            query: 查询内容
+            user_id: 用户ID
+            conv_id: 会话ID
+            
+        Returns:
+            格式化后的记忆文本
+        """
+        from datetime import datetime
+        
+        # 检索相关记忆
+        related_memories = await self.retrieve_related_memories(query, user_id, conv_id=conv_id)
+        
+        if not related_memories:
+            return "我似乎没有关于这方面的记忆..."
+            
+        # 格式化回复
+        reply = "我记得这些内容:\n"
+        for i, memory in enumerate(related_memories, 1):
+            memory_source = memory.get("source", "未知")
+            title = memory.get("title", "无标题")
+            content = memory.get("content", "无内容")
+            time_str = datetime.fromtimestamp(memory.get("created_at", 0)).strftime("%Y-%m-%d %H:%M")
+            reply += f"{i}. [{memory_source}]【{title}】{content} ({time_str})\n"
+            
+        return reply
