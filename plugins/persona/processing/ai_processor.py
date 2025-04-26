@@ -163,7 +163,7 @@ class AIProcessor:
                     "type": "function",
                     "function": {
                         "name": "retrieve_memories",
-                        "description": "从数据库中检索与当前对话相关的记忆",
+                        "description": "从数据库中根据关键词检索信息",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -189,7 +189,7 @@ class AIProcessor:
                 model=self.model,
                 messages=api_messages,
                 tools=tools,
-                tool_choice="auto",
+                tool_choice="required",
                 temperature=0.2,
                 max_tokens=1200
             )
@@ -228,15 +228,20 @@ class AIProcessor:
                             # 调用format_memories直接获取格式化的记忆文本
                             if hasattr(self, "memory_retrieval_callback") and self.memory_retrieval_callback:
                                 memory_context = await self.memory_retrieval_callback(query, user_id=None, conv_id=conv_id)
-                                if memory_context and not memory_context.startswith("我似乎没有关于这方面的记忆"):
-                                    # 将记忆文本添加到消息中
-                                    final_messages.append({
-                                        "role": "tool",
-                                        "tool_call_id": tool_call.id,
-                                        "content": memory_context
-                                    })
+                                # 将记忆文本添加到消息中
+                                final_messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": memory_context
+                                })
                         except Exception as e:
                             logging.error(f"处理记忆检索工具调用失败: {e}")
+                            # 即使出错也需要添加空响应
+                            final_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": "记忆检索失败"
+                            })
             
             # 使用完整消息历史生成最终回复
             if memory_context:
@@ -249,8 +254,13 @@ class AIProcessor:
                 )
                 content = final_response.choices[0].message.content or ""
             else:
+                logging.warning(f"没有记忆上下文，function calling失败: {response}")
                 # 如果没有记忆上下文，直接使用第一次调用的结果
-                content = response_message.content or ""
+                content = await self._call_api(
+                system_prompt,
+                api_messages,
+                temperature=temperature
+            )
             
             # 对回复内容进行处理
             content = re.sub(r'.*?说[:：]\s*', '', content, count=1)
@@ -262,7 +272,7 @@ class AIProcessor:
                 logging.warning(f"处理后: {content}")
             # 对换行符进行处理，如果content中包含\n，则删除包括\n之后的内容
             if "\n" in content:
-                logging.warning(f"生成回复中包含\n，进行处理: {content}")
+                logging.warning(f"生成回复中包含\\n，进行处理: {content}")
                 content = content.split("\n")[0]
                 logging.warning(f"处理后: {content}")
             # 如果content中包含"笑死"，则删除

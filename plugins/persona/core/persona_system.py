@@ -324,8 +324,12 @@ class PersonaSystem:
         """
         if not self.retriever:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
-            
-        return await self.retriever.search_for_memories(query, user_id, limit, conv_id)
+        
+        keywords = query.split(" ")
+        memory_list = []
+        for keyword in keywords:
+            memory_list.extend(await self.retriever.search_for_memories(keyword, user_id, limit, conv_id))
+        return memory_list
     
     async def get_queue_status(self) -> Dict:
         """获取队列状态
