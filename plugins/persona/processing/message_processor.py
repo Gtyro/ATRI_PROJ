@@ -13,11 +13,12 @@ class MessageProcessor:
     消息处理器，负责处理消息并生成回复
     """
     
-    def __init__(self, config: Dict, group_character: Dict[str, str] = {}, queue_history_size: int = 40):
+    def __init__(self, config: Dict, ai_processor: AIProcessor, group_character: Dict[str, str] = {}, queue_history_size: int = 40):
         """初始化消息处理器
         
         Args:
             config: 配置信息
+            ai_processor: AI处理器实例
             group_character: 群组人格配置
             queue_history_size: 队列历史消息保留数量
         """
@@ -25,18 +26,8 @@ class MessageProcessor:
         self.config = config
         self.queue_history_size = queue_history_size
         
-        # 初始化AI处理器
-        try:
-            self.ai_processor = AIProcessor(
-                api_key=config.get("openai_api_key", ""),
-                model=config.get("model", "deepseek-chat"),
-                base_url=config.get("base_url", "https://api.deepseek.com"),
-                group_character=group_character,
-                queue_history_size=queue_history_size
-            )
-        except Exception as e:
-            logging.error(f"初始化AI处理器失败: {e}")
-            raise
+        # 使用传入的AI处理器
+        self.ai_processor = ai_processor
         
         # 群组配置
         self.group_config = GroupPluginConfig

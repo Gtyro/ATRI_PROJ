@@ -54,7 +54,8 @@ class PersonaSystem:
         self.repository = None
         self.short_term = None
         self.long_term = None
-        self.processor = None
+        self.aiprocessor = None
+        self.msgprocessor = None
         self.retriever = None
         self.decay_manager = None
         self.reply_callback = None
@@ -101,7 +102,7 @@ class PersonaSystem:
             api_key = self.config.get('api_key', '') or os.getenv('OPENAI_API_KEY', '')
             base_url = self.config.get('base_url', '') or os.getenv('OPENAI_BASE_URL', '')
             
-            self.processor = AIProcessor(
+            self.aiprocessor = AIProcessor(
                 api_key=api_key,
                 model=self.config.get('model', 'deepseek-chat'),
                 base_url=base_url or "https://api.deepseek.com",
@@ -109,8 +110,16 @@ class PersonaSystem:
                 queue_history_size=self.config.get('queue_history_size', 40)
             )
             
+            # 传递现有的AI处理器实例给消息处理器
+            self.msgprocessor = MessageProcessor(
+                self.config,
+                ai_processor=self.aiprocessor,
+                group_character=group_character,
+                queue_history_size=self.config.get('queue_history_size', 40)
+            )
+            
             # 设置记忆检索回调
-            self.processor.set_memory_retrieval_callback(self.format_memories)
+            self.aiprocessor.set_memory_retrieval_callback(self.format_memories)
             
             # 初始化长期记忆组件
             self.long_term = LongTermMemory(self.repository, self.config)
@@ -192,7 +201,7 @@ class PersonaSystem:
                 message_count += len(messages)
 
                 # 处理会话
-                topics = await self.processor.extract_topics_from_messages(conv_id, messages)
+                topics = await self.msgprocessor.extract_topics_from_messages(conv_id, messages)
                 if len(topics) == 0:
                     break
                 
@@ -219,7 +228,7 @@ class PersonaSystem:
             raise e
             
         # 判断是否需要回复
-        should_reply = await self.processor.should_respond(conv_id, topics)
+        should_reply = await self.msgprocessor.should_respond(conv_id, topics)
         # 判断队列中是否有机器人发的消息
         has_bot_message = await self.repository.has_bot_message(conv_id)
         if has_bot_message:
@@ -257,7 +266,7 @@ class PersonaSystem:
             logging.error(f"会话 {conv_id} 调整下次处理时间失败: {e}")
             raise e
         # 生成回复
-        reply_data = await self.processor.generate_reply(conv_id, recent_messages, temperature=0.7)
+        reply_data = await self.msgprocessor.generate_reply(conv_id, recent_messages, temperature=0.7)
         reply_content = reply_data["content"]
         logging.info(f"会话 {conv_id} 生成回复完成")
         logging.info(f"会话 {conv_id} 回复内容: {reply_content}")
@@ -352,10 +361,6 @@ class PersonaSystem:
         Returns:
             回复内容字典
         """
-        if not self.processor:
-            logging.error("人格系统尚未初始化，simulate_reply调用失败")
-            raise RuntimeError("系统尚未初始化，请先调用initialize()")
-            
         try:
             # 获取会话最近消息
             messages = await self.short_term.get_recent_messages(conv_id, self.config.get('queue_history_size', 40))
@@ -367,7 +372,7 @@ class PersonaSystem:
             logging.info(f"开始为会话 {conv_id} 生成模拟回复，获取到 {len(messages)} 条历史消息")
             
             # 直接使用AI处理器的function calling能力生成回复
-            reply_content = await self.processor.generate_response(conv_id, messages, temperature=0.7)
+            reply_content = await self.msgprocessor.generate_reply(conv_id, messages, temperature=0.7)
             
             # 判断回复状态
             if reply_content:

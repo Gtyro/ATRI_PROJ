@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from tortoise import Model, fields
 import pytz
 from tzlocal import get_localzone
+import uuid
 
 # Get the local timezone from the system
 LOCAL_TZ = get_localzone()
@@ -45,7 +46,7 @@ class MessageQueue(Model):
 
 class Memory(Model):
     """记忆模型, 共10个字段"""
-    id = fields.UUIDField(pk=True)
+    id = fields.UUIDField(pk=True, default=uuid.uuid4)
     conv_id = fields.CharField(max_length=20, index=True)
     '''group_id or private_id'''
 
@@ -68,7 +69,7 @@ class Memory(Model):
 
 class CognitiveNode(Model):
     """认知节点模型, 共5个字段"""
-    id = fields.UUIDField(pk=True)
+    id = fields.UUIDField(pk=True, default=uuid.uuid4)
     name = fields.CharField(max_length=100, index=True)
     conv_id = fields.CharField(max_length=20, default='', null=False, index=True)
     '''会话id
@@ -105,4 +106,4 @@ class Association(Model):
 
     class Meta:
         table = "associations"
-        unique_together = (("source", "target"),) 
+        unique_together = (("source", "target"),)
