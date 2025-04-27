@@ -35,23 +35,25 @@ class DecayManager:
         """
             
         nodes = await self.repository.get_nodes(limit=None)  # 不限制数量，获取所有节点
-        processed = 0
+        processed_nodes = 0
         
         for node in nodes:
             # 应用衰减到所有节点，不再跳过高激活水平的节点
             if await self.repository.apply_decay(str(node.id), self.decay_rate):
-                processed += 1
+                processed_nodes += 1
         
         # 应用关联关系的衰减
-        associations_processed = await self.repository.apply_association_decay(self.decay_rate)
-        logging.info(f"关联关系衰减完成，处理了 {associations_processed} 个关联")
+        processed_associations = await self.repository.apply_association_decay(self.decay_rate)
+        # 应用记忆权重的衰减
+        processed_memories = await self.repository.apply_memory_decay(self.decay_rate)
         
-        logging.info(f"记忆衰减完成，处理了 {processed} 个节点和 {associations_processed} 个关联")
+        logging.info(f"记忆衰减完成，处理了 {processed_nodes} 个节点、{processed_associations} 个关联和 {processed_memories} 个记忆")
         
-        # 执行完衰减后，检查是否需要清理过多的节点
+        # 执行完衰减后，检查是否需要清理过多的节点和记忆
         await self.cleanup_old_nodes()
+        await self.cleanup_old_memories()
         
-        return processed
+        return processed_nodes + processed_associations + processed_memories # 返回总处理数
     
     async def cleanup_old_nodes(self) -> int:
         """清理旧节点，为每个会话只保留指定数量的节点
@@ -75,6 +77,31 @@ class DecayManager:
             
         except Exception as e:
             logging.error(f"清理旧节点失败: {e}")
+            return 0
+    
+    async def cleanup_old_memories(self) -> int:
+        """清理旧记忆，为每个会话只保留指定数量的记忆
+        
+        Returns:
+            清理的记忆数量
+        """
+        try:
+            # 获取所有使用 persona 插件的会话 ID
+            conv_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
+            total_cleaned = 0
+            
+            # 对每个会话进行记忆清理
+            for conv_id in conv_ids:
+                # 每个会话保留500个非永久性记忆
+                cleaned = await self.repository.clean_old_memories_by_conv(conv_id, max_memories=500)
+                total_cleaned += cleaned
+                
+            if total_cleaned > 0:
+                logging.info(f"长期记忆清理完成，共清理 {total_cleaned} 个记忆")
+            return total_cleaned
+            
+        except Exception as e:
+            logging.error(f"清理旧记忆失败: {e}")
             return 0
     
     async def forget_node_by_conv(self, conv_id: str) -> int:

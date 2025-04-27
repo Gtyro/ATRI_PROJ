@@ -216,6 +216,49 @@ class Repository:
             query = query.filter(completed_status=completed)
         
         return await query.order_by("-last_accessed").limit(limit).all()
+        
+    async def clean_old_memories_by_conv(self, conv_id: str, max_memories: int = 500) -> int:
+        """清理指定会话的旧记忆，只保留指定数量
+        
+        Args:
+            conv_id: 会话ID
+            max_memories: 每个会话保留的最大记忆数
+            
+        Returns:
+            清理的记忆数量
+        """
+        try:
+            # 只获取非永久性记忆
+            non_permanent_memories = await Memory.filter(conv_id=conv_id, is_permanent=False).all()
+            non_permanent_count = len(non_permanent_memories)
+            
+            # 如果非永久性记忆数量超过了允许的限制
+            if non_permanent_count > max_memories:
+                # 计算需要删除的数量
+                to_delete_count = non_permanent_count - max_memories
+                
+                # 获取权重最低的非永久性记忆 (先按权重升序，再按最后访问时间升序)
+                memories_to_delete = await Memory.filter(
+                    conv_id=conv_id,
+                    is_permanent=False
+                ).order_by("weight", "last_accessed").limit(to_delete_count).all()
+                
+                # 删除这些记忆
+                deleted_count = 0
+                for memory in memories_to_delete:
+                    # 先解除与节点的关联
+                    await memory.nodes.clear()
+                    # 然后删除记忆
+                    await memory.delete()
+                    deleted_count += 1
+                
+                logging.info(f"会话 {conv_id} 清理了 {deleted_count} 个非永久性记忆，保留了 {max_memories} 个")
+                return deleted_count
+            
+            return 0  # 不需要清理
+        except Exception as e:
+            logging.error(f"清理会话 {conv_id} 的记忆失败: {e}")
+            return 0
 
     # === 认知节点相关操作 ===
 
@@ -325,43 +368,6 @@ class Repository:
             if target_node:
                 nodes.append(target_node)
         return nodes
-    
-    async def apply_decay(self, node_id: str, decay_rate: float) -> bool:
-        """应用记忆衰减"""
-        try:
-            node = await CognitiveNode.filter(id=node_id).first()
-            if node:
-                node.act_lv *= (1 - decay_rate*(random.random()*0.5+0.5))  # 应用完整的衰减率
-                await node.save()
-                return True
-        except Exception as e:
-            logging.error(f"应用记忆衰减失败: {e}")
-        return False
-    
-    async def apply_association_decay(self, decay_rate: float) -> int:
-        """应用关联关系衰减
-        
-        Args:
-            decay_rate: 衰减率
-            
-        Returns:
-            处理的关联数量
-        """
-        try:
-            # 获取所有关联关系
-            associations = await Association.all()
-            processed = 0
-            
-            for assoc in associations:
-                # 应用衰减
-                assoc.strength *= (1 - decay_rate*(random.random()*0.5+0.5))
-                await assoc.save()
-                processed += 1
-                
-            return processed
-        except Exception as e:
-            logging.error(f"应用关联关系衰减失败: {e}")
-            return 0
         
     async def get_nodes_by_conv_id(self, conv_id: str, order_by: str = "-act_lv", limit: Optional[int] = None, is_permanent: Optional[bool] = None) -> List[CognitiveNode]:
         """获取指定会话ID的所有认知节点
@@ -435,4 +441,73 @@ class Repository:
             return True
         except Exception as e:
             logging.error(f"删除节点 {node_id} 失败: {e}")
-            return False 
+            return False
+            
+    # === 衰减相关操作 ===
+    
+    async def apply_decay(self, node_id: str, decay_rate: float) -> bool:
+        """应用节点衰减"""
+        try:
+            node = await CognitiveNode.filter(id=node_id).first()
+            if node:
+                node.act_lv *= (1 - decay_rate*(random.random()*0.5+0.5))  # 应用完整的衰减率
+                await node.save()
+                return True
+        except Exception as e:
+            logging.error(f"应用记忆衰减失败: {e}")
+        return False
+
+    async def apply_association_decay(self, decay_rate: float) -> int:
+        """应用关联关系衰减
+        
+        Args:
+            decay_rate: 衰减率
+            
+        Returns:
+            处理的关联数量
+        """
+        try:
+            # 获取所有关联关系
+            associations = await Association.all()
+            processed = 0
+            
+            for assoc in associations:
+                # 应用衰减
+                assoc.strength *= (1 - decay_rate*(random.random()*0.5+0.5))
+                await assoc.save()
+                processed += 1
+                
+            return processed
+        except Exception as e:
+            logging.error(f"应用关联关系衰减失败: {e}")
+            return 0
+
+    async def apply_memory_decay(self, decay_rate: float) -> int:
+        """应用记忆权重衰减到非永久性记忆
+        
+        Args:
+            decay_rate: 衰减率
+            
+        Returns:
+            处理的记忆数量
+        """
+        try:
+            # 获取所有非永久性记忆
+            memories = await Memory.filter(is_permanent=False).all()
+            processed = 0
+            
+            for memory in memories:
+                # 应用衰减到权重
+                memory.weight *= (1 - decay_rate * (random.random() * 0.5 + 0.5))
+                
+                # 如果权重过低，可以考虑在这里添加删除逻辑，但目前仅应用衰减
+                # if memory.weight < some_threshold:
+                #     await memory.delete() # 需要考虑关联等清理
+                
+                await memory.save()
+                processed += 1
+                
+            return processed
+        except Exception as e:
+            logging.error(f"应用记忆衰减失败: {e}")
+            return 0
