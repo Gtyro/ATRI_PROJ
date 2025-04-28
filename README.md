@@ -86,3 +86,7 @@ pip install -r requirements.txt
 |---------------|--------------------------------|
 | 人格系统配置   | [persona模块文档](plugins/persona/README.md) |
 | WebUI使用指南  | [WebUI文档](plugins/webui/README.md)      |
+
+## 🕸 群组记忆图谱
+
+![atlas](assets\atlas.png)

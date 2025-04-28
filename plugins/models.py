@@ -1,6 +1,18 @@
 from typing import List
 from tortoise import Model, fields
 
+class PluginConfig(Model):
+    id = fields.IntField(pk=True)
+    plugin_name = fields.CharField(max_length=50)
+    '''plugin name'''
+    plugin_config = fields.JSONField(default={})
+    '''plugin config'''
+    
+    class Meta:
+        table = "plugin_configs"
+        unique_together = (('plugin_name',))
+        connection_name = "default"
+
 class GroupPluginConfig(Model):
     id = fields.IntField(pk=True)
     gid = fields.CharField(max_length=20, index=True)

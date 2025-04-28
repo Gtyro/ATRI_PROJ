@@ -3,7 +3,7 @@ import time
 from typing import Dict, List, Optional
 
 from ..storage.repository import Repository
-from ...models import GroupPluginConfig
+from ...models import GroupPluginConfig, PluginConfig
 
 class DecayManager:
     """记忆衰减管理器
@@ -24,6 +24,20 @@ class DecayManager:
         self.max_nodes_per_conv = 1000  # 每个会话保留的最大节点数
         logging.info(f"记忆衰减管理器已创建，衰减率: {decay_rate}")
     
+    async def load_next_decay_time(self) -> int:
+        # 通过plugin_name获取插件配置
+        plugin_config = await PluginConfig.get(plugin_name=self.plugin_name)
+        # 获取plugin_config中的next_decay_time
+        next_decay_time = plugin_config.plugin_config.get("next_decay_time", time.time())
+        return next_decay_time
+    
+    async def set_next_decay_time(self) -> None:
+        # 通过plugin_name获取插件配置
+        plugin_config = await PluginConfig.get(plugin_name=self.plugin_name)
+        # 更新plugin_config中的next_decay_time
+        plugin_config.plugin_config["next_decay_time"] = time.time() + 4*3600
+        await plugin_config.save()
+    
     async def apply_decay(self, force: bool = False) -> int:
         """应用记忆衰减
         
@@ -33,6 +47,10 @@ class DecayManager:
         Returns:
             处理的节点数量
         """
+        next_decay_time = await self.load_next_decay_time()
+        if not force and time.time() < next_decay_time:
+            logging.info(f"未到下次衰减时间，跳过衰减")
+            return 0
             
         nodes = await self.repository.get_nodes(limit=None)  # 不限制数量，获取所有节点
         processed_nodes = 0
@@ -52,7 +70,7 @@ class DecayManager:
         # 执行完衰减后，检查是否需要清理过多的节点和记忆
         await self.cleanup_old_nodes()
         await self.cleanup_old_memories()
-        
+        await self.set_next_decay_time()
         return processed_nodes + processed_associations + processed_memories # 返回总处理数
     
     async def cleanup_old_nodes(self) -> int:

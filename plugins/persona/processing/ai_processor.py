@@ -228,6 +228,7 @@ class AIProcessor:
                             # 调用format_memories直接获取格式化的记忆文本
                             if hasattr(self, "memory_retrieval_callback") and self.memory_retrieval_callback:
                                 memory_context = await self.memory_retrieval_callback(query, user_id=None, conv_id=conv_id)
+                                logging.info(f"记忆文本: {memory_context}")
                                 # 将记忆文本添加到消息中
                                 final_messages.append({
                                     "role": "tool",
