@@ -125,6 +125,7 @@ class PersonaSystem:
             self.long_term = LongTermMemory(self.repository, self.config)
             self.retriever = LongTermRetriever(self.repository)
             self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
+            await self.decay_manager.initialize()
             
             # 设置回调函数
             self.reply_callback = reply_callback

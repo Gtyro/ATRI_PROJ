@@ -24,19 +24,47 @@ class DecayManager:
         self.max_nodes_per_conv = 1000  # 每个会话保留的最大节点数
         logging.info(f"记忆衰减管理器已创建，衰减率: {decay_rate}")
     
+    async def initialize(self):
+        """初始化衰减管理器，确保配置数据存在"""
+        try:
+            # 检查并初始化配置数据
+            await self.load_next_decay_time()
+            logging.info("衰减管理器初始化完成")
+        except Exception as e:
+            logging.error(f"衰减管理器初始化失败: {e}")
+            raise
+    
     async def load_next_decay_time(self) -> int:
-        # 通过plugin_name获取插件配置
-        plugin_config = await PluginConfig.get(plugin_name=self.plugin_name)
-        # 获取plugin_config中的next_decay_time
+        # 使用get_or_create确保配置存在
+        plugin_config, created = await PluginConfig.get_or_create(
+            plugin_name=self.plugin_name,
+            defaults={"plugin_config": {"next_decay_time": time.time()}}
+        )
+        
+        # 如果是新创建的，记录日志
+        if created:
+            logging.info(f"创建了新的衰减时间配置，下次衰减时间: {plugin_config.plugin_config.get('next_decay_time')}")
+        
+        # 确保plugin_config字典中有next_decay_time键
+        if "next_decay_time" not in plugin_config.plugin_config:
+            plugin_config.plugin_config["next_decay_time"] = time.time()
+            await plugin_config.save()
+            
+        # 获取next_decay_time
         next_decay_time = plugin_config.plugin_config.get("next_decay_time", time.time())
         return next_decay_time
     
     async def set_next_decay_time(self) -> None:
-        # 通过plugin_name获取插件配置
-        plugin_config = await PluginConfig.get(plugin_name=self.plugin_name)
+        # 使用get_or_create确保配置存在
+        plugin_config, created = await PluginConfig.get_or_create(
+            plugin_name=self.plugin_name,
+            defaults={"plugin_config": {"next_decay_time": time.time() + 4*3600}}
+        )
+        
         # 更新plugin_config中的next_decay_time
         plugin_config.plugin_config["next_decay_time"] = time.time() + 4*3600
         await plugin_config.save()
+        logging.info(f"设置下次衰减时间: {plugin_config.plugin_config['next_decay_time']}")
     
     async def apply_decay(self, force: bool = False) -> int:
         """应用记忆衰减

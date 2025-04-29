@@ -34,9 +34,9 @@ city_data = pd.read_excel(excel_path, engine='openpyxl')
 # 创建城市名到adcode的映射
 city_to_adcode = {}
 for _, row in city_data.iterrows():
-    if not pd.isna(row[0]):  # 确保城市名不为空
-        city_name = row[0].replace('市', '').replace('区', '').replace('县', '')
-        city_to_adcode[city_name] = str(int(row[1]))  # adcode
+    if not pd.isna(row.iloc[0]):  # 确保城市名不为空
+        city_name = row.iloc[0].replace('市', '').replace('区', '').replace('县', '')
+        city_to_adcode[city_name] = str(int(row.iloc[1]))  # adcode
 
 # 注册天气查询命令处理器
 weather = on_command("天气", aliases={"查天气", "weather"}, permission=SUPERUSER, priority=5, block=True)
