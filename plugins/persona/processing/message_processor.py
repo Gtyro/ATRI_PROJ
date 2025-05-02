@@ -116,11 +116,11 @@ class MessageProcessor:
         logging.info(f"消息历史: \n{'\n'.join([f'[{msg['role']}] {msg['content']}' for msg in chat_messages])}")
                 
         # 生成回复
-        response = await self.ai_processor.generate_response(
+        reply_content = await self.ai_processor.generate_response(
             conv_id=conv_id,
             messages=chat_messages,
             temperature=temperature,
             long_memory_promt=long_memory_promt
         )
         
-        return {"content": response} 
+        return reply_content 

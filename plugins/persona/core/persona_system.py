@@ -267,8 +267,7 @@ class PersonaSystem:
             logging.error(f"会话 {conv_id} 调整下次处理时间失败: {e}")
             raise e
         # 生成回复
-        reply_data = await self.msgprocessor.generate_reply(conv_id, recent_messages, temperature=0.7)
-        reply_content = reply_data["content"]
+        reply_content = await self.msgprocessor.generate_reply(conv_id, recent_messages, temperature=0.7)
         logging.info(f"会话 {conv_id} 生成回复完成")
         logging.info(f"会话 {conv_id} 回复内容: {reply_content}")
 
@@ -352,12 +351,13 @@ class PersonaSystem:
             
         return await self.short_term.get_queue_stats()
 
-    async def simulate_reply(self, conv_id: str) -> Dict:
+    async def simulate_reply(self, conv_id: str, test_message: Optional[str] = None) -> Dict:
         """模拟回复
         使用function calling功能生成回复
         
         Args:
             conv_id: 会话ID
+            test_message: 可选的测试消息，如果提供则临时添加到消息历史末尾
             
         Returns:
             回复内容字典
@@ -368,6 +368,15 @@ class PersonaSystem:
             if not messages:
                 logging.info(f"会话 {conv_id} 没有历史消息")
                 return None
+                
+            # 如果提供了测试消息，临时添加到消息列表末尾
+            if test_message:
+                # 复制最后一条消息的格式，只替换内容
+                last_message = messages[-1].copy()
+                last_message["content"] = test_message
+                last_message["is_bot"] = False
+                last_message["is_direct"] = True
+                messages.append(last_message)
                 
             # 日志记录消息数量
             logging.info(f"开始为会话 {conv_id} 生成模拟回复，获取到 {len(messages)} 条历史消息")

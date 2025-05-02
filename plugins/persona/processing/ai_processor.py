@@ -163,13 +163,13 @@ class AIProcessor:
                     "type": "function",
                     "function": {
                         "name": "retrieve_memories",
-                        "description": "从数据库中根据关键词检索信息",
+                        "description": "从数据库中根据具体实体（人名、物名、地点等）检索相关信息，使用空格分隔的若干个具体关键词",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "query": {
                                     "type": "string",
-                                    "description": "要查询的关键词或短语",
+                                    "description": "要查询的具体实体关键词，如果有多个，用空格分隔。",
                                 }
                             },
                             "required": ["query"]
