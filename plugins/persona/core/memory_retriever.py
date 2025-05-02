@@ -49,10 +49,19 @@ class LongTermRetriever:
                 memory['source'] = 'node'
             results.extend(memories)
         
-        # 3. 按重要性排序
+        # 3. 按id过滤重复数据
+        unique_results = []
+        seen_ids = set()
+        for result in results:
+            if result['id'] not in seen_ids:
+                unique_results.append(result)
+                seen_ids.add(result['id'])
+        results = unique_results
+        
+        # 4. 按重要性排序
         results.sort(key=lambda x: x['weight'], reverse=True)
         
-        # 4. 限制结果数量
+        # 5. 限制结果数量
         return results[:limit]
     
     async def _search_topics(self, query: str, limit: int, conv_id: str) -> List[Dict]:
@@ -80,6 +89,7 @@ class LongTermRetriever:
             if (query.lower() in memory.title.lower() or 
                 query.lower() in memory.content.lower()):
                 results.append({
+                    "id": memory.id,
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
@@ -126,6 +136,7 @@ class LongTermRetriever:
             if (query.lower() in memory.title.lower() or 
                 query.lower() in memory.content.lower()):
                 results.append({
+                    "id": memory.id,
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
