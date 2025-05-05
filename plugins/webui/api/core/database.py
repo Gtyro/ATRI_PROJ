@@ -18,7 +18,7 @@ async def initialize_tortoise():
     try:
         # 使用与memory模块相同的数据库
         db_url = f"sqlite://{settings.DATABASE_PATH}"
-        
+
         await Tortoise.init(
             db_url=db_url,
             modules={'models': ['plugins.persona.storage.models', 'plugins.webui.api.db.models']}

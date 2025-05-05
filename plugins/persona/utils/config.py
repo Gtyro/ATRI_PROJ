@@ -23,7 +23,7 @@ def load_config(config_path: str = CONFIG_PATH) -> Dict[str, Any]:
             yaml.dump(DEFAULT_CONFIG, f)
         logging.info(f"已创建默认配置文件: {config_path}")
         return DEFAULT_CONFIG
-    
+
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)

@@ -1,42 +1,42 @@
 <template>
   <div class="login-container">
     <h2 class="login-title">ATRI管理面板</h2>
-    <el-form 
-      :model="loginForm" 
-      :rules="loginRules" 
-      ref="loginFormRef" 
+    <el-form
+      :model="loginForm"
+      :rules="loginRules"
+      ref="loginFormRef"
       label-position="top"
     >
       <el-form-item label="用户名" prop="username">
-        <el-input 
-          v-model="loginForm.username" 
+        <el-input
+          v-model="loginForm.username"
           placeholder="请输入用户名"
           :prefix-icon="User"
         ></el-input>
       </el-form-item>
-      
+
       <el-form-item label="密码" prop="password">
-        <el-input 
-          v-model="loginForm.password" 
-          type="password" 
+        <el-input
+          v-model="loginForm.password"
+          type="password"
           placeholder="请输入密码"
           :prefix-icon="Lock"
           @keyup.enter="submitForm"
         ></el-input>
       </el-form-item>
-      
+
       <el-form-item>
-        <el-button 
-          type="primary" 
-          style="width: 100%;" 
-          @click="submitForm" 
+        <el-button
+          type="primary"
+          style="width: 100%;"
+          @click="submitForm"
           :loading="loading"
         >
           登录
         </el-button>
       </el-form-item>
     </el-form>
-    
+
     <div class="login-tips">
       <p>默认用户名: admin</p>
       <p>默认密码: admin</p>
@@ -72,11 +72,11 @@ const loginRules = {
 
 const submitForm = () => {
   if (!loginFormRef.value) return
-  
+
   loginFormRef.value.validate((valid) => {
     if (valid) {
       loading.value = true
-      
+
       authStore.login(loginForm.username, loginForm.password)
         .then(() => {
           ElMessage.success('登录成功')

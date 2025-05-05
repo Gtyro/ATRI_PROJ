@@ -12,16 +12,16 @@ class Settings(BaseSettings):
 
     # 项目根目录
     PROJECT_ROOT: str = str(Path(__file__).parent.parent.parent.parent.parent)
-    
+
     # 数据库设置
     DATABASE_PATH: str = str(Path(PROJECT_ROOT) / "data" / "persona.db")
     PUBLIC_PATH: str = str(Path(PROJECT_ROOT) / "plugins" / "webui" / "static" / "webui")
-    
+
     # CORS设置
     CORS_ORIGINS: list = ["*"]  # 在生产环境中应该限制来源
-    
+
     class Config:
         env_file = ".env"
-        
+
 # 创建全局设置实例
 settings = Settings()

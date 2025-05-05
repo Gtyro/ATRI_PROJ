@@ -11,22 +11,22 @@
           ></el-option>
         </el-select>
       </el-form-item>
-      
+
       <el-form-item label="选择列" v-if="selectedTable">
         <el-checkbox-group v-model="selectedColumns">
-          <el-checkbox 
-            v-for="column in tableColumns" 
-            :key="column.name" 
+          <el-checkbox
+            v-for="column in tableColumns"
+            :key="column.name"
             :label="column.name"
           >
             {{ column.name }} ({{ column.type }})
           </el-checkbox>
         </el-checkbox-group>
       </el-form-item>
-      
+
       <el-form-item label="过滤条件" v-if="selectedTable">
         <el-button type="primary" size="small" @click="addCondition">添加条件</el-button>
-        
+
         <div v-for="(condition, index) in conditions" :key="index" class="condition-row">
           <el-select v-model="condition.column" placeholder="选择列" style="width: 160px">
             <el-option
@@ -36,7 +36,7 @@
               :value="column.name"
             ></el-option>
           </el-select>
-          
+
           <el-select v-model="condition.operator" placeholder="条件" style="width: 120px">
             <el-option label="等于" value="="></el-option>
             <el-option label="不等于" value="!="></el-option>
@@ -44,19 +44,19 @@
             <el-option label="小于" value="<"></el-option>
             <el-option label="包含" value="LIKE"></el-option>
           </el-select>
-          
+
           <el-input v-model="condition.value" placeholder="值" style="width: 160px"></el-input>
-          
+
           <el-button type="danger" circle size="small" @click="removeCondition(index)">
             <el-icon><Delete /></el-icon>
           </el-button>
         </div>
       </el-form-item>
-      
+
       <el-form-item label="限制结果数">
         <el-input-number v-model="limit" :min="1" :max="1000" :step="10"></el-input-number>
       </el-form-item>
-      
+
       <el-form-item>
         <el-button type="primary" @click="buildAndExecuteQuery" :loading="loading">执行查询</el-button>
         <el-button @click="clearBuilder">重置</el-button>
@@ -64,7 +64,7 @@
         <el-button type="success" @click="showAddForm = true">添加记录</el-button>
       </el-form-item>
     </el-form>
-    
+
     <!-- 数据结果表格 -->
     <div class="result-table" v-if="resultData.columns.length">
       <h3>查询结果 ({{ resultData.rows.length }} 行)</h3>
@@ -86,8 +86,8 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-popconfirm 
-              title="确定删除这条记录吗？" 
+            <el-popconfirm
+              title="确定删除这条记录吗？"
               @confirm="handleDelete(scope.row)"
             >
               <template #reference>
@@ -97,7 +97,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <div class="pagination" v-if="resultData.rows.length > 10">
         <el-pagination
           layout="total, sizes, prev, pager, next"
@@ -108,7 +108,7 @@
         ></el-pagination>
       </div>
     </div>
-    
+
     <!-- 生成SQL对话框 -->
     <el-dialog title="生成的SQL查询" v-model="showGeneratedSql" width="60%">
       <pre class="sql-preview">{{ generatedSql }}</pre>
@@ -119,13 +119,13 @@
         </span>
       </template>
     </el-dialog>
-    
+
     <!-- 添加记录对话框 -->
     <el-dialog title="添加记录" v-model="showAddForm" width="50%">
       <el-form :model="formData" label-width="120px">
-        <el-form-item 
-          v-for="col in tableColumns" 
-          :key="col.name" 
+        <el-form-item
+          v-for="col in tableColumns"
+          :key="col.name"
           :label="col.name"
           :prop="col.name"
         >
@@ -140,13 +140,13 @@
         </span>
       </template>
     </el-dialog>
-    
+
     <!-- 编辑记录对话框 -->
     <el-dialog title="编辑记录" v-model="showEditForm" width="50%">
       <el-form :model="formData" label-width="120px">
-        <el-form-item 
-          v-for="col in tableColumns" 
-          :key="col.name" 
+        <el-form-item
+          v-for="col in tableColumns"
+          :key="col.name"
           :label="col.name"
           :prop="col.name"
         >
@@ -224,7 +224,7 @@ watch(() => props.initialTable, (newVal) => {
 const handleTableChange = (tableName) => {
   if (!tableName) return
   loading.value = true
-  
+
   axios.get(`/db/table/${tableName}`)
     .then(response => {
       tableColumns.value = response.data.columns
@@ -237,7 +237,7 @@ const handleTableChange = (tableName) => {
     .catch(error => {
       console.error('获取表结构失败:', error);
       let errorMessage = '获取表结构失败';
-      
+
       if (error.response) {
         const detail = error.response.data?.detail;
         if (detail) {
@@ -248,7 +248,7 @@ const handleTableChange = (tableName) => {
       } else if (error.message) {
         errorMessage += ': ' + error.message;
       }
-      
+
       ElMessage.error(errorMessage);
     })
     .finally(() => {
@@ -290,15 +290,15 @@ const handleSortChange = ({ prop, order }) => {
 // 构建SQL查询
 const buildQuery = () => {
   if (!selectedTable.value) return ''
-  
+
   // 构建列部分
-  const columnsStr = selectedColumns.value.length > 0 
+  const columnsStr = selectedColumns.value.length > 0
     ? selectedColumns.value.join(', ')
     : '*'
-  
+
   // 构建基础查询
   let sql = `SELECT ${columnsStr} FROM ${selectedTable.value}`
-  
+
   // 添加WHERE条件
   if (conditions.value.length > 0) {
     const whereConditions = conditions.value
@@ -309,23 +309,23 @@ const buildQuery = () => {
         }
         return `${c.column} ${c.operator} '${c.value}'`
       })
-    
+
     if (whereConditions.length > 0) {
       sql += ` WHERE ${whereConditions.join(' AND ')}`
     }
   }
-  
+
   // 添加排序
   if (sortConfig.value.prop) {
     const direction = sortConfig.value.order === 'ascending' ? 'ASC' : 'DESC'
     sql += ` ORDER BY ${sortConfig.value.prop} ${direction}`
   }
-  
+
   // 添加限制
   if (limit.value > 0) {
     sql += ` LIMIT ${limit.value}`
   }
-  
+
   return sql
 }
 
@@ -336,9 +336,9 @@ const buildAndExecuteQuery = () => {
     ElMessage.warning('请先选择表')
     return
   }
-  
+
   loading.value = true
-  
+
   axios.post('/db/query', { query: sql })
     .then(response => {
       resultData.value = response.data
@@ -348,7 +348,7 @@ const buildAndExecuteQuery = () => {
     .catch(error => {
       console.error('查询执行失败:', error);
       let errorMessage = '查询执行失败';
-      
+
       if (error.response) {
         const detail = error.response.data?.detail;
         if (detail) {
@@ -359,7 +359,7 @@ const buildAndExecuteQuery = () => {
       } else if (error.message) {
         errorMessage += ': ' + error.message;
       }
-      
+
       ElMessage.error(errorMessage);
     })
     .finally(() => {
@@ -414,7 +414,7 @@ const handleAdd = () => {
   if (primaryKey in data) {
     delete data[primaryKey]
   }
-  
+
   addRecord(selectedTable.value, data)
     .then(response => {
       ElMessage.success(response.data.message || '添加成功')
@@ -425,7 +425,7 @@ const handleAdd = () => {
     .catch(error => {
       console.error('添加记录失败:', error);
       let errorMessage = '添加记录失败';
-      
+
       if (error.response) {
         const detail = error.response.data?.detail;
         if (detail) {
@@ -436,7 +436,7 @@ const handleAdd = () => {
       } else if (error.message) {
         errorMessage += ': ' + error.message;
       }
-      
+
       ElMessage.error(errorMessage);
     })
 }
@@ -453,12 +453,12 @@ const handleUpdate = () => {
   const primaryKey = getPrimaryKey()
   const id = editingId.value
   const data = { ...formData.value }
-  
+
   // 移除主键字段
   if (primaryKey in data) {
     delete data[primaryKey]
   }
-  
+
   updateRecord(selectedTable.value, id, data)
     .then(response => {
       ElMessage.success(response.data.message || '更新成功')
@@ -468,7 +468,7 @@ const handleUpdate = () => {
     .catch(error => {
       console.error('更新记录失败:', error);
       let errorMessage = '更新记录失败';
-      
+
       if (error.response) {
         const detail = error.response.data?.detail;
         if (detail) {
@@ -479,7 +479,7 @@ const handleUpdate = () => {
       } else if (error.message) {
         errorMessage += ': ' + error.message;
       }
-      
+
       ElMessage.error(errorMessage);
     })
 }
@@ -487,12 +487,12 @@ const handleUpdate = () => {
 // 处理删除记录
 const handleDelete = (row) => {
   const id = getRowPrimaryKeyValue(row)
-  
+
   if (id === undefined) {
     ElMessage.error('无法获取记录ID')
     return
   }
-  
+
   deleteRecord(selectedTable.value, id)
     .then(response => {
       ElMessage.success(response.data.message || '删除成功')
@@ -501,7 +501,7 @@ const handleDelete = (row) => {
     .catch(error => {
       console.error('删除错误详情:', error);
       let errorMessage = '删除记录失败';
-      
+
       if (error.response) {
         const detail = error.response.data?.detail;
         if (detail) {
@@ -512,7 +512,7 @@ const handleDelete = (row) => {
       } else if (error.message) {
         errorMessage += ': ' + error.message;
       }
-      
+
       ElMessage.error(errorMessage);
     })
 }

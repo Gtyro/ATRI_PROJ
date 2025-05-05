@@ -7,7 +7,7 @@ class PluginConfig(Model):
     '''plugin name'''
     plugin_config = fields.JSONField(default={})
     '''plugin config'''
-    
+
     class Meta:
         table = "plugin_configs"
         unique_together = (('plugin_name',))
@@ -37,13 +37,13 @@ class GroupPluginConfig(Model):
 
     def __str__(self):
         return f"{self.name} - {self.plugin_name}"
-    
+
     @classmethod
     async def get_config(cls, gid: str, plugin_name: str):
         '''获取群组插件配置'''
         config, _ = await cls.get_or_create(gid=gid, name=gid, plugin_name=plugin_name, defaults={'plugin_config': {}})
         return config
-    
+
     @classmethod
     async def update_config(cls, gid: str, plugin_name: str, config: dict):
         '''更新群组插件配置'''

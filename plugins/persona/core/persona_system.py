@@ -31,10 +31,10 @@ from ..processing.ai_processor import AIProcessor
 
 class PersonaSystem:
     """人格系统主类，负责协调各个子系统"""
-    
+
     def __init__(self, db_path: str = "data/persona.db", config_path: str = "data/persona.yaml"):
         """初始化系统及相关组件
-        
+
         Args:
             db_path: 数据库路径（SQLite使用）
             config_path: 配置文件路径
@@ -43,13 +43,13 @@ class PersonaSystem:
         check_config(config_path)
         self.config = load_config(config_path)
         self.plugin_name = "persona"
-        
+
         # 创建数据目录
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        
+
         # 配置数据库路径
         self.config["db_path"] = db_path
-        
+
         # 初始化属性但不创建对象
         self.repository = None
         self.short_term = None
@@ -61,17 +61,17 @@ class PersonaSystem:
         self.reply_callback = None
         self.group_config = GroupPluginConfig
         self.group_character = {}
-        
+
         logging.info("人格系统构造完成，等待初始化")
-    
+
     async def initialize(self, reply_callback: Callable = None):
         """初始化人格系统
-        
+
         包括:
         1. 初始化数据库连接
         2. 初始化各个组件
         3. 设置回调函数
-        
+
         Args:
             reply_callback: 回复回调函数
         """
@@ -79,13 +79,13 @@ class PersonaSystem:
             # 初始化仓库
             self.repository = Repository(self.config)
             await self.repository.initialize()
-            
+
             # 初始化组件
             self.short_term = ShortTermMemory(
                 self.repository,
                 self.config
             )
-            
+
             # 初始化群组配置
             group_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
             group_character = {}
@@ -97,11 +97,11 @@ class PersonaSystem:
                         group_character[group_id] = prompt_file
                 except Exception as e:
                     logging.error(f"读取群组配置失败[{group_id}]: {e}")
-            
+
             # 初始化AI处理器
             api_key = self.config.get('api_key', '') or os.getenv('OPENAI_API_KEY', '')
             base_url = self.config.get('base_url', '') or os.getenv('OPENAI_BASE_URL', '')
-            
+
             self.aiprocessor = AIProcessor(
                 api_key=api_key,
                 model=self.config.get('model', 'deepseek-chat'),
@@ -109,7 +109,7 @@ class PersonaSystem:
                 group_character=group_character,
                 queue_history_size=self.config.get('queue_history_size', 40)
             )
-            
+
             # 传递现有的AI处理器实例给消息处理器
             self.msgprocessor = MessageProcessor(
                 self.config,
@@ -117,69 +117,69 @@ class PersonaSystem:
                 group_character=group_character,
                 queue_history_size=self.config.get('queue_history_size', 40)
             )
-            
+
             # 设置记忆检索回调
             self.aiprocessor.set_memory_retrieval_callback(self.format_memories)
-            
+
             # 初始化长期记忆组件
             self.long_term = LongTermMemory(self.repository, self.config)
             self.retriever = LongTermRetriever(self.repository)
             self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
             await self.decay_manager.initialize()
-            
+
             # 设置回调函数
             self.reply_callback = reply_callback
-            
+
             # 标记系统已初始化
             logging.info("人格系统初始化成功")
             return True
         except Exception as e:
             logging.error(f"人格系统初始化失败: {e}")
             raise
-    
+
     async def close(self):
         """关闭系统并清理资源"""
         if self.repository:
             await self.repository.close()
         logging.info("人格系统已关闭")
-    
+
     async def process_message(self, message_data: Dict) -> Optional[Dict]:
         """处理新消息
         添加到短期记忆，如果是直接对话，立即处理
-        
+
         Args:
             message_data: 消息数据
-            
+
         Returns:
             可能的回复内容
         """
         if not self.short_term:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
-            
+
         # 添加到短期记忆
         try:
             await self.short_term.add_message(message_data)
         except Exception as e:
             logging.error(f"persona_system.process_message:添加消息到短期记忆失败: {e}")
             raise e
-        
+
         # 如果是直接对话，立即处理
         try:
             if message_data["is_direct"]:
                 return await self.process_conversation(
-                    message_data['conv_id'], 
+                    message_data['conv_id'],
                     message_data['user_id'],
                     message_data['is_direct']
                 )
         except Exception as e:
             logging.error(f"persona_system.process_message:处理消息失败: {e}")
             raise e
-        
+
         return None
-    
+
     async def process_conversation(self, conv_id: str, user_id: str, is_direct: bool = False) -> Optional[Dict]:
         """处理特定会话的消息
-        
+
         Args:
             conv_id: 会话ID
             user_id: 用户ID
@@ -205,7 +205,7 @@ class PersonaSystem:
                 topics = await self.msgprocessor.extract_topics_from_messages(conv_id, messages)
                 if len(topics) == 0:
                     break
-                
+
                 # 将话题存储为长期记忆
                 memory_ids = await self.long_term.store_memories(conv_id, topics)
                 memory_count += len(memory_ids)
@@ -215,19 +215,19 @@ class PersonaSystem:
                 # 标记消息为已处理
                 marked_count = await self.short_term.mark_processed(conv_id, topics)
                 marked_count_total += marked_count
-                
+
                 if len(messages) < 2*self.config['queue_history_size']:
                     break
                 if len(topics) == 0 or len(memory_ids) == 0 or marked_count == 0:
                     logging.warning(f"会话 {conv_id} 处理异常，有 {len(topics)} 个话题，{len(memory_ids)} 个记忆，{marked_count} 条消息被标记为已处理")
                     break
                 logging.info(f"会话 {conv_id} 第{loop_count}次循环: 处理了 {len(messages)} 条消息，存储了 {len(memory_ids)} 个记忆，标记了 {marked_count} 条消息为已处理")
-            
+
             logging.info(f"会话 {conv_id} 处理完成: 共 {loop_count} 次循环，处理了 {message_count} 条消息，存储了 {memory_count} 个记忆，标记了 {marked_count_total} 条消息为已处理")
         except Exception as e:
             logging.error(f"会话 {conv_id} 处理失败: {e}")
             raise e
-            
+
         # 判断是否需要回复
         should_reply = await self.msgprocessor.should_respond(conv_id, topics)
         # 判断队列中是否有机器人发的消息
@@ -241,7 +241,7 @@ class PersonaSystem:
             should_reply = False
         if is_direct: # 如果是直接对话，则必须回复
             should_reply = True
-        
+
         if not should_reply:
             if conv_id.startswith('group_'):
                 # 如果群组不需要回复，下次处理时间设置为30分钟
@@ -250,9 +250,9 @@ class PersonaSystem:
                 gpconfig.plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)
                 await gpconfig.save()
             return None
-        
+
         logging.info(f"会话 {conv_id} 需要回复")
-        
+
         # 获取最近消息历史（包括已处理的）
         recent_messages = await self.short_term.get_recent_messages(conv_id, self.config.get('queue_history_size', 40))
         logging.info(f"会话 {conv_id} 获取最近消息历史完成")
@@ -289,75 +289,75 @@ class PersonaSystem:
         }
         if reply_content and self.reply_callback:
             await self.reply_callback(conv_id, reply_dict)
-    
+
     async def schedule_maintenance(self) -> None:
         """定期维护任务"""
         if not self.repository or not self.short_term:
             logging.warning("系统尚未初始化，跳过维护")
             return
-            
+
         # 获取所有需要处理的群组
         distinct_convs = await self.group_config.get_distinct_group_ids(self.plugin_name)
-        
+
         for conv_id in distinct_convs:
             # 检查是否到达处理时间
             gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
             plugin_config = gpconfig.plugin_config or {}
-            
+
             next_process_time = plugin_config.get('next_process_time', 0)
             if time.time() > next_process_time or logging.getLogger().getEffectiveLevel() == logging.DEBUG:
                 # 处理该会话
                 await self.process_conversation(conv_id, "")
-                    
+
                 # 更新下次处理时间
                 plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)
                 gpconfig.plugin_config = plugin_config
                 await gpconfig.save()
             else:
                 logging.info(f"会话 {conv_id} 未到处理时间，跳过")
-        
+
         # 执行记忆衰减
         await self.decay_manager.apply_decay()
-    
+
     async def retrieve_related_memories(self, query: str, user_id: str = None, limit: int = 5, conv_id: str = None) -> List[Dict]:
         """检索相关记忆
-        
+
         Args:
             query: 查询内容
             user_id: 用户ID（可选）
             limit: 结果数量限制
             conv_id: 会话ID（可选），用于限制查询范围
-            
+
         Returns:
             相关记忆列表
         """
         if not self.retriever:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
-        
+
         keywords = query.split(" ")
         memory_list = []
         for keyword in keywords:
             memory_list.extend(await self.retriever.search_for_memories(keyword, user_id, limit, conv_id))
         return memory_list
-    
+
     async def get_queue_status_reply(self, conv_id: Optional[str] = None) -> str:
         """获取队列状态
-        
+
         Args:
             conv_id: 可选的会话ID，如果指定则只返回该会话的状态
-            
+
         Returns:
             队列状态回复字符串
         """
         if not self.short_term:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
-            
+
         # 获取基本队列统计
         stats = await self.repository.get_queue_stats(conv_id)
-        
+
         # 获取处理间隔
         batch_interval = self.config.get('batch_interval', 30*60)
-        
+
         # 如果指定了conv_id，获取该会话的下次处理时间
         if conv_id:
             gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
@@ -368,26 +368,26 @@ class PersonaSystem:
             # 获取所有会话的下一次处理时间中最早的
             distinct_convs = await self.group_config.get_distinct_group_ids(self.plugin_name)
             next_times = []
-            
+
             for conv in distinct_convs:
                 gpconfig = await self.group_config.get_config(conv, self.plugin_name)
                 plugin_config = gpconfig.plugin_config or {}
                 next_process_time = plugin_config.get('next_process_time', 0)
                 if next_process_time > 0:
                     next_times.append(next_process_time)
-            
+
             if next_times:
                 next_process_in = max(0, int(min(next_times) - time.time()))
             else:
                 next_process_in = 0
-                
+
         # 生成统计信息
         reply = f"会话 {conv_id} 状态:\n" if conv_id else "人格系统状态:\n"
         reply += f"- 消息总数: {stats.get('total_messages', 0)} 条\n"
         reply += f"- 未处理消息: {stats.get('unprocessed_messages', 0)} 条\n"
         reply += f"- 下次处理: {next_process_in} 秒后\n"
         reply += f"- 处理间隔: {batch_interval} 秒\n"
-        
+
         # 显示数据库信息
         db_type = "PostgreSQL" if self.config.get("use_postgres") else "SQLite"
         reply += f"- 数据库类型: {db_type}\n"
@@ -397,11 +397,11 @@ class PersonaSystem:
     async def simulate_reply(self, conv_id: str, test_message: Optional[str] = None) -> Dict:
         """模拟回复
         使用function calling功能生成回复
-        
+
         Args:
             conv_id: 会话ID
             test_message: 可选的测试消息，如果提供则临时添加到消息历史末尾
-            
+
         Returns:
             回复内容字典
         """
@@ -411,7 +411,7 @@ class PersonaSystem:
             if not messages:
                 logging.info(f"会话 {conv_id} 没有历史消息")
                 return None
-                
+
             # 如果提供了测试消息，临时添加到消息列表末尾
             if test_message:
                 # 复制最后一条消息的格式，只替换内容
@@ -420,13 +420,13 @@ class PersonaSystem:
                 last_message["is_bot"] = False
                 last_message["is_direct"] = True
                 messages.append(last_message)
-                
+
             # 日志记录消息数量
             logging.info(f"开始为会话 {conv_id} 生成模拟回复，获取到 {len(messages)} 条历史消息")
-            
+
             # 直接使用AI处理器的function calling能力生成回复
             reply_content = await self.msgprocessor.generate_reply(conv_id, messages, temperature=0.7)
-            
+
             # 判断回复状态
             if reply_content:
                 logging.info(f"会话 {conv_id} 生成模拟回复成功: {reply_content[:30]}...")
@@ -440,17 +440,17 @@ class PersonaSystem:
         except Exception as e:
             logging.error(f"会话 {conv_id} 模拟回复异常: {e}")
             return None
-        
+
     async def create_permanent_memory(self, conv_id: str, node_name: str, memory_title: str, memory_content: str) -> Dict:
         """创建常驻节点和记忆对
-            
+
         Returns:
             包含节点和记忆信息的字典
         """
         try:
             # 创建常驻节点
             node = await self.repository.update_or_create_node(conv_id, node_name, is_permanent=True)
-            
+
             # 创建常驻记忆
             memory_data = {
                 "conv_id": conv_id,
@@ -459,12 +459,12 @@ class PersonaSystem:
                 "is_permanent": True
             }
             memory = await self.repository.store_memory(conv_id, memory_data)
-            
+
             # 使用现有的_link_nodes_to_memory函数建立关联
             await self.repository._link_nodes_to_memory(memory, [str(node.id)])
-            
+
             logging.info(f"创建常驻节点-记忆对: 节点[{node_name}], 记忆[{memory_title}]")
-            
+
             return {
                 "node": {
                     "id": str(node.id),
@@ -481,26 +481,26 @@ class PersonaSystem:
         except Exception as e:
             logging.error(f"创建常驻节点-记忆对失败: {e}")
             raise
-            
+
     async def format_memories(self, query: str, user_id: str, conv_id: str) -> str:
         """检索相关记忆并格式化为可读文本
-        
+
         Args:
             query: 查询内容
             user_id: 用户ID
             conv_id: 会话ID
-            
+
         Returns:
             格式化后的记忆文本
         """
         from datetime import datetime
-        
+
         # 检索相关记忆
         related_memories = await self.retrieve_related_memories(query, user_id, conv_id=conv_id)
-        
+
         if not related_memories:
             return "我似乎没有关于这方面的记忆..."
-            
+
         # 格式化回复
         reply = "我记得这些内容:\n"
         for i, memory in enumerate(related_memories, 1):
@@ -509,5 +509,5 @@ class PersonaSystem:
             content = memory.get("content", "无内容")
             time_str = datetime.fromtimestamp(memory.get("created_at", 0)).strftime("%Y-%m-%d %H:%M")
             reply += f"{i}. [{memory_source}]【{title}】{content} ({time_str})\n"
-            
+
         return reply

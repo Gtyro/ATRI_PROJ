@@ -7,7 +7,7 @@ export function login(username, password) {
   params.append('username', username)
   params.append('password', password)
   params.append('grant_type', 'password') // OAuth2要求
-  
+
   return axios.post('/auth/token', params, { // 没有api前缀，生产环境没有Vite代理重写
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'

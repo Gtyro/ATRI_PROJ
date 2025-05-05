@@ -10,15 +10,15 @@ async def execute_select_query(query: str):
     """执行SELECT查询"""
     if not is_select_query(query):
         raise HTTPException(
-            status_code=403, 
+            status_code=403,
             detail="出于安全原因，仅支持SELECT查询"
         )
-    
+
     try:
         # 使用连接对象执行查询
         conn = Tortoise.get_connection("default")
         results = await conn.execute_query_dict(query) # Executes a RAW SQL query statement, and returns the resultset as a list of dicts.
-        
+
         # 处理结果 - 针对SELECT查询，结果通常是一个包含行的列表
         # 将每一行转换为字典
         columns = []
@@ -45,7 +45,7 @@ async def get_tables():
     try:
         # 执行checkpoint确保能看到最新数据
         # await execute_checkpoint()
-        
+
         models = Tortoise.apps.get("models", {})
         table_names = [model._meta.db_table for model in models.values()]
         return {"tables": table_names}
@@ -71,7 +71,7 @@ async def execute_insert_query(table_name: str, data: dict):
         model_class = get_model_for_table(table_name)
         if not model_class:
             raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在或未映射")
-        
+
         # 创建并保存新记录
         instance = model_class(**data)
         await instance.save()
@@ -87,12 +87,12 @@ async def execute_update_query(table_name: str, id_value: any, data: dict):
         model_class = get_model_for_table(table_name)
         if not model_class:
             raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在或未映射")
-            
+
         # 查找主键字段
         pk_field = get_primary_key_field(model_class)
         if not pk_field:
             raise HTTPException(status_code=400, detail=f"无法确定表 {table_name} 的主键")
-            
+
         # 尝试根据主键类型转换id值
         id_value = convert_id_value(id_value, pk_field)
 
@@ -118,12 +118,12 @@ async def execute_delete_query(table_name: str, id_value: any):
         model_class = get_model_for_table(table_name)
         if not model_class:
             raise HTTPException(status_code=404, detail=f"表 {table_name} 不存在或未映射")
-            
+
         # 查找主键字段
         pk_field = get_primary_key_field(model_class)
         if not pk_field:
             raise HTTPException(status_code=400, detail=f"无法确定表 {table_name} 的主键")
-            
+
         # 尝试根据主键类型转换id值
         id_value = convert_id_value(id_value, pk_field)
 
@@ -169,10 +169,10 @@ def convert_id_value(id_value, pk_field):
 def get_model_for_table(table_name: str):
     """根据表名获取对应的模型类"""
     model = table_to_model_map.get(table_name)
-    
+
     # 检查获取到的是否是有效的模型类
     if model and hasattr(model, 'get') and callable(getattr(model, 'get')):
         return model
-    
+
     logging.error(f"找不到表 {table_name} 对应的有效模型类")
     return None

@@ -4,7 +4,7 @@ import json
 def test_api():
     """测试API功能是否正常工作"""
     base_url = "http://127.0.0.1:8080"
-    
+
     # 1. 测试登录
     print("测试登录 API...")
     login_data = {
@@ -15,12 +15,12 @@ def test_api():
         f"{base_url}/auth/token",
         data={"username": login_data["username"], "password": login_data["password"]}
     )
-    
+
     if login_response.status_code == 200:
         print("✅ 登录成功")
         token = login_response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # 2. 测试获取用户信息
         print("测试获取用户信息 API...")
         user_response = requests.get(f"{base_url}/auth/users/me", headers=headers)
@@ -30,7 +30,7 @@ def test_api():
         else:
             print(f"❌ 获取用户信息失败: {user_response.status_code}")
             print(user_response.text)
-        
+
         # 3. 测试获取表列表
         print("测试获取表列表 API...")
         tables_response = requests.get(f"{base_url}/db/tables", headers=headers)
@@ -38,7 +38,7 @@ def test_api():
             tables = tables_response.json()["tables"]
             print("✅ 获取表列表成功")
             print(f"表列表: {tables}")
-            
+
             if tables:
                 # 4. 测试获取表结构
                 print(f"测试获取表结构 API (表: {tables[0]})...")
@@ -49,7 +49,7 @@ def test_api():
                 else:
                     print(f"❌ 获取表结构失败: {structure_response.status_code}")
                     print(structure_response.text)
-                
+
                 # 5. 测试执行SQL查询
                 print("测试执行SQL查询 API...")
                 query = f"SELECT * FROM {tables[0]} LIMIT 5"
@@ -67,7 +67,7 @@ def test_api():
                 else:
                     print(f"❌ 执行SQL查询失败: {query_response.status_code}")
                     print(query_response.text)
-                
+
                 # 6. 测试非SELECT查询
                 print("测试非SELECT查询限制...")
                 invalid_query = f"DELETE FROM {tables[0]}"

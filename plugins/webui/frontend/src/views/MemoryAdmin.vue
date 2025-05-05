@@ -5,23 +5,23 @@
         <div class="card-header">
           <h3>记忆管理</h3>
           <div class="header-controls">
-            <el-select 
-              v-model="selectedConvId" 
-              placeholder="选择会话ID" 
+            <el-select
+              v-model="selectedConvId"
+              placeholder="选择会话ID"
               clearable
               @change="loadGraphData"
             >
-              <el-option 
-                v-for="conv in convOptions" 
-                :key="conv.value" 
-                :label="conv.label" 
+              <el-option
+                v-for="conv in convOptions"
+                :key="conv.value"
+                :label="conv.label"
                 :value="conv.value"
               />
             </el-select>
-            <el-input-number 
-              v-model="nodeLimit" 
-              :min="10" 
-              :max="200" 
+            <el-input-number
+              v-model="nodeLimit"
+              :min="10"
+              :max="200"
               :step="10"
               size="small"
               @change="loadGraphData"
@@ -32,7 +32,7 @@
           </div>
         </div>
       </template>
-      
+
       <div class="memory-content">
         <el-alert
           title="记忆管理面板"
@@ -41,14 +41,14 @@
         >
           这里是知识图谱可视化区域，您可以查看系统的认知节点和关联。节点按激活水平降序排列，显示前{{ nodeLimit }}个节点。
         </el-alert>
-        
+
         <div class="graph-info-container">
           <div class="graph-info">
             <p><strong>当前视图：</strong> {{ graphTitle }}</p>
             <p><strong>节点数量：</strong> {{ nodeCount }}</p>
             <p><strong>关联数量：</strong> {{ linkCount }}</p>
           </div>
-          
+
           <div class="graph-legend">
             <div class="legend-item">
               <div class="legend-color" style="background-color: #5470c6;"></div>
@@ -60,7 +60,7 @@
             </div>
           </div>
         </div>
-        
+
         <div class="graph-container" ref="graphContainer"></div>
       </div>
     </el-card>
@@ -88,7 +88,7 @@ const error = ref(null);
 // 计算属性
 const nodeCount = computed(() => (nodes.value && nodes.value.length) || 0);
 const linkCount = computed(() => (links.value && links.value.length) || 0);
-const graphTitle = computed(() => 
+const graphTitle = computed(() =>
   selectedConvId.value ? `会话 ${selectedConvId.value} 知识图谱` : '公共知识图谱'
 );
 
@@ -98,14 +98,14 @@ const initChart = () => {
     console.error("图表容器不存在");
     return;
   }
-  
+
   // 如果已经初始化过，先销毁
   if (chart.value) {
     chart.value.dispose();
   }
-  
+
   chart.value = echarts.init(graphContainer.value);
-  
+
   // 设置图表的基本配置
   const option = {
     title: {
@@ -168,15 +168,15 @@ const initChart = () => {
       edges: []
     }]
   };
-  
+
   // 应用配置
   chart.value.setOption(option);
-  
+
   // 添加窗口大小调整事件
   window.addEventListener('resize', () => {
     chart.value && chart.value.resize();
   });
-  
+
   return chart.value;
 };
 
@@ -196,7 +196,7 @@ const formatGraphData = () => {
     });
     return;
   }
-  
+
   // 格式化节点数据
   const graphNodes = nodes.value.map(node => ({
     id: node.id,
@@ -208,7 +208,7 @@ const formatGraphData = () => {
       color: '#5470c6'
     }
   }));
-  
+
   // 格式化关联数据
   const graphLinks = links.value && links.value.length ? links.value.map(link => ({
     source: link.source_id,
@@ -220,7 +220,7 @@ const formatGraphData = () => {
       width: Math.max(1, parseFloat(link.strength || 1.0) * 3)
     }
   })) : [];
-  
+
   // 更新图表数据
   chart.value.setOption({
     title: {
@@ -243,19 +243,19 @@ const getNodeIdsString = () => {
 const loadGraphData = async () => {
   loading.value = true;
   error.value = null;
-  
+
   try {
     // 首先获取节点数据
     const nodesResponse = await getCognitiveNodes(selectedConvId.value, nodeLimit.value);
     nodes.value = nodesResponse.data.rows || [];
-    
+
     // 获取节点ID字符串
     const nodeIds = getNodeIdsString();
-    
+
     // 然后获取这些节点之间的关联数据
     const linksResponse = await getAssociations(selectedConvId.value, nodeIds);
     links.value = linksResponse.data.rows || [];
-    
+
     // 更新图表
     formatGraphData();
   } catch (err) {
@@ -273,13 +273,13 @@ const loadConvOptions = async () => {
     const result = await getConversations();
     // 修改数据访问方式，API返回的是{columns, rows}格式
     const conversations = result.data.rows || [];
-    
+
     // 更新选项
     convOptions.value = [
       { label: '公共图谱', value: '' },  // 将值改为空字符串
-      ...conversations.map(conv => ({ 
-        label: `会话 ${conv.gid} (${conv.name})`, 
-        value: conv.gid 
+      ...conversations.map(conv => ({
+        label: `会话 ${conv.gid} (${conv.name})`,
+        value: conv.gid
       }))
     ];
   } catch (err) {
@@ -292,10 +292,10 @@ onMounted(async () => {
   try {
     // 初始化图表
     initChart();
-    
+
     // 先加载会话选项
     await loadConvOptions();
-    
+
     // 然后加载图表数据
     await loadGraphData();
   } catch (err) {

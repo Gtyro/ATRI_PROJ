@@ -16,7 +16,7 @@
         </el-menu-item>
       </el-menu>
     </div>
-    
+
     <div class="right-panel">
       <Navbar />
       <div class="main-content">
@@ -75,7 +75,7 @@ onMounted(() => {
   .dashboard-container {
     flex-direction: column;
   }
-  
+
   .sidebar {
     width: 100%;
     padding: 10px;

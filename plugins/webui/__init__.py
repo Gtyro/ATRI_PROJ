@@ -42,11 +42,11 @@ webui_thread = None
 
 @driver.on_startup
 async def start_webui():
-    
+
     """启动WebUI服务"""
     global webui_thread
     logger.info("正在启动WebUI管理面板...")
-    
+
     try:
         # 获取nonebot应用实例
         nonebot_app: FastAPI = nonebot.get_app()
@@ -56,7 +56,7 @@ async def start_webui():
         nonebot_app.include_router(auth_router)
         nonebot_app.include_router(db_router)
         await waitfor_nonebot_app(nonebot_app)
-        
+
         logger.success("WebUI管理面板已启动，访问 http://127.0.0.1:8080/webui")
     except Exception as e:
         logger.error(f"启动WebUI失败: {e}")
@@ -65,7 +65,7 @@ async def start_webui():
 async def stop_webui():
     """关闭WebUI服务"""
     global webui_thread
-    
+
     if webui_thread and webui_thread.is_alive():
         logger.info("正在关闭WebUI管理面板...")
         # 由于使用daemon=True，主线程结束时WebUI也会自动关闭

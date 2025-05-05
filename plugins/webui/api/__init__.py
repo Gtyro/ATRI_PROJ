@@ -41,7 +41,7 @@ def create_app():
     # 添加路由
     fastapi_app.include_router(auth_router)
     fastapi_app.include_router(db_router)
-    
+
     return fastapi_app
 
 # 默认应用实例

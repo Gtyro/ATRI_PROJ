@@ -10,7 +10,7 @@ export const useDbStore = defineStore('db', {
     queryResult: { columns: [], rows: [] },
     isLoading: false
   }),
-  
+
   actions: {
     async fetchTables() {
       this.isLoading = true
@@ -24,7 +24,7 @@ export const useDbStore = defineStore('db', {
         this.isLoading = false
       }
     },
-    
+
     async fetchTableStructure(tableName) {
       this.isLoading = true
       try {
@@ -38,7 +38,7 @@ export const useDbStore = defineStore('db', {
         this.isLoading = false
       }
     },
-    
+
     async executeQuery(sqlQuery) {
       this.isLoading = true
       try {

@@ -23,14 +23,14 @@ class MessageQueue(Model):
     is_bot = fields.BooleanField(default=False)
     '''消息是否是机器人发的'''
     metadata = fields.JSONField(default={})
-    
+
     class Meta:
         table = "message_queue"
 
     def to_dict(self):
         # Convert UTC time to local timezone for display
         created_time = self.created_at.replace(tzinfo=pytz.UTC).astimezone(LOCAL_TZ) if self.created_at else None
-        
+
         return {
             "id": self.id,
             "conv_id": self.conv_id,
@@ -63,7 +63,7 @@ class Memory(Model):
     metadata = fields.JSONField(default={})
     is_permanent = fields.BooleanField(default=False)
     '''是否为常驻记忆，常驻记忆不会被遗忘(删除)，但仍会被衰减'''
-    
+
     class Meta:
         table = "memories"
 
@@ -82,7 +82,7 @@ class CognitiveNode(Model):
     last_accessed = fields.DatetimeField(auto_now=True)
     is_permanent = fields.BooleanField(default=False)
     '''是否为常驻节点，常驻节点不会被遗忘(删除)，但仍会被衰减'''
-    
+
     class Meta:
         table = "nodes"
         unique_together = (("conv_id", "name"),)
@@ -90,7 +90,7 @@ class CognitiveNode(Model):
 class Association(Model):
     """认知节点关联模型, 共9个字段"""
     source = fields.ForeignKeyField(
-        "models.CognitiveNode", 
+        "models.CognitiveNode",
         related_name="source_associations",
         on_delete=fields.CASCADE
     )

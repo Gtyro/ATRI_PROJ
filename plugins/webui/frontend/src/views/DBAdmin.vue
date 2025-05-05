@@ -6,20 +6,20 @@
           <h3>数据库管理</h3>
         </div>
       </template>
-      
+
       <el-tabs v-model="activeTab">
         <el-tab-pane label="数据管理" name="manager">
-          <TableManager 
-            :tables="tables" 
-            :onResult="handleQueryResult" 
+          <TableManager
+            :tables="tables"
+            :onResult="handleQueryResult"
           />
         </el-tab-pane>
-        
+
         <el-tab-pane label="SQL查询" name="query">
           <SqlEditor :onResult="handleQueryResult" />
           <DataTable :data="queryResult" :loading="loading" />
         </el-tab-pane>
-        
+
         <el-tab-pane label="常用查询" name="presets">
           <el-card>
             <template #header>
@@ -27,11 +27,11 @@
                 <h4>常用查询</h4>
               </div>
             </template>
-            
+
             <el-collapse>
-              <el-collapse-item 
-                v-for="(group, groupName) in presetQueries" 
-                :key="groupName" 
+              <el-collapse-item
+                v-for="(group, groupName) in presetQueries"
+                :key="groupName"
                 :title="group.name"
               >
                 <el-descriptions border>
@@ -47,13 +47,13 @@
                 </el-descriptions>
               </el-collapse-item>
             </el-collapse>
-            
+
             <DataTable :data="queryResult" :loading="loading" style="margin-top: 20px" />
           </el-card>
         </el-tab-pane>
       </el-tabs>
     </el-card>
-    
+
     <el-dialog title="SQL查询预览" v-model="showSqlPreview" width="60%">
       <pre class="sql-preview">{{ sqlPreview }}</pre>
       <template #footer>
@@ -90,9 +90,9 @@ const presetQueries = ref({
       {
         name: '数据库统计',
         description: '显示所有表及其行数',
-        query: `SELECT name, 
+        query: `SELECT name,
                 (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%') as total_tables,
-                (SELECT COUNT(*) FROM sqlite_master WHERE type='index') as total_indexes 
+                (SELECT COUNT(*) FROM sqlite_master WHERE type='index') as total_indexes
                 FROM sqlite_master WHERE type='table' AND name='sqlite_schema'`
       }
     ]
@@ -108,8 +108,8 @@ const presetQueries = ref({
       {
         name: '今日日志汇总',
         description: '按类型统计今日日志',
-        query: `SELECT level, COUNT(*) as count FROM logs 
-                WHERE date(timestamp) = date('now', 'localtime') 
+        query: `SELECT level, COUNT(*) as count FROM logs
+                WHERE date(timestamp) = date('now', 'localtime')
                 GROUP BY level ORDER BY count DESC`
       }
     ]
@@ -149,7 +149,7 @@ const handleQueryResult = (result) => {
 // 运行预设查询
 const runPresetQuery = (query) => {
   loading.value = true
-  
+
   axios.post('/db/query', { query })
     .then(response => {
       queryResult.value = response.data

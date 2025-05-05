@@ -16,14 +16,14 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()],
     }),
   ],
-  
+
   // 路径别名
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src')
     }
   },
-  
+
   // 开发服务器配置
   server: {
     proxy: {
@@ -37,7 +37,7 @@ export default defineConfig({
       }
     }
   },
-  
+
   // 构建配置
   build: {
     outDir: '../static/webui', // 构建输出到static/webui目录

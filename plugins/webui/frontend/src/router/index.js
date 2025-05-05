@@ -9,7 +9,7 @@ const MemoryAdmin = () => import('@/views/MemoryAdmin.vue')
 
 // 路由配置
 const routes = [
-  { 
+  {
     path: '/',
     redirect: '/dashboard'
   },

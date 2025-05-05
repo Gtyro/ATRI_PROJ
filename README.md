@@ -22,20 +22,20 @@ pip install -r requirements.txt
 ```
 
 ### 三步极速启动
-1. **配置密钥**  
+1. **配置密钥**
    修改 `data/persona.yaml` 填入你的 [OpenAI API Key](https://platform.openai.com/)
-   
+
    ```yaml
    api_key: "你的密钥"
    ```
-   
-2. **设置管理员**  
+
+2. **设置管理员**
    在 `.env.prod` 中添加你的QQ号：
    ```
    SUPERUSERS=["123456789"]  # 替换为你的QQ号
    ```
 
-3. **启动！**  
+3. **启动！**
    ```bash
    python bot.py
    ```

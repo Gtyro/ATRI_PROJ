@@ -11,9 +11,9 @@ greeting_cmd = on_command("你好", aliases={"hello", "hi"}, permission=SUPERUSE
 async def handle_greeting_cmd(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     # 获取用户名称
     user_id = event.get_user_id()
-    
+
     # 构建回复消息
     reply = Message(f"你好呀，{user_id}！很高兴见到你~")
-    
+
     # 发送回复
     await greeting_cmd.finish(reply)

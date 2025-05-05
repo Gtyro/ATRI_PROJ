@@ -63,7 +63,7 @@ def UserName():
 
 async def persona_callback(conv_id: str, message_dict: dict) -> None:
     """人格系统自动回复回调函数
-    
+
     Args:
         conv_id: 对话ID（如"group_123456"）
         message_dict: 消息数据，包含回复内容
@@ -72,7 +72,7 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
         target = Target(id=conv_id.split("_")[1])
         if message_dict:
             reply_content = message_dict["reply_content"]
-            
+
             # 处理回复内容（可能是字符串或列表）
             if isinstance(reply_content, list):
                 for reply in reply_content:
@@ -88,12 +88,12 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
 @driver.on_startup
 async def init_persona_system():
     global PERSONA_SYSTEM_ENABLED
-    
+
     if persona_system:
         try:
             # 初始化数据库和组件
             await persona_system.initialize(reply_callback=persona_callback)
-            
+
             PERSONA_SYSTEM_ENABLED = True
             logging.info("人格系统初始化成功")
         except Exception as e:
@@ -118,14 +118,14 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     # 如果人格系统未启用，跳过处理
     if not PERSONA_SYSTEM_ENABLED:
         return
-        
+
     user_id = event.get_user_id()
     message = event.get_plaintext() # 目前只处理纯文本消息
-    
+
     # 忽略空消息
     if not message.strip():
         return
-    
+
     # 正确区分群聊和私聊
     is_group = isinstance(event, GroupMessageEvent)
     conv_type = "group" if is_group else "private"
@@ -134,12 +134,12 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     # 尝试获取群组名称
     group_info = await bot.get_group_info(group_id=event.group_id)
     group_name = group_info["group_name"]
-    
+
     # 判断直接交互（@机器人或私聊）
     is_direct = False
     if event.is_tome() or not is_group:
         is_direct = True
-    
+
     # 构建消息数据
     message_data = { # 此处有8个字段+自动生成的id和created_at
         "conv_id": conv_id,
@@ -155,11 +155,11 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     # 异步处理消息
     try:
         reply_dict = await persona_system.process_message(message_data)
-        
+
         # 如果有回复内容，发送回复
         if reply_dict:
             reply_content = reply_dict["reply_content"]
-            
+
             if isinstance(reply_content, list):
                 for reply in reply_content:
                     await bot.send(event, reply)
@@ -179,16 +179,16 @@ async def handle_process_now(bot: Bot, event: Event, state: T_State):
     if not PERSONA_SYSTEM_ENABLED:
         await process_now.finish("人格系统未启用，请检查配置和日志")
         return
-    
+
     args = str(event.get_plaintext()).strip().split()
     if args:
         await process_now.send(f"开始处理消息... 参数: {args}")
     else:
         await process_now.send("开始处理消息...")
-    
+
     if len(args) == 2:
         group_id = args[1]
-    
+
     try:
         if group_id:
             conv_id = f"group_{group_id}"
@@ -210,17 +210,17 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
     try:
         if not PERSONA_SYSTEM_ENABLED:
             await memories.finish("人格系统未启用，请检查配置和日志")
-            
+
         user_id = event.get_user_id()
         args = str(event.get_message()).strip().split()
-        
+
         # 格式: 记得 [conv_id] [query]
         if len(args) < 3:
             await memories.finish("命令格式: 记得 [群号/私聊ID] [查询内容]")
-            
+
         cmd, conv_id, *query_parts = args
         query = " ".join(query_parts)
-        
+
         # 构建conv_id的格式
         if conv_id.isdigit():
             # 判断是群聊还是私聊
@@ -228,7 +228,7 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
                 conv_id = f"group_{conv_id}"
             else:
                 conv_id = f"private_{conv_id}"
-        
+
         # 使用persona_system的format_memories方法获取格式化的记忆回复
         reply = await persona_system.format_memories(query, user_id, conv_id)
         await memories.send(reply)
@@ -245,15 +245,15 @@ async def handle_remember_permanent(bot: Bot, event: Event):
     """创建常驻节点和记忆对"""
     if not PERSONA_SYSTEM_ENABLED:
         await remember_permanent.finish("人格系统未启用，请检查配置和日志")
-        
+
     command_text = str(event.get_plaintext()).strip()
     parts = command_text.split(maxsplit=4)
-    
+
     if len(parts) < 4:
         await remember_permanent.finish("命令格式: 记住 [群号/私聊ID] [节点名称] [记忆标题] [记忆内容]")
-        
+
     _, group_id, node_name, memory_title, memory_content = parts
-    
+
     # 构建conv_id的格式
     if group_id.isdigit():
         # 判断是群聊还是私聊
@@ -264,13 +264,13 @@ async def handle_remember_permanent(bot: Bot, event: Event):
                 await remember_permanent.finish("群号格式不正确")
         except Exception:
             await remember_permanent.finish("群号格式不正确")
-    
+
     try:
         # 直接使用persona_system的方法创建常驻节点和记忆对
         result = await persona_system.create_permanent_memory(
             conv_id, node_name, memory_title, memory_content
         )
-        
+
         await remember_permanent.send(f"已创建常驻节点-记忆对:\n节点: {node_name}\n记忆标题: {memory_title}\n记忆内容: {memory_content[:10]}...")
     except Exception as e:
         logging.error(f"创建常驻节点-记忆对异常: {e}")
@@ -344,23 +344,23 @@ async def handle_test_persona(bot: Bot, event: Event):
     group_id = args[1]
     if not group_id.isdigit():
         await test_persona.finish("群号格式不正确")
-    
+
     # 构造会话ID
     conv_id = f"group_{group_id}"
-    
+
     # 检查是否有测试消息
     test_message = args[2] if len(args) > 2 else None
-    
+
     try:
         # 提示开始生成回复
         if test_message:
             await test_persona.send(f"正在为群 {group_id} 使用测试消息「{test_message}」生成模拟回复...")
         else:
             await test_persona.send(f"正在为群 {group_id} 生成模拟回复...")
-            
+
         # 调用simulate_reply生成回复，直接传入测试消息
         reply_data = await persona_system.simulate_reply(conv_id, test_message)
-        
+
         # 处理回复结果
         if reply_data and "reply_content" in reply_data:
             reply_content = reply_data["reply_content"]
@@ -382,11 +382,11 @@ async def handle_persona_stats(bot: Bot, event: Event, state: T_State):
     # 如果系统未启用，返回错误信息
     if not PERSONA_SYSTEM_ENABLED:
         await persona_stats.finish("人格系统未启用，请检查配置和日志")
-    
+
     # 解析命令参数
     args = str(event.get_plaintext()).strip().split()
     conv_id = None
-    
+
     # 如果指定了会话ID
     if len(args) > 1:
         group_id = args[1]
@@ -394,11 +394,11 @@ async def handle_persona_stats(bot: Bot, event: Event, state: T_State):
             conv_id = f"group_{group_id}"
         else:
             await persona_stats.finish("会话ID格式不正确")
-    
+
     try:
         # 获取队列统计
         reply = await persona_system.get_queue_status_reply(conv_id)
-        
+
         await persona_stats.send(reply)
     except Exception as e:
         logging.error(f"获取系统状态异常: {e}")

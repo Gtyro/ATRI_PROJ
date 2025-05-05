@@ -45,29 +45,29 @@ weather = on_command("天气", aliases={"查天气", "weather"}, permission=SUPE
 async def handle_weather(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     # 获取命令参数（城市名称）
     city = args.extract_plain_text().strip()
-    
+
     if not city:
         await weather.finish("请提供要查询的城市名称，例如：天气 北京")
         return
-    
+
     # 找到城市对应的adcode
     adcode = find_adcode(city)
     if not adcode:
         await weather.finish(f"未找到{city}的编码信息，请检查城市名称是否正确。")
         return
-    
+
     # 获取实时天气
     live_weather = await get_weather(adcode, "base")
     if not live_weather:
         await weather.finish(f"抱歉，未能获取到{city}的天气信息。")
         return
-    
+
     # 获取天气预报
     forecast_weather = await get_weather(adcode, "all")
-    
+
     # 构建回复消息
     reply = format_weather_reply(city, live_weather, forecast_weather)
-    
+
     # 发送回复
     await weather.finish(reply)
 
@@ -89,12 +89,12 @@ async def get_weather(adcode, extensions="base"):
         "extensions": extensions,
         "output": "JSON"
     }
-    
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params)
             data = response.json()
-            
+
             if data["status"] == "1":
                 if extensions == "base" and "lives" in data and data["lives"]:
                     return data["lives"][0]
@@ -108,7 +108,7 @@ async def get_weather(adcode, extensions="base"):
 def format_weather_reply(city, live_weather, forecast_weather):
     """格式化天气回复消息"""
     reply = f"🌈 {city}天气信息：\n"
-    
+
     if live_weather:
         reply += f"📍 当前天气：{live_weather['weather']}\n"
         reply += f"🌡️ 实时温度：{live_weather['temperature']}°C\n"
@@ -116,7 +116,7 @@ def format_weather_reply(city, live_weather, forecast_weather):
         reply += f"🍃 风向：{live_weather['winddirection']}\n"
         reply += f"💨 风力：{live_weather['windpower']}\n"
         reply += f"🕒 发布时间：{live_weather['reporttime']}\n"
-    
+
     if forecast_weather and "casts" in forecast_weather:
         reply += "\n⏱️ 未来天气预报：\n"
         for i, cast in enumerate(forecast_weather["casts"]):
@@ -126,5 +126,5 @@ def format_weather_reply(city, live_weather, forecast_weather):
             reply += f"\n{day_label}：\n"
             reply += f"白天：{cast['dayweather']} {cast['daytemp']}°C {cast['daywind']}风{cast['daypower']}级\n"
             reply += f"夜间：{cast['nightweather']} {cast['nighttemp']}°C {cast['nightwind']}风{cast['nightpower']}级\n"
-    
+
     return reply.strip()

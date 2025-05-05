@@ -11,19 +11,19 @@ status_cmd = on_command("系统状态", aliases={"status", "状态"}, permission
 async def handle_status(bot: Bot, event: MessageEvent):
     # 获取CPU使用率
     cpu_percent = psutil.cpu_percent(interval=1)
-    
+
     # 获取内存使用情况
     memory = psutil.virtual_memory()
     memory_total = memory.total / (1024 * 1024 * 1024)  # 转换为GB
     memory_used = memory.used / (1024 * 1024 * 1024)    # 转换为GB
     memory_percent = memory.percent
-    
+
     # 获取磁盘使用情况
     disk = psutil.disk_usage('/')
     disk_total = disk.total / (1024 * 1024 * 1024)  # 转换为GB
     disk_used = disk.used / (1024 * 1024 * 1024)    # 转换为GB
     disk_percent = disk.percent
-    
+
     status_text = f"""
 📊 系统状态信息 📊
 ------------------------
@@ -37,5 +37,5 @@ async def handle_status(bot: Bot, event: MessageEvent):
   - 总空间: {disk_total:.2f} GB
   - 已使用: {disk_used:.2f} GB ({disk_percent:.1f}%)
     """
-    
+
     await status_cmd.finish(status_text) 

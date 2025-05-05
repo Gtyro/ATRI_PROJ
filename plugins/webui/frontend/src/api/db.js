@@ -34,20 +34,20 @@ export function deleteRecord(tableName, id) {
 export function getCognitiveNodes(convId = '', limit = 50) {
   let url = '/db/memory/nodes';
   const params = new URLSearchParams();
-  
+
   if (convId) {
     params.append('conv_id', convId);
   }
-  
+
   if (limit) {
     params.append('limit', limit);
   }
-  
+
   const queryString = params.toString();
   if (queryString) {
     url += `?${queryString}`;
   }
-  
+
   return axios.get(url);
 }
 
@@ -55,24 +55,24 @@ export function getCognitiveNodes(convId = '', limit = 50) {
 export function getAssociations(convId = '', nodeIds = null, limit = 200) {
   let url = '/db/memory/associations';
   const params = new URLSearchParams();
-  
+
   if (convId) {
     params.append('conv_id', convId);
   }
-  
+
   if (nodeIds) {
     params.append('node_ids', nodeIds);
   }
-  
+
   if (limit) {
     params.append('limit', limit);
   }
-  
+
   const queryString = params.toString();
   if (queryString) {
     url += `?${queryString}`;
   }
-  
+
   return axios.get(url);
 }
 

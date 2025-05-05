@@ -37,14 +37,14 @@ const executeQuery = () => {
     ElMessage.warning('请输入SQL查询语句')
     return
   }
-  
+
   if (!sql.value.toLowerCase().trim().startsWith('select')) {
     ElMessage.warning('只支持SELECT查询语句')
     return
   }
-  
+
   loading.value = true
-  
+
   axios.post('/db/query', { query: sql.value })
     .then(response => {
       props.onResult(response.data)
