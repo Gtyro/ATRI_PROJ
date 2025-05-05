@@ -127,22 +127,27 @@ class Repository:
         logging.info(f"移除旧消息: {deleted} 条，基于双重时间阈值策略")
         return deleted
     
-    async def get_queue_stats(self) -> Dict[str, Any]:
-        """获取队列统计信息"""
+    async def get_queue_stats(self, conv_id: Optional[str] = None) -> Dict[str, Any]:
+        """获取队列统计信息
+        
+        Args:
+            conv_id: 可选的会话ID，如果指定则只返回该会话的统计
+        """
+        # 如果指定了conv_id，只获取该会话的统计
+        if conv_id:
+            total = await MessageQueue.filter(conv_id=conv_id).count()
+            unprocessed = await MessageQueue.filter(conv_id=conv_id, is_processed=False).count()
+            return {
+                "total_messages": total,
+                "unprocessed_messages": unprocessed
+            }
+        
+        # 否则获取全局统计
         total = await MessageQueue.all().count()
-        unprocessed = await MessageQueue.filter(is_processed=False).count()
-        conv_counts = {}
-        
-        # 获取各会话未处理消息数量
-        for conv in await MessageQueue.filter(is_processed=False).distinct().values("conv_id"):
-            conv_id = conv["conv_id"]
-            count = await MessageQueue.filter(conv_id=conv_id, is_processed=False).count()
-            conv_counts[conv_id] = count
-        
+        unprocessed = await MessageQueue.filter(is_processed=False).count()        
         return {
             "total_messages": total,
-            "unprocessed_messages": unprocessed,
-            "conversations": conv_counts
+            "unprocessed_messages": unprocessed
         }
         
     async def has_bot_message(self, conv_id: str) -> bool:

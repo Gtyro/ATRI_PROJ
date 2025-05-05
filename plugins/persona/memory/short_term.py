@@ -111,10 +111,3 @@ class ShortTermMemory:
             删除的消息数量
         """
         return await self.repository.remove_old_messages(conv_id, self.queue_history_size)
-    
-    async def get_queue_stats(self) -> Dict[str, Any]:
-        """获取队列统计信息"""
-        stats = await self.repository.get_queue_stats()
-        stats["next_process_in"] = max(0, int(self.next_process_time - time.time()))
-        stats["batch_interval"] = self.batch_interval
-        return stats 

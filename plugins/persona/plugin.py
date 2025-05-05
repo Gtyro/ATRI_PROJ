@@ -382,22 +382,22 @@ async def handle_persona_stats(bot: Bot, event: Event, state: T_State):
     # 如果系统未启用，返回错误信息
     if not PERSONA_SYSTEM_ENABLED:
         await persona_stats.finish("人格系统未启用，请检查配置和日志")
-        
+    
+    # 解析命令参数
+    args = str(event.get_plaintext()).strip().split()
+    conv_id = None
+    
+    # 如果指定了会话ID
+    if len(args) > 1:
+        group_id = args[1]
+        if group_id.isdigit():
+            conv_id = f"group_{group_id}"
+        else:
+            await persona_stats.finish("会话ID格式不正确")
+    
     try:
         # 获取队列统计
-        queue_status = await persona_system.get_queue_status()
-        stats = queue_status.get("stats", {})
-        
-        # 生成统计信息
-        reply = "人格系统状态:\n"
-        reply += f"- 消息总数: {stats.get('total_messages', 0)} 条\n"
-        reply += f"- 未处理消息: {stats.get('unprocessed_messages', 0)} 条\n"
-        reply += f"- 下次处理: {queue_status.get('next_process_in', 0)} 秒后\n"
-        reply += f"- 处理间隔: {queue_status.get('batch_interval', 0)} 秒\n"
-        
-        # 显示数据库信息
-        db_type = "PostgreSQL" if persona_system.config.get("use_postgres") else "SQLite"
-        reply += f"- 数据库类型: {db_type}\n"
+        reply = await persona_system.get_queue_status_reply(conv_id)
         
         await persona_stats.send(reply)
     except Exception as e:

@@ -89,4 +89,4 @@ pip install -r requirements.txt
 
 ## 🕸 群组记忆图谱
 
-![atlas](assets\atlas.png)
+![atlas](assets/atlas.png)

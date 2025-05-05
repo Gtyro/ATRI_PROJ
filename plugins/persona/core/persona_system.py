@@ -340,16 +340,59 @@ class PersonaSystem:
             memory_list.extend(await self.retriever.search_for_memories(keyword, user_id, limit, conv_id))
         return memory_list
     
-    async def get_queue_status(self) -> Dict:
+    async def get_queue_status_reply(self, conv_id: Optional[str] = None) -> str:
         """获取队列状态
         
+        Args:
+            conv_id: 可选的会话ID，如果指定则只返回该会话的状态
+            
         Returns:
-            队列状态字典
+            队列状态回复字符串
         """
         if not self.short_term:
             raise RuntimeError("系统尚未初始化，请先调用initialize()")
             
-        return await self.short_term.get_queue_stats()
+        # 获取基本队列统计
+        stats = await self.repository.get_queue_stats(conv_id)
+        
+        # 获取处理间隔
+        batch_interval = self.config.get('batch_interval', 30*60)
+        
+        # 如果指定了conv_id，获取该会话的下次处理时间
+        if conv_id:
+            gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
+            plugin_config = gpconfig.plugin_config or {}
+            next_process_time = plugin_config.get('next_process_time', 0)
+            next_process_in = max(0, int(next_process_time - time.time()))
+        else:
+            # 获取所有会话的下一次处理时间中最早的
+            distinct_convs = await self.group_config.get_distinct_group_ids(self.plugin_name)
+            next_times = []
+            
+            for conv in distinct_convs:
+                gpconfig = await self.group_config.get_config(conv, self.plugin_name)
+                plugin_config = gpconfig.plugin_config or {}
+                next_process_time = plugin_config.get('next_process_time', 0)
+                if next_process_time > 0:
+                    next_times.append(next_process_time)
+            
+            if next_times:
+                next_process_in = max(0, int(min(next_times) - time.time()))
+            else:
+                next_process_in = 0
+                
+        # 生成统计信息
+        reply = f"会话 {conv_id} 状态:\n" if conv_id else "人格系统状态:\n"
+        reply += f"- 消息总数: {stats.get('total_messages', 0)} 条\n"
+        reply += f"- 未处理消息: {stats.get('unprocessed_messages', 0)} 条\n"
+        reply += f"- 下次处理: {next_process_in} 秒后\n"
+        reply += f"- 处理间隔: {batch_interval} 秒\n"
+        
+        # 显示数据库信息
+        db_type = "PostgreSQL" if self.config.get("use_postgres") else "SQLite"
+        reply += f"- 数据库类型: {db_type}\n"
+
+        return reply
 
     async def simulate_reply(self, conv_id: str, test_message: Optional[str] = None) -> Dict:
         """模拟回复
