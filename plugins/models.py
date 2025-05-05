@@ -13,6 +13,12 @@ class PluginConfig(Model):
         unique_together = (('plugin_name',))
         connection_name = "default"
 
+class GroupConfig(Model):
+    id = fields.IntField(pk=True)
+    '''group id'''
+    name = fields.CharField(max_length=50)
+    '''group name'''
+
 class GroupPluginConfig(Model):
     id = fields.IntField(pk=True)
     gid = fields.CharField(max_length=20, index=True)
@@ -41,9 +47,9 @@ class GroupPluginConfig(Model):
     @classmethod
     async def update_config(cls, gid: str, plugin_name: str, config: dict):
         '''更新群组插件配置'''
-        config = await cls.get_config(gid, plugin_name)
-        config.plugin_config = config
-        await config.save()
+        gpconfig = await cls.get_config(gid, plugin_name)
+        gpconfig.plugin_config = config
+        await gpconfig.save()
 
     @classmethod
     async def get_distinct_group_ids(cls, plugin_name: str) -> List[str]:

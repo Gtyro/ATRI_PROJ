@@ -65,26 +65,8 @@ class ShortTermMemory:
         return await self.add_message(message_data)
     
     async def get_unprocessed_messages(self, conv_id: str, limit: int) -> List[Dict]:
-        """获取未处理的消息
-        
-        Args:
-            conv_id: 会话ID
-            
-        Returns:
-            未处理消息列表
-        """
-        return await self.repository.get_messages(conv_id, processed=False, limit=limit)
-    
-    async def get_all_messages(self, conv_id: str) -> List[Dict]:
-        """获取所有消息
-        
-        Args:
-            conv_id: 会话ID
-            
-        Returns:
-            已处理消息列表
-        """
-        return await self.repository.get_messages(conv_id)
+        """获取未处理的消息字典列表"""
+        return await self.repository.get_unprocessed_messages(conv_id, limit)
     
     async def get_recent_messages(self, conv_id: str, limit: int = 40) -> List[Dict]:
         """获取最近的消息，按时间从前往后排序"""

@@ -109,9 +109,9 @@ async def shutdown_persona_system():
             logging.error(f"人格系统关闭失败: {e}")
 
 # 消息记录器，处理所有接收到的消息
-message_recorder = on_message(priority=10)
-@message_recorder.handle()
-async def record_message(bot: Bot, event: Event, uname: str = UserName()):
+message_handler = on_message(priority=10)
+@message_handler.handle()
+async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     """
     记录所有接收到的消息并处理
     """
@@ -120,7 +120,7 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
         return
         
     user_id = event.get_user_id()
-    message = event.get_plaintext()
+    message = event.get_plaintext() # 目前只处理纯文本消息
     
     # 忽略空消息
     if not message.strip():
@@ -132,11 +132,8 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
     # 群组ID或用户ID
     conv_id = f"{conv_type}_{event.group_id if is_group else user_id}"
     # 尝试获取群组名称
-    try:
-        group_info = await bot.get_group_info(group_id=event.group_id)
-        group_name = group_info["group_name"]
-    except Exception as e:
-        logging.error(f"获取群组名称失败: {e}")
+    group_info = await bot.get_group_info(group_id=event.group_id)
+    group_name = group_info["group_name"]
     
     # 判断直接交互（@机器人或私聊）
     is_direct = False
@@ -172,36 +169,6 @@ async def record_message(bot: Bot, event: Event, uname: str = UserName()):
                 await bot.send(event, reply_content)
     except Exception as e:
         logging.error(f"消息处理异常: {e}")
-
-# 状态查询命令
-persona_stats = on_command("状态", aliases={"人格状态", "系统状态"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)
-@persona_stats.handle()
-async def handle_persona_stats(bot: Bot, event: Event, state: T_State):
-    """查询人格系统状态"""
-    # 如果系统未启用，返回错误信息
-    if not PERSONA_SYSTEM_ENABLED:
-        await persona_stats.finish("人格系统未启用，请检查配置和日志")
-        
-    try:
-        # 获取队列统计
-        queue_status = await persona_system.get_queue_status()
-        stats = queue_status.get("stats", {})
-        
-        # 生成统计信息
-        reply = "人格系统状态:\n"
-        reply += f"- 消息总数: {stats.get('total_messages', 0)} 条\n"
-        reply += f"- 未处理消息: {stats.get('unprocessed_messages', 0)} 条\n"
-        reply += f"- 下次处理: {queue_status.get('next_process_in', 0)} 秒后\n"
-        reply += f"- 处理间隔: {queue_status.get('batch_interval', 0)} 秒\n"
-        
-        # 显示数据库信息
-        db_type = "PostgreSQL" if persona_system.config.get("use_postgres") else "SQLite"
-        reply += f"- 数据库类型: {db_type}\n"
-        
-        await persona_stats.send(reply)
-    except Exception as e:
-        logging.error(f"获取系统状态异常: {e}")
-        await persona_stats.send(f"获取状态信息失败: {str(e)}")
 
 # 强制处理命令
 process_now = on_command("处理队列", aliases={"处理消息", "立即处理"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)
@@ -272,7 +239,7 @@ async def handle_memories(bot: Bot, event: Event, state: T_State):
         await memories.send("回忆过程出现了问题...")
 
 # 添加常驻记忆命令
-remember_permanent = on_command("牢记", permission=SUPERUSER, priority=5, block=True)
+remember_permanent = on_command("记住", permission=SUPERUSER, priority=5, block=True)
 @remember_permanent.handle()
 async def handle_remember_permanent(bot: Bot, event: Event):
     """创建常驻节点和记忆对"""
@@ -283,7 +250,7 @@ async def handle_remember_permanent(bot: Bot, event: Event):
     parts = command_text.split(maxsplit=4)
     
     if len(parts) < 4:
-        await remember_permanent.finish("命令格式: 牢记 [群号/私聊ID] [节点名称] [记忆标题] [记忆内容]")
+        await remember_permanent.finish("命令格式: 记住 [群号/私聊ID] [节点名称] [记忆标题] [记忆内容]")
         
     _, group_id, node_name, memory_title, memory_content = parts
     
@@ -406,3 +373,33 @@ async def handle_test_persona(bot: Bot, event: Event):
     except Exception as e:
         logging.error(f"测试人格回复异常: {e}")
         await test_persona.finish(f"模拟回复出错: {str(e)}")
+
+# 状态查询命令
+persona_stats = on_command("状态", aliases={"人格状态", "系统状态"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)
+@persona_stats.handle()
+async def handle_persona_stats(bot: Bot, event: Event, state: T_State):
+    """查询人格系统状态"""
+    # 如果系统未启用，返回错误信息
+    if not PERSONA_SYSTEM_ENABLED:
+        await persona_stats.finish("人格系统未启用，请检查配置和日志")
+        
+    try:
+        # 获取队列统计
+        queue_status = await persona_system.get_queue_status()
+        stats = queue_status.get("stats", {})
+        
+        # 生成统计信息
+        reply = "人格系统状态:\n"
+        reply += f"- 消息总数: {stats.get('total_messages', 0)} 条\n"
+        reply += f"- 未处理消息: {stats.get('unprocessed_messages', 0)} 条\n"
+        reply += f"- 下次处理: {queue_status.get('next_process_in', 0)} 秒后\n"
+        reply += f"- 处理间隔: {queue_status.get('batch_interval', 0)} 秒\n"
+        
+        # 显示数据库信息
+        db_type = "PostgreSQL" if persona_system.config.get("use_postgres") else "SQLite"
+        reply += f"- 数据库类型: {db_type}\n"
+        
+        await persona_stats.send(reply)
+    except Exception as e:
+        logging.error(f"获取系统状态异常: {e}")
+        await persona_stats.send(f"获取状态信息失败: {str(e)}")

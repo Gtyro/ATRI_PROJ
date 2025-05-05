@@ -63,18 +63,10 @@ class Repository:
         """添加消息到队列"""
         message = await MessageQueue.create(**message_data)
         return message
-    
-    async def get_messages(self, conv_id: str, processed: Optional[bool] = None, limit: int = None) -> List[Dict]:
-        """获取指定会话的消息"""
-        if not limit:
-            messages = await MessageQueue.filter(conv_id=conv_id).order_by("created_at").all()
-        elif processed is None:
-            messages = await MessageQueue.filter(conv_id=conv_id).order_by("created_at").limit(limit).all()
-        else:
-            messages = await MessageQueue.filter(
-                conv_id=conv_id,
-                is_processed=processed
-            ).order_by("created_at").limit(limit).all()
+
+    async def get_unprocessed_messages(self, conv_id: str, limit: int) -> List[Dict]:
+        """获取指定会话的未处理消息字典列表"""
+        messages = await MessageQueue.filter(conv_id=conv_id, is_processed=False).order_by("created_at").limit(limit).all()
         return [msg.to_dict() for msg in messages]
     
     async def get_recent_messages(self, conv_id: str, limit: int = 40) -> List[Dict]:
@@ -89,11 +81,9 @@ class Repository:
     
     async def mark_messages_processed(self, message_ids: List[int]) -> int:
         """标记消息为已处理"""
-            
         update_values = {
             "is_processed": True
         }
-        
         try:
             # 批量更新时会自动处理None值
             return await MessageQueue.filter(id__in=message_ids).update(**update_values)
@@ -102,64 +92,39 @@ class Repository:
             return 0
     
     async def remove_old_messages(self, conv_id: str, keep_count: int = 40) -> int:
-        """移除旧消息，基于时间戳的清理策略
+        """移除旧消息，基于时间阈值策略
         
-        1. 找到最新一条已处理消息的时间
-        2. 计算晚于这个时间的未处理消息数量
-        3. 如果数量超过40，则清理所有早于最新已处理消息时间的消息（不管是否已处理）
-        4. 如果数量不超过40，则只保留最新的keep_count条消息（不管是否已处理）
+        Args:
+            conv_id: 会话ID
+            keep_count: 最少保留的消息数量
+            
+        Returns:
+            移除的消息数量
         """
-        # 获取最新一条已处理消息
+        # 获取最新的已处理消息
         latest_processed = await MessageQueue.filter(
             conv_id=conv_id, 
             is_processed=True
         ).order_by("-created_at").first()
-        
-        # 如果没有已处理消息，则无需清理
-        if not latest_processed:
+
+        # 获取第keep_count+1条消息
+        threshold_msg = await MessageQueue.filter(
+            conv_id=conv_id
+        ).order_by("-created_at").offset(keep_count).first()
+
+        if not latest_processed or not threshold_msg:
             return 0
-        
-        # 获取晚于最新已处理消息时间的未处理消息数量
-        newer_unprocessed_count = await MessageQueue.filter(
+
+        # 确定时间阈值
+        time_threshold = min(latest_processed.created_at, threshold_msg.created_at)
+
+        # 删除早于等于阈值的消息
+        deleted = await MessageQueue.filter(
             conv_id=conv_id,
-            is_processed=False,
-            created_at__gt=latest_processed.created_at
-        ).count()
-        
-        deleted = 0
-        
-        # 如果晚于最新已处理消息时间的未处理消息数量超过40
-        if newer_unprocessed_count >= 40:
-            # 清理所有早于最新已处理消息时间的消息（不管是否已处理）
-            messages_to_delete = await MessageQueue.filter(
-                conv_id=conv_id,
-                created_at__lt=latest_processed.created_at
-            ).all()
-            
-            for msg in messages_to_delete:
-                await msg.delete()
-                deleted += 1
-        else:
-            # 只保留最新的keep_count条消息
-            # 首先获取总消息数
-            total_messages = await MessageQueue.filter(conv_id=conv_id).count()
-            
-            # 如果总消息数超过keep_count，则需要清理
-            if total_messages > keep_count:
-                # 计算需要删除的消息数量
-                to_delete = total_messages - keep_count
-                
-                # 获取要删除的消息（按创建时间排序，删除最早的）
-                messages_to_delete = await MessageQueue.filter(
-                    conv_id=conv_id
-                ).order_by("created_at").limit(to_delete).all()
-                
-                for msg in messages_to_delete:
-                    await msg.delete()
-                    deleted += 1
-        
-        logging.info(f"移除旧消息: {deleted} 条，基于新的时间戳清理策略")
-        
+            created_at__lte=time_threshold
+        ).delete()
+
+        logging.info(f"移除旧消息: {deleted} 条，基于双重时间阈值策略")
         return deleted
     
     async def get_queue_stats(self) -> Dict[str, Any]:
