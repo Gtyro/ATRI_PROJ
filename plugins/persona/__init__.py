@@ -1,7 +1,38 @@
-from .core.persona_system import PersonaSystem
-from .plugin import *
+import inspect
+import sys
+import os
 
-__all__ = ["PersonaSystem"]
+# 判断当前代码是否在脚本模式下执行
+def is_running_as_script():
+    """检测代码是否在脚本模式下运行而非作为插件导入"""
+    # 获取调用栈
+    stack = inspect.stack()
+    main_module = sys.modules['__main__']
+    main_file = getattr(main_module, '__file__', '')
+    
+    # 检查是否从scripts目录执行
+    if main_file and '/scripts/' in main_file:
+        return True
+        
+    # 检查调用链是否来自script目录的模块
+    for frame in stack:
+        if '/scripts/' in frame.filename:
+            return True
+    
+    return False
+
+# 只有在非脚本模式下才导入完整的插件功能
+if not is_running_as_script():
+    from .core.persona_system import PersonaSystem
+    from .plugin import *
+    
+    __all__ = ["PersonaSystem"]
+else:
+    # 仅导出迁移脚本所需的最小模块和函数
+    from .utils.config import load_config, check_config, save_config
+    from .storage.models import Memory as OldMemory, CognitiveNode as OldNode, Association as OldAssociation
+    
+    __all__ = ["load_config", "check_config", "save_config", "OldMemory", "OldNode", "OldAssociation"]
 
 # 插件元信息
 __plugin_meta__ = {

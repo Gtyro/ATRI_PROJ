@@ -20,7 +20,8 @@ from typing import Dict, List, Optional, Any, Callable
 import yaml
 
 from ..utils.config import check_config, load_config
-from ..storage.repository import Repository
+from ..storage.message_repository import MessageRepository
+from ..storage.memory_repository import MemoryRepository
 from ..memory.short_term import ShortTermMemory
 from ..memory.long_term import LongTermMemory
 from ..memory.decay import DecayManager
@@ -51,7 +52,8 @@ class PersonaSystem:
         self.config["db_path"] = db_path
 
         # 初始化属性但不创建对象
-        self.repository = None
+        self.message_repo = None
+        self.memory_repo = None
         self.short_term = None
         self.long_term = None
         self.aiprocessor = None
@@ -74,73 +76,91 @@ class PersonaSystem:
 
         Args:
             reply_callback: 回复回调函数
+            
+        Raises:
+            Exception: 如果任何组件初始化失败
         """
-        try:
-            # 初始化仓库
-            self.repository = Repository(self.config)
-            await self.repository.initialize()
+        # 初始化存储库 - 分离消息队列和记忆网络存储
+        self.message_repo = MessageRepository(self.config)
+        await self.message_repo.initialize()
+        
+        self.memory_repo = MemoryRepository(self.config)
+        await self.memory_repo.initialize()
 
-            # 初始化组件
-            self.short_term = ShortTermMemory(
-                self.repository,
-                self.config
-            )
+        # 初始化组件
+        self.short_term = ShortTermMemory(
+            self.message_repo,
+            self.config
+        )
 
-            # 初始化群组配置
-            group_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
-            group_character = {}
-            for group_id in group_ids:
-                try:
-                    gpconfig = await GroupPluginConfig.get_config(group_id, self.plugin_name)
-                    prompt_file = gpconfig.plugin_config.get("prompt_file", None)
-                    if prompt_file and os.path.exists(prompt_file):
-                        group_character[group_id] = prompt_file
-                except Exception as e:
-                    logging.error(f"读取群组配置失败[{group_id}]: {e}")
+        # 初始化群组配置
+        group_ids = await GroupPluginConfig.get_distinct_group_ids(self.plugin_name)
+        group_character = {}
+        for group_id in group_ids:
+            try:
+                gpconfig = await GroupPluginConfig.get_config(group_id, self.plugin_name)
+                prompt_file = gpconfig.plugin_config.get("prompt_file", None)
+                if prompt_file and os.path.exists(prompt_file):
+                    group_character[group_id] = prompt_file
+            except Exception as e:
+                logging.error(f"读取群组配置失败[{group_id}]: {e}")
 
-            # 初始化AI处理器
-            api_key = self.config.get('api_key', '') or os.getenv('OPENAI_API_KEY', '')
-            base_url = self.config.get('base_url', '') or os.getenv('OPENAI_BASE_URL', '')
+        # 初始化AI处理器
+        api_key = self.config.get('api_key', '') or os.getenv('OPENAI_API_KEY', '')
+        base_url = self.config.get('base_url', '') or os.getenv('OPENAI_BASE_URL', '')
 
-            self.aiprocessor = AIProcessor(
-                api_key=api_key,
-                model=self.config.get('model', 'deepseek-chat'),
-                base_url=base_url or "https://api.deepseek.com",
-                group_character=group_character,
-                queue_history_size=self.config.get('queue_history_size', 40)
-            )
+        self.aiprocessor = AIProcessor(
+            api_key=api_key,
+            model=self.config.get('model', 'deepseek-chat'),
+            base_url=base_url or "https://api.deepseek.com",
+            group_character=group_character,
+            queue_history_size=self.config.get('queue_history_size', 40)
+        )
 
-            # 传递现有的AI处理器实例给消息处理器
-            self.msgprocessor = MessageProcessor(
-                self.config,
-                ai_processor=self.aiprocessor,
-                group_character=group_character,
-                queue_history_size=self.config.get('queue_history_size', 40)
-            )
+        # 传递现有的AI处理器实例给消息处理器
+        self.msgprocessor = MessageProcessor(
+            self.config,
+            ai_processor=self.aiprocessor,
+            group_character=group_character,
+            queue_history_size=self.config.get('queue_history_size', 40)
+        )
 
-            # 设置记忆检索回调
-            self.aiprocessor.set_memory_retrieval_callback(self.format_memories)
+        # 设置记忆检索回调
+        self.aiprocessor.set_memory_retrieval_callback(self.format_memories)
 
-            # 初始化长期记忆组件
-            self.long_term = LongTermMemory(self.repository, self.config)
-            self.retriever = LongTermRetriever(self.repository)
-            self.decay_manager = DecayManager(self.repository, self.config.get("node_decay_rate", 0.01))
-            await self.decay_manager.initialize()
+        # 初始化长期记忆组件
+        self.long_term = LongTermMemory(self.memory_repo, self.config)
+        self.retriever = LongTermRetriever(self.memory_repo)
+        self.decay_manager = DecayManager(self.memory_repo, self.config.get("node_decay_rate", 0.01))
+        await self.decay_manager.initialize()
 
-            # 设置回调函数
-            self.reply_callback = reply_callback
+        # 设置回调函数
+        self.reply_callback = reply_callback
+        
+        # 检查所有必需组件是否初始化成功
+        initialization_checks = [
+            (self.message_repo, "消息存储库"),
+            (self.memory_repo, "记忆存储库"),
+            (self.short_term, "短期记忆"),
+            (self.long_term, "长期记忆"),
+            (self.aiprocessor, "AI处理器"),
+            (self.msgprocessor, "消息处理器"),
+            (self.retriever, "记忆检索器"),
+            (self.decay_manager, "衰减管理器")
+        ]
+        
+        for component, name in initialization_checks:
+            if component is None:
+                raise RuntimeError(f"{name}初始化失败")
 
-            # 标记系统已初始化
-            logging.info("人格系统初始化成功")
-            return True
-        except Exception as e:
-            logging.error(f"人格系统初始化失败: {e}")
-            raise
+        # 标记系统已初始化
+        logging.info("人格系统初始化成功")
+        return True
 
     async def close(self):
         """关闭系统并清理资源"""
-        if self.repository:
-            await self.repository.close()
+        if self.message_repo:
+            await self.message_repo.close()
         logging.info("人格系统已关闭")
 
     async def process_message(self, message_data: Dict) -> Optional[Dict]:
@@ -153,9 +173,6 @@ class PersonaSystem:
         Returns:
             可能的回复内容
         """
-        if not self.short_term:
-            raise RuntimeError("系统尚未初始化，请先调用initialize()")
-
         # 添加到短期记忆
         try:
             await self.short_term.add_message(message_data)
@@ -231,7 +248,7 @@ class PersonaSystem:
         # 判断是否需要回复
         should_reply = await self.msgprocessor.should_respond(conv_id, topics)
         # 判断队列中是否有机器人发的消息
-        has_bot_message = await self.repository.has_bot_message(conv_id)
+        has_bot_message = await self.message_repo.has_bot_message(conv_id)
         if has_bot_message:
             logging.info(f"会话 {conv_id} 已有机器人发的消息，不回复")
             should_reply = False
@@ -290,12 +307,10 @@ class PersonaSystem:
         if reply_content and self.reply_callback:
             await self.reply_callback(conv_id, reply_dict)
 
+        return reply_dict
+
     async def schedule_maintenance(self) -> None:
         """定期维护任务"""
-        if not self.repository or not self.short_term:
-            logging.warning("系统尚未初始化，跳过维护")
-            return
-
         # 获取所有需要处理的群组
         distinct_convs = await self.group_config.get_distinct_group_ids(self.plugin_name)
 
@@ -331,9 +346,6 @@ class PersonaSystem:
         Returns:
             相关记忆列表
         """
-        if not self.retriever:
-            raise RuntimeError("系统尚未初始化，请先调用initialize()")
-
         keywords = query.split(" ")
         memory_list = []
         for keyword in keywords:
@@ -349,11 +361,8 @@ class PersonaSystem:
         Returns:
             队列状态回复字符串
         """
-        if not self.short_term:
-            raise RuntimeError("系统尚未初始化，请先调用initialize()")
-
         # 获取基本队列统计
-        stats = await self.repository.get_queue_stats(conv_id)
+        stats = await self.message_repo.get_queue_stats(conv_id)
 
         # 获取处理间隔
         batch_interval = self.config.get('batch_interval', 30*60)
@@ -390,7 +399,8 @@ class PersonaSystem:
 
         # 显示数据库信息
         db_type = "PostgreSQL" if self.config.get("use_postgres") else "SQLite"
-        reply += f"- 数据库类型: {db_type}\n"
+        reply += f"- 短期记忆数据库: {db_type}\n"
+        reply += f"- 长期记忆数据库: Neo4j\n"
 
         return reply
 
@@ -449,7 +459,7 @@ class PersonaSystem:
         """
         try:
             # 创建常驻节点
-            node = await self.repository.update_or_create_node(conv_id, node_name, is_permanent=True)
+            node = await self.memory_repo.update_or_create_node(conv_id, node_name, is_permanent=True)
 
             # 创建常驻记忆
             memory_data = {
@@ -458,21 +468,21 @@ class PersonaSystem:
                 "content": memory_content,
                 "is_permanent": True
             }
-            memory = await self.repository.store_memory(conv_id, memory_data)
+            memory = await self.memory_repo.store_memory(conv_id, memory_data)
 
             # 使用现有的_link_nodes_to_memory函数建立关联
-            await self.repository._link_nodes_to_memory(memory, [str(node.id)])
+            await self.memory_repo._link_nodes_to_memory(memory, [str(node.uid)])
 
             logging.info(f"创建常驻节点-记忆对: 节点[{node_name}], 记忆[{memory_title}]")
 
             return {
                 "node": {
-                    "id": str(node.id),
+                    "id": str(node.uid),
                     "name": node.name,
                     "is_permanent": node.is_permanent
                 },
                 "memory": {
-                    "id": str(memory.id),
+                    "id": str(memory.uid),
                     "title": memory.title,
                     "content": memory.content,
                     "is_permanent": memory.is_permanent
@@ -511,3 +521,93 @@ class PersonaSystem:
             reply += f"{i}. [{memory_source}]【{title}】{content} ({time_str})\n"
 
         return reply
+
+    async def parse_chat_history(self, bot_id: str, file_path: str, conv_id: str) -> List[Dict]:
+        """解析聊天历史记录文件
+        
+        Args:
+            bot_id: 机器人的ID
+            file_path: 聊天记录文件路径
+            conv_id: 会话ID
+            
+        Returns:
+            消息字典列表
+        """
+        try:
+            import re
+            from datetime import datetime
+            
+            # 检查文件是否存在
+            if not os.path.exists(file_path):
+                logging.error(f"文件不存在: {file_path}")
+                return []
+            
+            # 读取文件内容
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            # 解析消息头部和内容
+            header_pattern = r'(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2}) (.*?)\((\d+)\)'
+            headers = [(m.group(1), m.group(2), m.group(3), m.start(), m.end()) 
+                    for m in re.finditer(header_pattern, content)]
+            
+            messages = []
+            for i, (time_str, user_name, user_id, start_idx, end_idx) in enumerate(headers):
+                # 去除用户名中的标题（【】包围）
+                user_name = re.sub(r'【.*?】', '', user_name).strip()
+                
+                # 解析消息时间
+                created_at = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                
+                # 提取消息内容
+                if i < len(headers) - 1:
+                    next_start = headers[i+1][3]
+                    msg_content = content[end_idx:next_start].strip()
+                else:
+                    msg_content = content[end_idx:].strip()
+                
+                # 检查消息是否来自机器人
+                is_bot = (user_id == bot_id)
+                
+                # 创建消息字典
+                message = {
+                    "conv_id": conv_id,
+                    "user_id": user_id,
+                    "user_name": user_name,
+                    "content": msg_content,
+                    "created_at": created_at,
+                    "is_bot": is_bot,
+                    "is_direct": False,  # 默认非直接对话
+                    "is_processed": True,  # 标记为已处理
+                    "metadata": {}
+                }
+                
+                messages.append(message)
+            
+            logging.info(f"解析聊天记录完成，共 {len(messages)} 条消息")
+            
+            # 如果消息列表为空，则不进行删除
+            if messages == []:
+                return messages
+            
+            # 获取最早和最晚消息时间
+            earliest_time = min(msg["created_at"] for msg in messages)
+            latest_time = max(msg["created_at"] for msg in messages)
+            
+            # 删除时间范围内的消息
+            deleted_messages = await self.message_repo.delete_messages_by_time_range(
+                conv_id, earliest_time, latest_time
+            )
+            logging.info(f"已删除会话 {conv_id} 中 {earliest_time} 到 {latest_time} 之间的 {deleted_messages} 条消息")
+            
+            # 删除时间范围内的记忆及关联
+            await self.memory_repo.delete_memories_by_time_range(
+                conv_id, earliest_time, latest_time
+            )
+            logging.info(f"已删除会话 {conv_id} 中 {earliest_time} 到 {latest_time} 之间的记忆")
+            
+            return messages
+            
+        except Exception as e:
+            logging.error(f"解析聊天记录失败: {e}")
+            return []

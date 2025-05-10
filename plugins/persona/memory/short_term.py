@@ -1,113 +1,120 @@
-import logging
-import time
-from typing import Dict, List, Optional, Any, Callable
+"""
+短期记忆管理器
 
-from ..storage.repository import Repository
+负责处理消息队列，包括添加、获取和标记消息等功能
+"""
+
+import logging
+from typing import Dict, List, Optional, Any
+from time import time
+
+from ..storage.message_repository import MessageRepository
 
 class ShortTermMemory:
     """短期记忆管理器
 
-    负责管理消息队列作为机器人的短期记忆
+    负责处理消息队列，包括添加、获取和标记消息等功能
     """
 
-    def __init__(self, repository: Repository, config: Dict[str, Any] = None):
+    def __init__(self, message_repo: MessageRepository, config: Dict[str, Any]):
         """初始化短期记忆管理器
 
         Args:
-            repository: 存储仓库
+            message_repo: 消息存储库
             config: 配置参数
         """
-        self.repository = repository
-        self.config = config or {}
-        self.batch_interval = self.config.get("batch_interval", 3600)  # 默认1小时
-        self.queue_history_size = self.config.get("queue_history_size", 100)
-        self.next_process_time = time.time() + self.batch_interval
-        self.reply_callback = None
-        logging.info(f"短期记忆管理器已创建，批处理间隔: {self.batch_interval}秒")
+        self.message_repo = message_repo
+        self.config = config
+        logging.info("短期记忆管理器已创建")
 
-    def register_reply_callback(self, callback: Callable) -> None:
-        """注册回复回调函数"""
-        self.reply_callback = callback
-        logging.info("短期记忆管理器已注册回复回调函数")
-
-    async def add_message(self, message_data: Dict) -> int:
-        """添加消息到队列
+    async def add_message(self, message_data: Dict) -> None:
+        """添加消息到短期记忆
 
         Args:
             message_data: 消息数据
-
-        Returns:
-            消息ID
         """
-        message = await self.repository.add_message(message_data)
-        logging.info(f"已添加消息到队列: {message.id}")
-        return message.id
+        await self.message_repo.add_message(message_data)
 
-    async def add_bot_message(self, conv_id: str, content: str) -> int:
-        """添加机器人自己的消息到队列
+    async def add_bot_message(self, conv_id: str, content: str) -> None:
+        """添加机器人自己的消息到历史
 
         Args:
             conv_id: 会话ID
             content: 消息内容
-
-        Returns:
-            消息ID
         """
-        message_data = { # 此处有7个字段+自动生成的id和created_at+metadata
+        message_data = {
             "conv_id": conv_id,
             "user_id": "bot",
-            "user_name": "你", # 使用第二人称
+            "user_name": "机器人",
             "content": content,
+            "is_direct": False,
             "is_bot": True,
-            "is_processed": False,
-            "is_direct": False
+            "is_processed": True,
+            "extra_data": {}
         }
-        return await self.add_message(message_data)
+        await self.message_repo.add_message(message_data)
 
-    async def get_unprocessed_messages(self, conv_id: str, limit: int) -> List[Dict]:
-        """获取未处理的消息字典列表"""
-        return await self.repository.get_unprocessed_messages(conv_id, limit)
-
-    async def get_recent_messages(self, conv_id: str, limit: int = 40) -> List[Dict]:
-        """获取最近的消息，按时间从前往后排序"""
-        return await self.repository.get_recent_messages(conv_id, limit)
-
-    async def mark_processed(self, conv_id: str, memories: List[Dict]) -> int:
-        """标记消息为已处理
-
-        根据记忆列表中的message_ids标记对应消息为已处理
+    async def get_unprocessed_messages(self, conv_id: str, limit: int = 20) -> List[Dict]:
+        """获取未处理的消息
 
         Args:
             conv_id: 会话ID
-            memories: 记忆列表
+            limit: 返回消息数量限制
+
+        Returns:
+            未处理消息列表
+        """
+        return await self.message_repo.get_unprocessed_messages(conv_id, limit)
+
+    async def get_recent_messages(self, conv_id: str, limit: int = 40) -> List[Dict]:
+        """获取最近的消息
+
+        Args:
+            conv_id: 会话ID
+            limit: 返回消息数量限制
+
+        Returns:
+            最近消息列表
+        """
+        return await self.message_repo.get_recent_messages(conv_id, limit)
+
+    async def mark_processed(self, conv_id: str, processed_topics: List[Dict]) -> int:
+        """标记消息为已处理
+
+        Args:
+            conv_id: 会话ID
+            processed_topics: 已处理的话题列表，包含消息ID
 
         Returns:
             标记的消息数量
         """
-        marked_count = 0
-
-        # 从记忆中收集所有消息ID
-        for memory in memories:
-            if not memory["completed_status"]:
+        message_ids = []
+        for topic in processed_topics:
+            # 检查话题是否已完成，与原实现保持一致
+            if not topic.get("completed_status", False):
                 continue
-            message_ids = memory["message_ids"]
-            if message_ids:
-                count = await self.repository.mark_messages_processed(message_ids)
-                marked_count += count
-        logging.info(f"标记消息为已处理: {marked_count} 条")
+                
+            if "message_ids" in topic:
+                message_ids.extend(topic["message_ids"])
 
-        # 清理过多的历史消息
-        await self.clean_history(conv_id)
+        if not message_ids:
+            return 0
 
-        return marked_count
+        num_marked = await self.message_repo.mark_messages_processed(message_ids)
 
-    async def clean_history(self, conv_id: str) -> int:
-        """清理历史消息，保留最新的queue_history_size条
+        # 顺便清理旧消息
+        await self.remove_old_messages(conv_id)
+
+        return num_marked
+
+    async def remove_old_messages(self, conv_id: str) -> int:
+        """移除旧消息
 
         Args:
             conv_id: 会话ID
 
         Returns:
-            删除的消息数量
+            移除的消息数量
         """
-        return await self.repository.remove_old_messages(conv_id, self.queue_history_size)
+        keep_count = self.config.get("queue_history_size", 40)
+        return await self.message_repo.remove_old_messages(conv_id, keep_count)

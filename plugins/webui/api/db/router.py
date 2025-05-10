@@ -2,8 +2,13 @@ from fastapi import APIRouter, Depends
 
 from ..auth.utils import get_current_active_user
 from ..auth.models import User
-from .models import SQLQuery
+from .models import SQLQuery, Neo4jQuery
 from .utils import execute_select_query, get_tables, get_table_structure, execute_insert_query, execute_update_query, execute_delete_query
+from .neo4j_utils import (
+    execute_neo4j_query, get_cognitive_nodes, get_associations, 
+    get_node_by_id, create_cognitive_node, update_cognitive_node, delete_cognitive_node,
+    create_association, update_association, delete_association, get_conversations
+)
 from fastapi import Body, Path, HTTPException
 import re
 
@@ -24,13 +29,15 @@ def validate_id(id_str: str):
         # 不是有效的ID格式
         raise HTTPException(status_code=400, detail=f"无效的ID格式: {id_str}")
 
-# 创建路由
+# 创建SQL数据库路由
 router = APIRouter(
     prefix="/db",
     tags=["database"],
     dependencies=[Depends(get_current_active_user)],
     responses={401: {"description": "未经授权"}},
 )
+
+# === SQL/ORM 相关接口 ===
 
 @router.post("/query")
 async def execute_query(query: SQLQuery, current_user: User = Depends(get_current_active_user)):
@@ -75,29 +82,63 @@ async def delete_data(
     validate_id(id)
     return await execute_delete_query(table_name, id)
 
+# === Neo4j/记忆网络相关接口 ===
+
+@router.post("/neo4j/query")
+async def execute_neo4j_cypher(query: Neo4jQuery, current_user: User = Depends(get_current_active_user)):
+    """执行Neo4j Cypher查询"""
+    return await execute_neo4j_query(query.query)
+
 @router.get("/memory/nodes")
-async def get_cognitive_nodes(conv_id: str = '', limit: int = 50, current_user: User = Depends(get_current_active_user)):
+async def get_memory_nodes(conv_id: str = '', limit: int = 50, current_user: User = Depends(get_current_active_user)):
     """获取认知节点数据，用于知识图谱可视化
 
     Args:
         conv_id: 可选，如果提供则获取特定会话的节点，否则获取公共节点(空conv_id)
         limit: 返回的最大节点数量，默认50个
     """
-    query = "SELECT id, name, conv_id, act_lv FROM nodes"
+    nodes = await get_cognitive_nodes(conv_id, limit)
+    # 包装为与原API兼容的格式
+    return {"rows": nodes}
 
-    if conv_id:  # 非空字符串
-        query += f" WHERE conv_id = '{conv_id}'"
-    else:  # 空字符串，获取公共图谱
-        query += " WHERE conv_id = ''"
+@router.get("/memory/node/{node_id}")
+async def get_memory_node(node_id: str, current_user: User = Depends(get_current_active_user)):
+    """获取单个认知节点
 
-    # 按激活水平降序排序，限制数量
-    query += f" ORDER BY act_lv DESC LIMIT {limit}"
+    Args:
+        node_id: 节点ID
+    """
+    return await get_node_by_id(node_id)
 
-    result = await execute_select_query(query)
-    return result
+@router.post("/memory/node")
+async def create_memory_node(data: dict = Body(...), current_user: User = Depends(get_current_active_user)):
+    """创建新认知节点"""
+    return await create_cognitive_node(data)
+
+@router.put("/memory/node/{node_id}")
+async def update_memory_node(
+    node_id: str,
+    data: dict = Body(...),
+    current_user: User = Depends(get_current_active_user)
+):
+    """更新认知节点"""
+    return await update_cognitive_node(node_id, data)
+
+@router.delete("/memory/node/{node_id}")
+async def delete_memory_node(
+    node_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """删除认知节点"""
+    return await delete_cognitive_node(node_id)
 
 @router.get("/memory/associations")
-async def get_associations(conv_id: str = '', node_ids: str = None, limit: int = 200, current_user: User = Depends(get_current_active_user)):
+async def get_memory_associations(
+    conv_id: str = '', 
+    node_ids: str = None, 
+    limit: int = 200, 
+    current_user: User = Depends(get_current_active_user)
+):
     """获取节点之间的关联数据
 
     Args:
@@ -105,50 +146,69 @@ async def get_associations(conv_id: str = '', node_ids: str = None, limit: int =
         node_ids: 可选，逗号分隔的节点ID列表，如果提供则只获取这些节点之间的关联
         limit: 返回的最大关联数量，默认200个
     """
-    # 基本查询
-    query = """
-    SELECT a.id, a.source_id, a.target_id, a.strength,
-           s.name as source_name, t.name as target_name
-    FROM associations a
-    JOIN nodes s ON a.source_id = s.id
-    JOIN nodes t ON a.target_id = t.id
+    # 处理节点ID列表
+    node_id_list = node_ids.split(',') if node_ids else None
+    return await get_associations(conv_id, node_id_list, limit)
+
+@router.post("/memory/association")
+async def create_memory_association(
+    data: dict = Body(...), 
+    current_user: User = Depends(get_current_active_user)
+):
+    """创建节点关联关系
+
+    请求体格式:
+    {
+        "source_id": "节点1 ID",
+        "target_id": "节点2 ID",
+        "strength": 1.0  // 可选，默认为1.0
+    }
     """
+    source_id = data.get("source_id")
+    target_id = data.get("target_id")
+    strength = data.get("strength", 1.0)
+    
+    if not source_id or not target_id:
+        raise HTTPException(status_code=400, detail="必须提供source_id和target_id")
+    
+    return await create_association(source_id, target_id, strength)
 
-    # 条件部分
-    conditions = []
+@router.put("/memory/association")
+async def update_memory_association(
+    data: dict = Body(...), 
+    current_user: User = Depends(get_current_active_user)
+):
+    """更新节点关联关系强度
 
-    # 会话ID条件
-    if conv_id:  # 非空字符串
-        conditions.append(f"s.conv_id = '{conv_id}' AND t.conv_id = '{conv_id}'")
-    else:  # 空字符串，获取公共图谱
-        conditions.append("s.conv_id = '' AND t.conv_id = ''")
+    请求体格式:
+    {
+        "source_id": "节点1 ID",
+        "target_id": "节点2 ID",
+        "strength": 2.0
+    }
+    """
+    source_id = data.get("source_id")
+    target_id = data.get("target_id")
+    strength = data.get("strength")
+    
+    if not source_id or not target_id or strength is None:
+        raise HTTPException(status_code=400, detail="必须提供source_id、target_id和strength")
+    
+    return await update_association(source_id, target_id, float(strength))
 
-    # 节点ID条件
-    if node_ids:
-        ids = node_ids.split(',')
-        if ids:
-            node_ids_str = "','".join(ids)
-            conditions.append(f"a.source_id IN ('{node_ids_str}') AND a.target_id IN ('{node_ids_str}')")
-
-    # 添加WHERE子句
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-
-    # 添加排序和限制
-    query += f" ORDER BY a.strength DESC LIMIT {limit}"
-
-    result = await execute_select_query(query)
-    return result
+@router.delete("/memory/association")
+async def delete_memory_association(
+    source_id: str,
+    target_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """删除节点关联关系"""
+    if not source_id or not target_id:
+        raise HTTPException(status_code=400, detail="必须提供source_id和target_id")
+    
+    return await delete_association(source_id, target_id)
 
 @router.get("/memory/conversations")
-async def get_conversations(current_user: User = Depends(get_current_active_user)):
-    """获取所有可用的会话ID（从GroupPluginConfig表获取）"""
-    # 从group_plugin_configs表获取所有不同的gid
-    query = """
-    SELECT DISTINCT gid, name
-    FROM group_plugin_configs
-    ORDER BY gid
-    """
-
-    result = await execute_select_query(query)
-    return result
+async def get_memory_conversations(current_user: User = Depends(get_current_active_user)):
+    """获取所有可用的会话ID"""
+    return await get_conversations()

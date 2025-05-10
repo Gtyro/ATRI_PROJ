@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Dict, List, Optional
 
-from ..storage.repository import Repository
+from ..storage.memory_repository import MemoryRepository
 from ...models import GroupPluginConfig, PluginConfig
 
 class DecayManager:
@@ -11,14 +11,14 @@ class DecayManager:
     负责处理记忆衰减相关的功能
     """
 
-    def __init__(self, repository: Repository, decay_rate: float = 0.01):
+    def __init__(self, memory_repo: MemoryRepository, decay_rate: float = 0.01):
         """初始化记忆衰减管理器
 
         Args:
-            repository: 存储仓库
+            memory_repo: 记忆存储库
             decay_rate: 衰减率
         """
-        self.repository = repository
+        self.memory_repo = memory_repo
         self.decay_rate = decay_rate
         self.plugin_name = "persona"  # 插件名称
         self.max_nodes_per_conv = 1000  # 每个会话保留的最大节点数
@@ -80,18 +80,18 @@ class DecayManager:
             logging.info(f"未到下次衰减时间，跳过衰减")
             return 0
 
-        nodes = await self.repository.get_nodes(limit=None)  # 不限制数量，获取所有节点
+        nodes = await self.memory_repo.get_nodes()  # 不限制数量，获取所有节点
         processed_nodes = 0
 
         for node in nodes:
             # 应用衰减到所有节点，不再跳过高激活水平的节点
-            if await self.repository.apply_decay(str(node.id), self.decay_rate):
+            if await self.memory_repo.apply_decay(str(node.uid), self.decay_rate):
                 processed_nodes += 1
 
         # 应用关联关系的衰减
-        processed_associations = await self.repository.apply_association_decay(self.decay_rate)
+        processed_associations = await self.memory_repo.apply_association_decay(self.decay_rate)
         # 应用记忆权重的衰减
-        processed_memories = await self.repository.apply_memory_decay(self.decay_rate)
+        processed_memories = await self.memory_repo.apply_memory_decay(self.decay_rate)
 
         logging.info(f"记忆衰减完成，处理了 {processed_nodes} 个节点、{processed_associations} 个关联和 {processed_memories} 个记忆")
 
@@ -139,7 +139,7 @@ class DecayManager:
             # 对每个会话进行记忆清理
             for conv_id in conv_ids:
                 # 每个会话保留500个非永久性记忆
-                cleaned = await self.repository.clean_old_memories_by_conv(conv_id, max_memories=500)
+                cleaned = await self.memory_repo.clean_old_memories_by_conv(conv_id, max_memories=500)
                 total_cleaned += cleaned
 
             if total_cleaned > 0:
@@ -158,7 +158,7 @@ class DecayManager:
         """
         try:
             # 只获取非常驻节点，常驻节点不会被计入限制
-            non_permanent_nodes = await self.repository.get_nodes_by_conv_id(conv_id, is_permanent=False)
+            non_permanent_nodes = await self.memory_repo.get_nodes_by_conv_id(conv_id, is_permanent=False)
             non_permanent_count = len(non_permanent_nodes)
 
             # 如果非常驻节点数量超过了允许的限制
@@ -168,7 +168,7 @@ class DecayManager:
                 to_delete_count = non_permanent_count - self.max_nodes_per_conv
 
                 # 获取激活水平最低的非常驻节点
-                nodes_to_delete = await self.repository.get_nodes_by_conv_id(
+                nodes_to_delete = await self.memory_repo.get_nodes_by_conv_id(
                     conv_id=conv_id,
                     order_by="act_lv",  # 按激活水平升序（从低到高）
                     limit=to_delete_count,
@@ -178,7 +178,7 @@ class DecayManager:
                 # 删除这些节点
                 deleted_count = 0
                 for node in nodes_to_delete:
-                    success = await self.repository.delete_node(str(node.id))
+                    success = await self.memory_repo.delete_node(str(node.uid))
                     if success:
                         deleted_count += 1
 

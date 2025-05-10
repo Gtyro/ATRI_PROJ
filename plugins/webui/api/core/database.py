@@ -2,16 +2,31 @@ from tortoise import Tortoise
 from fastapi import HTTPException
 import logging
 from .config import settings
+from plugins.webui.api.db.neo4j_utils import initialize_neo4j, close_neo4j
+from .shared import table_to_model_map
 
 
 # 在初始化完成后（比如在 init_db() 中），构建反向映射
-table_to_model_map = {}
 async def build_table_model_map():
     models = Tortoise.apps.get("models", {})
     for model_name, model in models.items():
         table_name = model._meta.db_table  # 获取模型对应的真实表名
         table_to_model_map[table_name] = model  # 直接存储模型类对象而不是模型名称
     logging.info(f"构建表名到模型的映射完成，共 {len(table_to_model_map)} 个表")
+
+async def initialize_database():
+    """初始化所有数据库连接"""
+    try:
+        # 初始化Tortoise ORM
+        await initialize_tortoise()
+        
+        # 初始化Neo4j
+        await initialize_neo4j()
+        
+        logging.info("所有数据库连接已初始化")
+    except Exception as e:
+        logging.error(f"数据库初始化失败: {e}")
+        raise HTTPException(status_code=500, detail=f"数据库连接错误: {str(e)}")
 
 async def initialize_tortoise():
     """初始化Tortoise ORM"""
@@ -21,13 +36,26 @@ async def initialize_tortoise():
 
         await Tortoise.init(
             db_url=db_url,
-            modules={'models': ['plugins.persona.storage.models', 'plugins.webui.api.db.models']}
+            modules={'models': ['plugins.persona.storage.models', 'plugins.webui.api.db.models', 'plugins.persona.storage.message_models']}
         )
         await build_table_model_map()
         logging.info(f"Tortoise ORM已初始化: {db_url}")
     except Exception as e:
         logging.error(f"Tortoise ORM初始化失败: {e}")
         raise HTTPException(status_code=500, detail=f"数据库连接错误: {str(e)}")
+
+async def close_database():
+    """关闭所有数据库连接"""
+    try:
+        # 关闭Tortoise ORM连接
+        await close_tortoise()
+        
+        # 关闭Neo4j连接
+        await close_neo4j()
+        
+        logging.info("所有数据库连接已关闭")
+    except Exception as e:
+        logging.error(f"关闭数据库连接失败: {e}")
 
 async def close_tortoise():
     """关闭Tortoise ORM连接"""

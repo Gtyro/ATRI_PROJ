@@ -14,6 +14,10 @@ class TableInfo(BaseModel):
     name: str
     columns: List[Dict[str, Any]]
 
+class Neo4jQuery(BaseModel):
+    """Neo4j查询请求模型"""
+    query: str
+
 # Tortoise ORM模型用于数据库操作
 class User(Model):
     """用户模型"""

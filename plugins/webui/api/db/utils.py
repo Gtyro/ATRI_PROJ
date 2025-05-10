@@ -3,7 +3,8 @@ from tortoise import Tortoise
 from fastapi import HTTPException
 import re
 import logging
-from ..core.database import table_to_model_map
+# 改为从shared模块导入
+from ..core.shared import table_to_model_map
 # from ..core.database import execute_checkpoint
 
 async def execute_select_query(query: str):
