@@ -6,7 +6,7 @@
 import logging
 from typing import Dict, List, Optional, Any
 from tortoise import Tortoise
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .message_models import MessageQueue
 
@@ -178,7 +178,7 @@ class MessageRepository:
             deleted = await MessageQueue.filter(
                 conv_id=conv_id,
                 created_at__gte=start_time,
-                created_at__lte=end_time
+                created_at__lte=end_time + timedelta(seconds=1)
             ).delete()
 
             logging.info(f"会话 {conv_id} 删除了时间在 {start_time} 到 {end_time} 之间的消息共 {deleted} 条")

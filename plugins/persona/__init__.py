@@ -30,9 +30,9 @@ if not is_running_as_script():
 else:
     # 仅导出迁移脚本所需的最小模块和函数
     from .utils.config import load_config, check_config, save_config
-    from .storage.models import Memory as OldMemory, CognitiveNode as OldNode, Association as OldAssociation
+    from .storage import MemoryRepository, MessageRepository, MessageQueue, Memory, CognitiveNode, NodeAssociation
 
-    __all__ = ["load_config", "check_config", "save_config", "OldMemory", "OldNode", "OldAssociation"]
+    __all__ = ["load_config", "check_config", "save_config", "MemoryRepository", "MessageRepository", "MessageQueue", "Memory", "CognitiveNode", "NodeAssociation"]
 
 # 插件元信息
 __plugin_meta__ = {
