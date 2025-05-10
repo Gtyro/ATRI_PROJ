@@ -15,7 +15,7 @@ class MessageRepository:
 
     def __init__(self, config: Dict[str, Any]):
         """初始化存储库
-        
+
         Args:
             config: 配置字典，包含数据库配置
         """
@@ -96,11 +96,11 @@ class MessageRepository:
 
     async def remove_old_messages(self, conv_id: str, keep_count: int = 40) -> int:
         """移除旧消息，基于时间阈值策略
-        
+
         Args:
             conv_id: 会话ID
             keep_count: 最少保留的消息数量
-            
+
         Returns:
             移除的消息数量
         """
@@ -132,7 +132,7 @@ class MessageRepository:
 
     async def get_queue_stats(self, conv_id: Optional[str] = None) -> Dict[str, Any]:
         """获取队列统计信息
-        
+
         Args:
             conv_id: 可选的会话ID，如果指定则只返回该会话的统计
         """
@@ -165,12 +165,12 @@ class MessageRepository:
 
     async def delete_messages_by_time_range(self, conv_id: str, start_time: datetime, end_time: datetime) -> int:
         """删除指定会话时间范围内的消息
-        
+
         Args:
             conv_id: 会话ID
             start_time: 开始时间
             end_time: 结束时间
-            
+
         Returns:
             删除的消息数量
         """
@@ -180,7 +180,7 @@ class MessageRepository:
                 created_at__gte=start_time,
                 created_at__lte=end_time
             ).delete()
-            
+
             logging.info(f"会话 {conv_id} 删除了时间在 {start_time} 到 {end_time} 之间的消息共 {deleted} 条")
             return deleted
         except Exception as e:

@@ -14,7 +14,7 @@ from .test import handle_test_persona
 
 # 定义__all__列表，控制from handlers import *时导入的内容
 __all__ = [
-    "message_handler", 
+    "message_handler",
     "memories", "remember_permanent",
     "process_now", "persona_stats", "switch_persona",
     "test_persona"

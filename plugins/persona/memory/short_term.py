@@ -93,7 +93,7 @@ class ShortTermMemory:
             # 检查话题是否已完成，与原实现保持一致
             if not topic.get("completed_status", False):
                 continue
-                
+
             if "message_ids" in topic:
                 message_ids.extend(topic["message_ids"])
 

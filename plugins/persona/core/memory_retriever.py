@@ -81,26 +81,26 @@ class LongTermRetriever:
             # 使用Neo4j的正则表达式搜索功能
             cypher_query = """
                 MATCH (m:Memory)
-                WHERE 
+                WHERE
                     (m.conv_id = $conv_id OR $conv_id IS NULL) AND
                     (m.title =~ $query_pattern OR m.content =~ $query_pattern)
                 RETURN m
                 ORDER BY m.weight DESC, m.last_accessed DESC
                 LIMIT $limit
             """
-            
+
             # 构建正则表达式模式 (不区分大小写)
             query_pattern = f"(?i).*{query}.*"
-            
+
             # 执行查询
             params = {
                 "conv_id": conv_id,
                 "query_pattern": query_pattern,
                 "limit": limit
             }
-            
+
             results, meta = await self.memory_repo.run_cypher(cypher_query, params)
-            
+
             # 将结果转换为字典
             memories = []
             for row in results:
@@ -112,7 +112,7 @@ class LongTermRetriever:
                     "weight": memory.weight,
                     "created_at": memory.created_at.timestamp() if memory.created_at else datetime.now().timestamp()
                 })
-                
+
             return memories
         except Exception as e:
             logging.error(f"搜索记忆内容失败: {e}")
@@ -131,30 +131,30 @@ class LongTermRetriever:
         """
         try:
             # 使用Neo4j的图查询功能从节点关联查找记忆
-            # 1. 通过节点名称匹配查找相关节点 
+            # 1. 通过节点名称匹配查找相关节点
             # 2. 再通过节点查找关联记忆
             cypher_query = """
                 MATCH (n:CognitiveNode)-[:RELATED_TO]-(m:Memory)
-                WHERE 
+                WHERE
                     (n.conv_id = $conv_id OR $conv_id IS NULL) AND
                     n.name =~ $query_pattern
                 RETURN DISTINCT m
                 ORDER BY m.weight DESC, m.last_accessed DESC
                 LIMIT $limit
             """
-            
+
             # 构建正则表达式模式 (不区分大小写)
             query_pattern = f"(?i).*{query}.*"
-            
+
             # 执行查询
             params = {
                 "conv_id": conv_id,
                 "query_pattern": query_pattern,
                 "limit": limit
             }
-            
+
             results, meta = await self.memory_repo.run_cypher(cypher_query, params)
-            
+
             # 将结果转换为字典
             memories = []
             for row in results:
@@ -166,18 +166,18 @@ class LongTermRetriever:
                     "weight": memory.weight,
                     "created_at": memory.created_at.timestamp() if memory.created_at else datetime.now().timestamp()
                 })
-                
+
             # 如果没有足够的结果，尝试查找间接关联记忆
             if len(memories) < limit:
                 additional_limit = limit - len(memories)
                 indirect_memories = await self._search_indirect_memories(query, additional_limit, conv_id, [m["id"] for m in memories])
                 memories.extend(indirect_memories)
-                
+
             return memories
         except Exception as e:
             logging.error(f"通过节点搜索记忆失败: {e}")
             return []
-            
+
     async def _search_indirect_memories(self, query: str, limit: int, conv_id: Optional[str], excluded_ids: List[str]) -> List[Dict]:
         """搜索间接关联记忆 (通过节点关联)
 
@@ -197,7 +197,7 @@ class LongTermRetriever:
             # 3. 找到与n2关联的记忆
             cypher_query = """
                 MATCH (n1:CognitiveNode)-[:ASSOCIATED_WITH]-(n2:CognitiveNode)-[:RELATED_TO]-(m:Memory)
-                WHERE 
+                WHERE
                     (n1.conv_id = $conv_id OR $conv_id IS NULL) AND
                     n1.name =~ $query_pattern AND
                     NOT(m.uid IN $excluded_ids)
@@ -205,10 +205,10 @@ class LongTermRetriever:
                 ORDER BY m.weight DESC, m.last_accessed DESC
                 LIMIT $limit
             """
-            
+
             # 构建正则表达式模式 (不区分大小写)
             query_pattern = f"(?i).*{query}.*"
-            
+
             # 执行查询
             params = {
                 "conv_id": conv_id,
@@ -216,9 +216,9 @@ class LongTermRetriever:
                 "excluded_ids": excluded_ids,
                 "limit": limit
             }
-            
+
             results, meta = await self.memory_repo.run_cypher(cypher_query, params)
-            
+
             # 将结果转换为字典
             memories = []
             for row in results:
@@ -230,7 +230,7 @@ class LongTermRetriever:
                     "weight": memory.weight,
                     "created_at": memory.created_at.timestamp() if memory.created_at else datetime.now().timestamp()
                 })
-                
+
             return memories
         except Exception as e:
             logging.error(f"搜索间接关联记忆失败: {e}")

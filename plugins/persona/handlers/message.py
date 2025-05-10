@@ -89,15 +89,15 @@ async def handle_parse_history(bot: Bot, event: Event, args: Message = CommandAr
     """处理解析历史记录命令"""
     if not is_enabled():
         await parse_history.finish("人格系统未启用")
-    
+
     # 获取参数
     arg_list = args.extract_plain_text().strip().split()
     if len(arg_list) < 2:
         await parse_history.finish("参数不足，格式：解析历史记录 群号 文件路径")
-    
+
     group_id = arg_list[0]
     file_path = " ".join(arg_list[1:])  # 文件路径可能包含空格
-    
+
     # 验证群是否存在
     try:
         group_info = await bot.get_group_info(group_id=group_id)
@@ -105,27 +105,27 @@ async def handle_parse_history(bot: Bot, event: Event, args: Message = CommandAr
     except Exception as e:
         await parse_history.finish(f"获取群信息失败: {e}")
         return
-    
+
     # 构造会话ID
     conv_id = f"group_{group_id}"
-    
+
     # 验证文件是否存在
     if not os.path.exists(file_path):
         await parse_history.finish(f"文件不存在: {file_path}")
         return
-    
+
     # 获取bot ID
     bot_id = bot.self_id
-    
+
     try:
         # 调用解析函数
         messages = await psstate.persona_system.parse_chat_history(bot_id, file_path, conv_id)
     except Exception as e:
         await parse_history.finish(f"解析消息记录失败: {e}")
-        
+
     if not messages:
         await parse_history.finish("解析消息记录失败或记录为空")
-    
+
     # 目前只解析到这一步，后续功能待实现
     await parse_history.finish(f"成功解析消息记录，共 {len(messages)} 条消息\n群名称: {group_name}\n群号: {group_id}")
         

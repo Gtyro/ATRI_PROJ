@@ -10,8 +10,8 @@ import uuid
 import time
 from datetime import datetime
 from neomodel import (
-    StructuredNode, StringProperty, FloatProperty, 
-    DateTimeProperty, BooleanProperty, UniqueIdProperty, 
+    StructuredNode, StringProperty, FloatProperty,
+    DateTimeProperty, BooleanProperty, UniqueIdProperty,
     RelationshipTo, RelationshipFrom, StructuredRel,
     config
 )
@@ -40,7 +40,7 @@ class Memory(StructuredNode):
     weight = FloatProperty(default=1.0)
     is_permanent = BooleanProperty(default=False)
     metadata = StringProperty(default="{}")  # JSON存储为字符串
-    
+
     # 关系定义
     nodes = RelationshipTo('CognitiveNode', 'RELATED_TO', model=NodeMemoryRelationship)
 
@@ -67,7 +67,7 @@ class CognitiveNode(StructuredNode):
     created_at = DateTimeProperty(default=lambda: datetime.now())
     last_accessed = DateTimeProperty(default=lambda: datetime.now())
     is_permanent = BooleanProperty(default=False)
-    
+
     # 关系定义
     memories = RelationshipFrom('Memory', 'RELATED_TO', model=NodeMemoryRelationship)
     associated_nodes = RelationshipTo('CognitiveNode', 'ASSOCIATED_WITH', model=NodeAssociation)
@@ -77,7 +77,7 @@ class CognitiveNode(StructuredNode):
         indexes = [
             {'fields': ['conv_id', 'name'], 'unique': True}
         ]
-    
+
     def to_dict(self):
         """转换为字典表示"""
         return {

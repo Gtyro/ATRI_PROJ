@@ -110,18 +110,18 @@ class LongTermMemory:
         """
         # 构建Cypher查询
         query = """
-            MATCH (n:CognitiveNode {name: $name}) 
-            WHERE n.conv_id = $conv_id OR $conv_id IS NULL 
+            MATCH (n:CognitiveNode {name: $name})
+            WHERE n.conv_id = $conv_id OR $conv_id IS NULL
             RETURN n LIMIT 1
         """
         params = {"name": name, "conv_id": conv_id}
-        
+
         # 执行查询
         results, meta = await self.memory_repo.run_cypher(query, params)
-        
+
         if not results:
             return None
-            
+
         # 将结果转换为CognitiveNode对象并返回字典
         node = CognitiveNode.inflate(results[0][0])
         return self._node_to_dict(node)

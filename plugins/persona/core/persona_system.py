@@ -76,14 +76,14 @@ class PersonaSystem:
 
         Args:
             reply_callback: 回复回调函数
-            
+
         Raises:
             Exception: 如果任何组件初始化失败
         """
         # 初始化存储库 - 分离消息队列和记忆网络存储
         self.message_repo = MessageRepository(self.config)
         await self.message_repo.initialize()
-        
+
         self.memory_repo = MemoryRepository(self.config)
         await self.memory_repo.initialize()
 
@@ -136,7 +136,7 @@ class PersonaSystem:
 
         # 设置回调函数
         self.reply_callback = reply_callback
-        
+
         # 检查所有必需组件是否初始化成功
         initialization_checks = [
             (self.message_repo, "消息存储库"),
@@ -148,7 +148,7 @@ class PersonaSystem:
             (self.retriever, "记忆检索器"),
             (self.decay_manager, "衰减管理器")
         ]
-        
+
         for component, name in initialization_checks:
             if component is None:
                 raise RuntimeError(f"{name}初始化失败")
@@ -524,51 +524,51 @@ class PersonaSystem:
 
     async def parse_chat_history(self, bot_id: str, file_path: str, conv_id: str) -> List[Dict]:
         """解析聊天历史记录文件
-        
+
         Args:
             bot_id: 机器人的ID
             file_path: 聊天记录文件路径
             conv_id: 会话ID
-            
+
         Returns:
             消息字典列表
         """
         try:
             import re
             from datetime import datetime
-            
+
             # 检查文件是否存在
             if not os.path.exists(file_path):
                 logging.error(f"文件不存在: {file_path}")
                 return []
-            
+
             # 读取文件内容
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-                
+
             # 解析消息头部和内容
             header_pattern = r'(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2}) (.*?)\((\d+)\)'
-            headers = [(m.group(1), m.group(2), m.group(3), m.start(), m.end()) 
+            headers = [(m.group(1), m.group(2), m.group(3), m.start(), m.end())
                     for m in re.finditer(header_pattern, content)]
-            
+
             messages = []
             for i, (time_str, user_name, user_id, start_idx, end_idx) in enumerate(headers):
                 # 去除用户名中的标题（【】包围）
                 user_name = re.sub(r'【.*?】', '', user_name).strip()
-                
+
                 # 解析消息时间
                 created_at = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
-                
+
                 # 提取消息内容
                 if i < len(headers) - 1:
                     next_start = headers[i+1][3]
                     msg_content = content[end_idx:next_start].strip()
                 else:
                     msg_content = content[end_idx:].strip()
-                
+
                 # 检查消息是否来自机器人
                 is_bot = (user_id == bot_id)
-                
+
                 # 创建消息字典
                 message = {
                     "conv_id": conv_id,
@@ -581,33 +581,37 @@ class PersonaSystem:
                     "is_processed": True,  # 标记为已处理
                     "metadata": {}
                 }
-                
+
                 messages.append(message)
-            
+
             logging.info(f"解析聊天记录完成，共 {len(messages)} 条消息")
-            
+
             # 如果消息列表为空，则不进行删除
             if messages == []:
                 return messages
-            
+
             # 获取最早和最晚消息时间
             earliest_time = min(msg["created_at"] for msg in messages)
             latest_time = max(msg["created_at"] for msg in messages)
-            
+
             # 删除时间范围内的消息
             deleted_messages = await self.message_repo.delete_messages_by_time_range(
                 conv_id, earliest_time, latest_time
             )
             logging.info(f"已删除会话 {conv_id} 中 {earliest_time} 到 {latest_time} 之间的 {deleted_messages} 条消息")
-            
+
             # 删除时间范围内的记忆及关联
             await self.memory_repo.delete_memories_by_time_range(
                 conv_id, earliest_time, latest_time
             )
             logging.info(f"已删除会话 {conv_id} 中 {earliest_time} 到 {latest_time} 之间的记忆")
-            
+
+            # 添加消息到短期记忆
+            for message in messages:
+                await self.short_term.add_message(message)
+
             return messages
-            
+
         except Exception as e:
             logging.error(f"解析聊天记录失败: {e}")
             return []

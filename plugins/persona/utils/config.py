@@ -18,7 +18,7 @@ def check_config(config_path: str) -> None:
     if not os.path.exists(config_path):
         # 创建目录
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
-        
+
         # 默认配置
         default_config = {
             "api_key": os.environ.get("OPENAI_API_KEY", ""),
@@ -29,7 +29,7 @@ def check_config(config_path: str) -> None:
             "batch_interval": 30 * 60,  # 30分钟
             "node_decay_rate": 0.01,
             "queue_history_size": 40,
-            
+
             # Neo4j配置
             "neo4j_config": {
                 "uri": os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
@@ -37,7 +37,7 @@ def check_config(config_path: str) -> None:
                 "password": os.environ.get("NEO4J_PASSWORD", "neo4j")
             }
         }
-        
+
         # 如果设置了环境变量USE_POSTGRES，则使用PostgreSQL
         if os.environ.get("USE_POSTGRES", "false").lower() == "true":
             default_config["use_postgres"] = True
@@ -48,11 +48,11 @@ def check_config(config_path: str) -> None:
                 "password": os.environ.get("POSTGRES_PASSWORD", "postgres"),
                 "database": os.environ.get("POSTGRES_DB", "persona")
             }
-        
+
         # 写入配置文件
         with open(config_path, 'w', encoding='utf-8') as f:
             yaml.dump(default_config, f, default_flow_style=False, allow_unicode=True)
-            
+
         logging.info(f"已创建默认配置文件: {config_path}")
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -62,13 +62,13 @@ def load_config(config_path: str) -> Dict[str, Any]:
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-            
+
         # 环境变量优先级更高，如果设置了环境变量则覆盖配置
         if os.environ.get("OPENAI_API_KEY"):
             config["api_key"] = os.environ.get("OPENAI_API_KEY")
         if os.environ.get("OPENAI_BASE_URL"):
             config["base_url"] = os.environ.get("OPENAI_BASE_URL")
-            
+
         # 处理Neo4j环境变量
         if os.environ.get("NEO4J_URI"):
             config["neo4j_config"]["uri"] = os.environ.get("NEO4J_URI")
@@ -76,7 +76,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
             config["neo4j_config"]["user"] = os.environ.get("NEO4J_USER")
         if os.environ.get("NEO4J_PASSWORD"):
             config["neo4j_config"]["password"] = os.environ.get("NEO4J_PASSWORD")
-            
+
         return config
     except Exception as e:
         logging.error(f"加载配置文件失败: {e}")
