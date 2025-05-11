@@ -495,7 +495,7 @@ class MemoryRepository:
             # 获取所有关联关系
             query = """
                 MATCH ()-[r:ASSOCIATED_WITH]->()
-                RETURN id(r) as rel_id, r.strength as strength
+                RETURN elementId(r) as rel_id, r.strength as strength
             """
             results, meta = await self.run_cypher(query, {})
 
@@ -509,7 +509,7 @@ class MemoryRepository:
                 # 更新关联强度
                 update_query = """
                     MATCH ()-[r]-()
-                    WHERE id(r) = $rel_id
+                    WHERE elementId(r) = $rel_id
                     SET r.strength = $new_strength
                 """
                 await self.run_cypher(update_query, {"rel_id": rel_id, "new_strength": new_strength})

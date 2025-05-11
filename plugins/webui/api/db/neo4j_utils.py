@@ -161,7 +161,7 @@ async def get_associations(conv_id: str = '', node_ids: list = None, limit: int 
             query += " AND n.uid IN $node_ids AND m.uid IN $node_ids"
             params["node_ids"] = node_ids
             
-        query += " RETURN n.uid as source_id, n.name as source_name, m.uid as target_id, m.name as target_name, r.strength as strength, id(r) as id ORDER BY r.strength DESC LIMIT $limit"
+        query += " RETURN n.uid as source_id, n.name as source_name, m.uid as target_id, m.name as target_name, r.strength as strength, elementId(r) as id ORDER BY r.strength DESC LIMIT $limit"
         params["limit"] = limit
         
         results, _ = db.cypher_query(query, params)

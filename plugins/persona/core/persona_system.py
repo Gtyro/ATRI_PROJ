@@ -578,7 +578,7 @@ class PersonaSystem:
                     "created_at": created_at,
                     "is_bot": is_bot,
                     "is_direct": False,  # 默认非直接对话
-                    "is_processed": True,  # 标记为已处理
+                    "is_processed": False,  # 标记为未处理
                     "metadata": {}
                 }
 
