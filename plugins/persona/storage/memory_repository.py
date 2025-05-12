@@ -253,7 +253,7 @@ class MemoryRepository:
                 node = CognitiveNode.nodes.get_or_none(uid=node_id)
                 if node:
                     # 建立关联
-                    memory.nodes.connect(node)
+                    memory.cognitive_nodes.connect(node)
         except Exception as e:
             logging.error(f"关联节点到记忆失败: {e}")
 

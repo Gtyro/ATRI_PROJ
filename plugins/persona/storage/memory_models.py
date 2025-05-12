@@ -42,7 +42,7 @@ class Memory(StructuredNode):
     metadata = StringProperty(default="{}")  # JSON存储为字符串
 
     # 关系定义
-    nodes = RelationshipTo('CognitiveNode', 'RELATED_TO', model=NodeMemoryRelationship)
+    cognitive_nodes = RelationshipTo('CognitiveNode', 'RELATED_TO', model=NodeMemoryRelationship)
 
     def to_dict(self):
         """转换为字典表示"""
