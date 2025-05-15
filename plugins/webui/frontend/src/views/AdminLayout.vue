@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-container">
+  <div class="admin-layout-container">
     <div class="sidebar">
       <el-menu
         default-active="1"
@@ -45,7 +45,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.dashboard-container {
+.admin-layout-container {
   display: flex;
   min-height: 100vh;
 }
@@ -69,10 +69,10 @@ onMounted(() => {
   overflow-x: auto;
 }
 
-/* 可以添加其他特定于Dashboard组件的样式 */
+/* 可以添加其他特定于AdminLayout组件的样式 */
 
 @media (max-width: 768px) {
-  .dashboard-container {
+  .admin-layout-container {
     flex-direction: column;
   }
 

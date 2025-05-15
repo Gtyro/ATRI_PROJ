@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 
 // 懒加载路由组件
 const Login = () => import('@/views/LoginPage.vue')
-const Dashboard = () => import('@/views/DashboardPage.vue')
+const AdminLayout = () => import('@/views/AdminLayout.vue')
 const DBAdmin = () => import('@/views/DBAdmin.vue')
 const MemoryAdmin = () => import('@/views/MemoryAdmin.vue')
 
@@ -20,7 +20,7 @@ const routes = [
   },
   {
     path: '/dashboard',
-    component: Dashboard,
+    component: AdminLayout,
     meta: { requiresAuth: true },
     children: [
       {
