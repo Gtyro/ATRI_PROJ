@@ -15,7 +15,7 @@ router = APIRouter()
 async def waitfor_nonebot_app(app: FastAPI):
 
     # 获取静态文件路径
-    static_webui_path = Path(__file__).parent.parent.parent / "static" / "webui"
+    static_webui_path = (Path(__file__).parent.parent.parent.parent / "static" / "webui").resolve()
 
     # 挂载静态文件
     app.mount("/", StaticFiles(directory=static_webui_path, html=True), name="webui")

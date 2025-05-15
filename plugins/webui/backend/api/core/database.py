@@ -2,7 +2,7 @@ from tortoise import Tortoise
 from fastapi import HTTPException
 import logging
 from .config import settings
-from plugins.webui.api.db.neo4j_utils import initialize_neo4j, close_neo4j
+from ..db.neo4j_utils import initialize_neo4j, close_neo4j
 from .shared import table_to_model_map
 
 
@@ -36,7 +36,7 @@ async def initialize_tortoise():
 
         await Tortoise.init(
             db_url=db_url,
-            modules={'models': ['plugins.persona.storage.message_models', 'plugins.persona.storage.memory_models', 'plugins.webui.api.db.models']}
+            modules={'models': ['plugins.persona.storage.message_models', 'plugins.persona.storage.memory_models', 'plugins.webui.backend.api.db.models']}
         )
         await build_table_model_map()
         logging.info(f"Tortoise ORM已初始化: {db_url}")

@@ -33,7 +33,7 @@ def create_app():
         allow_headers=["*"],
     )
 
-    static_webui_path = Path(__file__).parent.parent / "static" / "webui"
+    static_webui_path = (Path(__file__).parent.parent.parent / "static" / "webui").resolve()
 
     # 挂载静态文件
     fastapi_app.mount("/webui", StaticFiles(directory=static_webui_path, html=True), name="webui")
