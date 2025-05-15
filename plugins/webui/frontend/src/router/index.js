@@ -6,6 +6,7 @@ const Login = () => import('@/views/LoginPage.vue')
 const AdminLayout = () => import('@/views/AdminLayout.vue')
 const DBAdmin = () => import('@/views/DBAdmin.vue')
 const MemoryAdmin = () => import('@/views/MemoryAdmin.vue')
+const DashboardOverview = () => import('@/views/dashboard/DashboardOverview.vue')
 
 // 路由配置
 const routes = [
@@ -25,7 +26,12 @@ const routes = [
     children: [
       {
         path: '',
-        redirect: '/dashboard/db-admin'
+        redirect: '/dashboard/overview'
+      },
+      {
+        path: 'overview',
+        component: DashboardOverview,
+        meta: { requiresAuth: true }
       },
       {
         path: 'db-admin',

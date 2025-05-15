@@ -6,6 +6,10 @@
         class="sidebar-menu"
         router
       >
+        <el-menu-item index="/dashboard/overview">
+          <el-icon><DataBoard /></el-icon>
+          <span>仪表盘</span>
+        </el-menu-item>
         <el-menu-item index="/dashboard/db-admin">
           <el-icon><Menu /></el-icon>
           <span>数据库管理</span>
@@ -30,7 +34,7 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Menu, Document } from '@element-plus/icons-vue'
+import { Menu, Document, DataBoard } from '@element-plus/icons-vue'
 import Navbar from '@/components/NavbarHeader.vue'
 
 const router = useRouter()
@@ -57,7 +61,7 @@ onMounted(() => {
 }
 
 .sidebar {
-  width: 20%;
+  width: 200px;
   background-color: #304156;
   color: #fff;
   padding: 20px 0;

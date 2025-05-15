@@ -1,8 +1,5 @@
 <template>
   <div class="header">
-    <div class="logo">
-      <h1>ATRI管理面板</h1>
-    </div>
     <div class="user-info" v-if="authStore.user">
       <el-dropdown @command="handleCommand">
         <span class="el-dropdown-link">
