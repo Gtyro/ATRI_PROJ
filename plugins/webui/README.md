@@ -62,34 +62,41 @@ python run.py
 ## 项目结构
 
 ```
-├── api/                  # 后端API代码
-│   ├── __init__.py       # 应用实例和根路由
-│   ├── main.py           # API启动入口
-│   ├── auth/             # 认证相关模块
-│   │   ├── __init__.py   # 导出路由
-│   │   ├── models.py     # 认证数据模型
-│   │   ├── router.py     # 认证路由
-│   │   └── utils.py      # 认证工具函数
-│   ├── core/             # 核心功能模块
-│   │   ├── __init__.py   # 导出配置
-│   │   ├── config.py     # 配置
-│   │   └── database.py   # 数据库连接和基本操作
-│   └── db/               # 数据库操作相关模块
-│       ├── __init__.py   # 导出路由
-│       ├── models.py     # 数据库操作数据模型
-│       ├── router.py     # 数据库操作路由
-│       └── utils.py      # 数据库操作工具函数
+├── backend/              # 后端代码 
+│   ├── __init__.py       # Backend package initialization
+│   ├── api/              # FastAPI应用和路由
+│   │   ├── __init__.py   # API modules initialization
+│   │   ├── main.py       # API entry point
+│   │   ├── auth/         # Authentication modules
+│   │   ├── core/         # Core modules (e.g., config, database)
+│   │   └── db/           # Database operations modules
+│   ├── init_db.py        # Database initialization script
+│   ├── requirements.txt  # Python dependencies for backend
+│   └── test_api.py       # API tests
+├── frontend/             # 前端代码 (Vue 3 + Element Plus)
+│   ├── public/           # Static assets for frontend
+│   ├── src/              # Frontend source code
+│   │   ├── assets/       # Assets like images, fonts
+│   │   ├── components/   # Vue components
+│   │   ├── router/       # Vue router configuration
+│   │   ├── stores/       # State management (e.g., Pinia)
+│   │   ├── utils/        # Utility functions
+│   │   ├── views/        # Vue views/pages
+│   │   ├── App.vue       # Main Vue application component
+│   │   └── main.js       # Frontend entry point
+│   ├── .gitignore        # Git ignore file for frontend
+│   ├── index.html        # Main HTML file for frontend SPA
+│   ├── package.json      # Frontend dependencies and scripts
+│   ├── vite.config.js    # Vite configuration
+│   └── README.md         # Frontend specific README (if any)
 ├── static/               # 静态文件
-│   └── webui/            # 前端代码
-│       ├── css/          # 样式文件
-│       ├── js/           # JavaScript文件
-│       │   ├── components/   # Vue组件
-│       │   └── views/        # Vue视图
-│       └── index.html    # HTML入口
-├── requirements.txt      # Python依赖
-├── init_db.py            # 初始化数据库脚本
-├── run.py                # 启动脚本
-└── README.md             # 说明文档
+│   └── webui/            # 静态资源
+│       ├── assets/
+│       └── index.html
+├── __init__.py           # webui插件模块初始化文件
+├── todo                  # TODO 任务列表文件
+├── .cursorignore         # Cursor ignore file
+└── README.md             # 本说明文档
 ```
 
 ## API 文档
