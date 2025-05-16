@@ -9,6 +9,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from .core.config import settings
 from .auth import auth_router
 from .db import db_router
+from .dashboard import dashboard_router
 from .auth.utils import authenticate_user, create_access_token
 from datetime import timedelta
 
@@ -41,6 +42,7 @@ def create_app():
     # 添加路由
     fastapi_app.include_router(auth_router)
     fastapi_app.include_router(db_router)
+    fastapi_app.include_router(dashboard_router)
 
     return fastapi_app
 

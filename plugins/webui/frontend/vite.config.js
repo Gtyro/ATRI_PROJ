@@ -34,6 +34,10 @@ export default defineConfig({
       '/db': {
         target: 'http://localhost:8080', // 后端API地址
         changeOrigin: true
+      },
+      '/api': {
+        target: 'http://localhost:8080', // 后端API地址
+        changeOrigin: true
       }
     }
   },

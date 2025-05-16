@@ -13,6 +13,7 @@ driver = get_driver()
 try:
     # from .run import main as run_webui
     from .api import create_app, auth_router, db_router
+    from .api.dashboard import dashboard_router
     from .api.core.config import settings
 except ImportError as e:
     logger.error(f"无法导入WebUI模块: {e}")
@@ -36,6 +37,7 @@ async def start_webui():
         # 添加路由
         nonebot_app.include_router(auth_router)
         nonebot_app.include_router(db_router)
+        nonebot_app.include_router(dashboard_router)
         await waitfor_nonebot_app(nonebot_app)
 
         logger.success("WebUI管理面板已启动，访问 http://127.0.0.1:8080/webui")

@@ -16,10 +16,7 @@ async def waitfor_nonebot_app(app: FastAPI):
 
     # 获取静态文件路径
     static_webui_path = (Path(__file__).parent.parent.parent.parent / "static" / "webui").resolve()
-
-    # 挂载静态文件
-    app.mount("/", StaticFiles(directory=static_webui_path, html=True), name="webui")
-
+    
     # 初始化数据库连接
     await initialize_database()
     
@@ -27,3 +24,13 @@ async def waitfor_nonebot_app(app: FastAPI):
     @app.on_event("shutdown")
     async def shutdown_db_client():
         await close_database()
+        
+    # 将静态文件挂载放在最后，确保API路由优先级更高
+    # 修改挂载路径为"/webui"，避免干扰API路由
+    app.mount("/webui", StaticFiles(directory=static_webui_path, html=True), name="static_webui")
+    
+    # 添加一个重定向路由，使根路径重定向到/webui
+    @app.get("/")
+    async def redirect_to_webui():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/webui")
