@@ -25,9 +25,9 @@ class DBManager:
             if module not in self._registered_module_set:
                 self._registered_models.append((app_name, module))
                 self._registered_module_set.add(module)
-                logging.info(f"已注册模型模块: {module}")
+                logging.debug(f"已注册模型模块: {module}")
             else:
-                logging.debug(f"模型模块已存在，跳过注册: {module}")
+                logging.warning(f"模型模块已存在，跳过注册: {module}")
 
     def set_db_url(self, db_url: str) -> None:
         """设置数据库URL"""
@@ -59,8 +59,7 @@ class DBManager:
             modules_dict[app_name].append(module)
 
         try:
-            logging.info(f"开始初始化数据库: {self._db_url}")
-            logging.info(f"注册的模块: {self._registered_module_set}")
+            logging.debug(f"开始初始化数据库: {self._db_url}")
             
             await Tortoise.init(
                 db_url=self._db_url,
@@ -68,7 +67,7 @@ class DBManager:
             )
             
             if generate_schemas:
-                logging.info(f"正在生成数据库表结构...")
+                logging.debug(f"正在生成数据库表结构...")
                 await Tortoise.generate_schemas()
                 
             # 动态导入，避免循环引用
@@ -87,7 +86,7 @@ class DBManager:
                 logging.warning("无法导入table_to_model_map，跳过表映射构建")
                 
             self._initialized = True
-            logging.info(f"数据库初始化成功: {self._db_url}")
+            logging.info(f"数据库初始化成功")
             
         except Exception as e:
             logging.error(f"数据库初始化失败: {e}")

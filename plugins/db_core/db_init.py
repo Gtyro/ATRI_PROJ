@@ -23,16 +23,12 @@ async def initialize_database(db_url=None, force=False):
     """
     # 如果已初始化且不强制重新初始化，则跳过
     if db_manager.is_initialized() and not force:
-        logging.info("数据库已初始化，跳过初始化过程")
+        logging.warning("数据库已初始化，跳过初始化过程")
         return True
         
     # 使用提供的URL或默认URL
     actual_db_url = db_url or DEFAULT_DB_URL
     db_manager.set_db_url(actual_db_url)
-    
-    # 输出已注册的模型列表
-    registered_modules = db_manager.get_registered_modules()
-    logging.info(f"已注册的数据库模型模块: {', '.join(registered_modules)}")
     
     # 初始化数据库
     try:

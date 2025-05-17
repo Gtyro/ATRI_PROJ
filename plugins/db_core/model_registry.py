@@ -24,6 +24,6 @@ def register_all_models():
     
     # 记录已注册的模型
     registered_modules = db_manager.get_registered_modules()
-    logging.info(f"已注册所有数据库模型: {', '.join(registered_modules)}")
+    logging.debug(f"已注册全部 {len(registered_modules)} 个数据库模型")
     
     return registered_modules 

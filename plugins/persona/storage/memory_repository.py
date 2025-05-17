@@ -57,7 +57,7 @@ class MemoryRepository:
             # 创建约束和索引
             await self._setup_constraints()
 
-            logging.info("记忆网络数据库已初始化")
+            logging.debug("记忆网络数据库已初始化")
         except Exception as e:
             logging.error(f"记忆网络数据库初始化失败: {e}")
             raise RuntimeError(f"Neo4j初始化失败: {e}")
@@ -77,7 +77,7 @@ class MemoryRepository:
                 ON (n.conv_id, n.name)
             """)
 
-            logging.info("Neo4j约束和索引设置完成")
+            logging.debug("Neo4j约束和索引设置完成")
         except Exception as e:
             logging.error(f"设置Neo4j约束和索引失败: {e}")
 

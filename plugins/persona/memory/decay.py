@@ -29,7 +29,7 @@ class DecayManager:
         try:
             # 检查并初始化配置数据
             await self.load_next_decay_time()
-            logging.info("衰减管理器初始化完成")
+            logging.debug("衰减管理器初始化完成")
         except Exception as e:
             logging.error(f"衰减管理器初始化失败: {e}")
             raise

@@ -72,7 +72,7 @@ async def init_persona_system():
             # 初始化数据库和组件
             await psstate.persona_system.initialize(reply_callback=persona_callback)
             psstate.PERSONA_SYSTEM_ENABLED = True
-            logging.info("人格系统初始化成功")
+            logging.debug("人格系统初始化成功")
         except Exception as e:
             logging.error(f"人格系统初始化失败，功能将被禁用: {e}", exc_info=True)
 

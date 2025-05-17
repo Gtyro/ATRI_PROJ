@@ -38,7 +38,7 @@ class AIProcessor:
         try:
             from openai import AsyncOpenAI
             self._client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
-            logging.info("OpenAI客户端初始化成功")
+            logging.debug("OpenAI客户端初始化成功")
         except ImportError:
             logging.error("未安装openai库，请使用pip install openai安装")
             raise ImportError("未安装openai库，请使用pip install openai安装")

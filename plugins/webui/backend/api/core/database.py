@@ -24,7 +24,7 @@ async def initialize_database_system():
         # 初始化Neo4j
         await initialize_neo4j()
         
-        logging.info(f"所有数据库连接已初始化，WebUI使用: {DB_URL}")
+        logging.info(f"所有数据库连接已初始化")
     except Exception as e:
         logging.error(f"数据库初始化失败: {e}")
         raise HTTPException(status_code=500, detail=f"数据库连接错误: {str(e)}")
@@ -35,7 +35,6 @@ async def register_models():
         global DB_URL
         # 设置数据库URL
         DB_URL = f"sqlite://{settings.DATABASE_PATH}"
-        logging.info(f"WebUI设置数据库路径: {settings.DATABASE_PATH}")
     except Exception as e:
         logging.error(f"WebUI数据库设置失败: {e}")
         raise HTTPException(status_code=500, detail=f"数据库设置错误: {str(e)}")

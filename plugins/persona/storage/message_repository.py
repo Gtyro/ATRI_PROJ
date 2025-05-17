@@ -46,7 +46,7 @@ class MessageRepository:
         try:
             # 设置初始化状态即可
             self.is_initialized = True
-            logging.info(f"消息队列存储库准备就绪，使用数据库: {self.db_url}")
+            logging.debug(f"消息队列存储库准备就绪")
         except Exception as e:
             logging.error(f"消息队列存储库准备失败: {e}")
             raise RuntimeError(f"存储库准备失败: {e}")
