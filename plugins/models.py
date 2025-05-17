@@ -1,5 +1,7 @@
 from typing import List
+
 from tortoise import Model, fields
+
 
 class PluginConfig(Model):
     id = fields.IntField(pk=True)

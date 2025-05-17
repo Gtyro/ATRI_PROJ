@@ -1,4 +1,9 @@
+from nonebot import require
 from nonebot.plugin import PluginMetadata
+
+# 在入口点引入数据库依赖
+require("db_core")
+
 # Import backend to ensure its lifecycle hooks are registered
 from . import backend
 

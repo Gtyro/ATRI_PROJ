@@ -8,20 +8,21 @@
 4. 定期维护：自动执行记忆衰减和整理
 """
 
-import random
 import asyncio
 import logging
+import random
 
-from nonebot import on_message, on_command, get_driver
-from nonebot import require
-require("nonebot_plugin_apscheduler")
+from nonebot import get_driver, on_command, on_message, require
+from nonebot_plugin_alconna.uniseg import Target, UniMessage
 from nonebot_plugin_apscheduler import scheduler
-from nonebot_plugin_alconna.uniseg import UniMessage, MsgTarget, Target, SupportScope
 
-from .core import PersonaSystem
-from .psstate import is_enabled, persona_system
 from . import psstate
+from .core import PersonaSystem
 from .handlers import *
+from .psstate import is_enabled, persona_system
+
+# 使用require机制加载数据库插件
+require("db_core")
 
 # 获取NoneBot驱动器
 driver = get_driver()
@@ -66,6 +67,8 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
 async def init_persona_system():
     if psstate.persona_system:
         try:
+            # 模型已由db_core插件集中注册，这里不再单独注册
+            
             # 初始化数据库和组件
             await psstate.persona_system.initialize(reply_callback=persona_callback)
             psstate.PERSONA_SYSTEM_ENABLED = True

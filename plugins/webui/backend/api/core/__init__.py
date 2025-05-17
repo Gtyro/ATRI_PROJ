@@ -3,8 +3,10 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
 from .config import settings
-from .database import initialize_database, close_database
+from .database import (close_database, initialize_database_system,
+                       register_models)
 
 router = APIRouter()
 
@@ -17,8 +19,11 @@ async def waitfor_nonebot_app(app: FastAPI):
     # 获取静态文件路径
     static_webui_path = (Path(__file__).parent.parent.parent.parent / "static" / "webui").resolve()
     
-    # 初始化数据库连接
-    await initialize_database()
+    # 先注册所有模型，但不初始化
+    await register_models()
+    
+    # 初始化数据库连接，这将应用所有已注册的模型
+    await initialize_database_system()
     
     # 注册关闭事件，确保应用关闭时关闭数据库连接
     @app.on_event("shutdown")

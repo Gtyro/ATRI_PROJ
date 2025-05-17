@@ -4,11 +4,13 @@
 """
 
 import logging
-from typing import Dict, List, Optional, Any
-from tortoise import Tortoise
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+from tortoise import Tortoise
 
 from .message_models import MessageQueue
+
 
 class MessageRepository:
     """消息队列存储库，处理短期记忆的存储和检索"""
@@ -40,23 +42,20 @@ class MessageRepository:
             return f"sqlite://{db_path}"
 
     async def initialize(self) -> None:
-        """初始化数据库连接和模型"""
+        """初始化存储库，仅标记状态"""
         try:
-            await Tortoise.init(
-                db_url=self.db_url,
-                modules={"models": ["plugins.persona.storage.message_models", "plugins.models"]}
-            )
-            await Tortoise.generate_schemas()
+            # 设置初始化状态即可
             self.is_initialized = True
-            logging.info(f"消息队列数据库已初始化: {self.db_url}")
+            logging.info(f"消息队列存储库准备就绪，使用数据库: {self.db_url}")
         except Exception as e:
-            logging.error(f"消息队列数据库初始化失败: {e}")
-            raise RuntimeError(f"数据库初始化失败: {e}")
+            logging.error(f"消息队列存储库准备失败: {e}")
+            raise RuntimeError(f"存储库准备失败: {e}")
 
     async def close(self) -> None:
         """关闭数据库连接"""
         if self.is_initialized:
-            await Tortoise.close_connections()
+            # 我们不在这里关闭连接，因为可能有其他组件还在使用
+            # 连接将在程序终止时由db_manager关闭
             self.is_initialized = False
             logging.info("消息队列数据库连接已关闭")
 
