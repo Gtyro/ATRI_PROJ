@@ -86,7 +86,7 @@ class DBManager:
                 logging.warning("无法导入table_to_model_map，跳过表映射构建")
                 
             self._initialized = True
-            logging.info(f"数据库初始化成功")
+            logging.debug(f"数据库初始化成功")
             
         except Exception as e:
             logging.error(f"数据库初始化失败: {e}")

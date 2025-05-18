@@ -25,7 +25,6 @@ class ShortTermMemory:
         """
         self.message_repo = message_repo
         self.config = config
-        logging.info("短期记忆管理器已创建")
 
     async def add_message(self, message_data: Dict) -> None:
         """添加消息到短期记忆

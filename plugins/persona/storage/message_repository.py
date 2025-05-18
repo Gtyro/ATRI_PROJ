@@ -24,7 +24,6 @@ class MessageRepository:
         self.config = config
         self.db_url = self._get_db_url()
         self.is_initialized = False
-        logging.info("消息队列存储库已创建，等待初始化")
 
     def _get_db_url(self) -> str:
         """根据配置获取数据库连接URL"""

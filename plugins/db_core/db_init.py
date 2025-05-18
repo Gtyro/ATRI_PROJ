@@ -33,7 +33,6 @@ async def initialize_database(db_url=None, force=False):
     # 初始化数据库
     try:
         await db_manager.initialize()
-        logging.info(f"数据库初始化成功: {actual_db_url}")
         return True
     except Exception as e:
         logging.error(f"数据库初始化失败: {e}")

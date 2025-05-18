@@ -22,7 +22,6 @@ class DecayManager:
         self.decay_rate = decay_rate
         self.plugin_name = "persona"  # 插件名称
         self.max_nodes_per_conv = 1000  # 每个会话保留的最大节点数
-        logging.info(f"记忆衰减管理器已创建，衰减率: {decay_rate}")
 
     async def initialize(self):
         """初始化衰减管理器，确保配置数据存在"""

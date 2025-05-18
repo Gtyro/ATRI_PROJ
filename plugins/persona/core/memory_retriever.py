@@ -18,7 +18,6 @@ class LongTermRetriever:
             memory_repo: 记忆存储库
         """
         self.memory_repo = memory_repo
-        logging.info("记忆检索器已创建")
 
     async def search_for_memories(self, query: str, user_id: Optional[str] = None, limit: int = 5, conv_id: Optional[str] = None) -> List[Dict]:
         """搜索相关记忆

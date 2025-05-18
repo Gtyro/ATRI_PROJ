@@ -21,7 +21,6 @@ class LongTermMemory:
         self.memory_repo = memory_repo
         self.config = config or {}
         self.decay_rate = self.config.get("node_decay_rate", 0.01)
-        logging.info("长期记忆管理器已创建")
 
     async def store_memories(self, conv_id: str, memories: List[Dict]) -> List[str]:
         """存储记忆列表

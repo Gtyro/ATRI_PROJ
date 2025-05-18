@@ -21,7 +21,6 @@ class MemoryRepository:
     def __init__(self, config_dict: Dict[str, Any]):
         """初始化记忆网络存储库"""
         self.config = config_dict
-        logging.info("记忆网络存储库已创建，等待初始化")
 
     async def _run_sync(self, func, *args, **kwargs):
         """在事件循环中运行同步函数"""

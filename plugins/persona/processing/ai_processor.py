@@ -347,4 +347,3 @@ class AIProcessor:
             callback: 回调函数，需要接受query, user_id, conv_id参数
         """
         self.memory_retrieval_callback = callback
-        logging.info("已设置记忆检索回调函数") 

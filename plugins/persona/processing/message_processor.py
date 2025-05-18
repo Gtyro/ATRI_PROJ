@@ -32,8 +32,6 @@ class MessageProcessor:
         # 群组配置
         self.group_config = GroupPluginConfig
 
-        logging.info("消息处理器初始化成功")
-
     async def extract_topics_from_messages(self, conv_id: str, messages: List[Dict]) -> List[Dict]:
         """从消息中提取话题
 
