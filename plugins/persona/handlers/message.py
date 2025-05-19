@@ -2,15 +2,19 @@ import asyncio
 import logging
 import os
 import random
-from nonebot.adapters.onebot.v11 import Bot, Event, Message
-from nonebot import on_message, on_command, get_driver
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent
+
+from nonebot import get_driver, on_command, on_message
+from nonebot.adapters.onebot.v11 import (Bot, Event, GroupMessageEvent,
+                                         Message, PrivateMessageEvent)
 from nonebot.internal.params import Depends
-from nonebot_plugin_uninfo import Uninfo
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
-from ..psstate import is_enabled
+from nonebot_plugin_uninfo import Uninfo
+
 from .. import psstate
+from ..psstate import is_enabled
+
+
 def UserName():
     """
     用户名称依赖函数

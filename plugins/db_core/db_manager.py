@@ -9,7 +9,7 @@ class DBManager:
     _initialized = False
     _db_url = None
     _registered_models = []
-    
+
     # 内部使用，跟踪已注册模块的集合
     _registered_module_set = set()
 
@@ -34,7 +34,7 @@ class DBManager:
         if self._initialized:
             logging.warning(f"数据库已初始化，忽略URL设置: {db_url}")
             return
-            
+
         if self._db_url != db_url:
             self._db_url = db_url
             logging.info(f"已设置数据库URL: {db_url}")
@@ -47,7 +47,7 @@ class DBManager:
 
         if not self._db_url:
             raise ValueError("数据库URL未设置，请先调用set_db_url")
-            
+
         if not self._registered_models:
             logging.warning("没有注册任何模型，数据库将不会创建任何表")
 
@@ -60,16 +60,16 @@ class DBManager:
 
         try:
             logging.debug(f"开始初始化数据库: {self._db_url}")
-            
+
             await Tortoise.init(
                 db_url=self._db_url,
                 modules=modules_dict
             )
-            
+
             if generate_schemas:
                 logging.debug(f"正在生成数据库表结构...")
                 await Tortoise.generate_schemas()
-                
+
             # 动态导入，避免循环引用
             try:
                 from plugins.webui.backend.api.core.shared import \
@@ -80,14 +80,14 @@ class DBManager:
                 for model_name, model in models.items():
                     table_name = model._meta.db_table
                     table_to_model_map[table_name] = model
-                    
+
                 logging.info(f"构建表名到模型的映射完成，共 {len(table_to_model_map)} 个表")
             except ImportError:
                 logging.warning("无法导入table_to_model_map，跳过表映射构建")
-                
+
             self._initialized = True
             logging.debug(f"数据库初始化成功")
-            
+
         except Exception as e:
             logging.error(f"数据库初始化失败: {e}")
             raise
@@ -98,11 +98,11 @@ class DBManager:
             await Tortoise.close_connections()
             self._initialized = False
             logging.info("数据库连接已关闭")
-            
+
     def is_initialized(self) -> bool:
         """返回数据库是否已初始化"""
         return self._initialized
-        
+
     def get_registered_modules(self) -> Set[str]:
         """返回已注册的模块集合"""
         return self._registered_module_set.copy()

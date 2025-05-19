@@ -35,8 +35,8 @@
           <p class="example-description">{{ example.description }}</p>
         </div>
       </div>
-      <el-button 
-        size="small" 
+      <el-button
+        size="small"
         @click="showExamples = false"
         style="margin-top: 10px"
       >
@@ -44,9 +44,9 @@
       </el-button>
     </div>
     <div v-else>
-      <el-button 
-        size="small" 
-        type="info" 
+      <el-button
+        size="small"
+        type="info"
         @click="showExamples = true"
         style="margin-top: 10px"
       >
@@ -117,29 +117,29 @@ const executeQuery = async () => {
   loading.value = true
   try {
     const response = await executeCypherQuery(query.value)
-    
+
     // 处理Neo4j查询结果
     if (response.data && response.data.results) {
       const rows = []
       const columns = new Set()
-      
+
       // 如果是返回整个节点的查询
-      if (response.data.results.length > 0 && 
-          response.data.results[0].length === 1 && 
-          typeof response.data.results[0][0] === 'object' && 
+      if (response.data.results.length > 0 &&
+          response.data.results[0].length === 1 &&
+          typeof response.data.results[0][0] === 'object' &&
           response.data.results[0][0]?.properties) {
-        
+
         response.data.results.forEach(row => {
           if (row[0] && row[0].properties) {
-            const nodeData = { 
-              ...row[0].properties, 
+            const nodeData = {
+              ...row[0].properties,
               id: row[0].identity ? row[0].identity.toString() : 'unknown',
               labels: JSON.stringify(row[0].labels || [])
             }
-            
+
             // 收集所有可能的列
             Object.keys(nodeData).forEach(key => columns.add(key))
-            
+
             rows.push(nodeData)
           }
         })
@@ -150,7 +150,7 @@ const executeQuery = async () => {
             columns.add(meta.name)
           }
         })
-        
+
         response.data.results.forEach(row => {
           const rowData = {}
           row.forEach((value, index) => {
@@ -167,12 +167,12 @@ const executeQuery = async () => {
           rows.push(rowData)
         })
       }
-      
+
       const result = {
         columns: Array.from(columns),
         rows: rows
       }
-      
+
       // 调用回调函数，传递查询结果
       props.onResult(result)
       ElMessage.success('查询执行成功')

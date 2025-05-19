@@ -1,13 +1,14 @@
 import logging
-from nonebot import on_message, on_command, get_driver
+
+from nonebot import get_driver, on_command, on_message
 from nonebot.adapters.onebot.v11 import Bot, Event, Message
+from nonebot.exception import MatcherException
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
-from nonebot.exception import MatcherException
 from nonebot.typing import T_State
 
-from ..psstate import is_enabled
 from .. import psstate
+from ..psstate import is_enabled
 
 # 设置拟人测试指令
 test_persona = on_command("测试", aliases={"测试人格"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)

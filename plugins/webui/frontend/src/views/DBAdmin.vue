@@ -4,9 +4,9 @@
       <template #header>
         <div class="card-header">
           <h3>数据库管理</h3>
-          <el-select 
-            v-model="dataSource" 
-            placeholder="选择数据源" 
+          <el-select
+            v-model="dataSource"
+            placeholder="选择数据源"
             style="width: 150px"
             @change="handleDataSourceChange"
           >
@@ -172,7 +172,7 @@ const sqlPresetQueries = ref({
       {
         name: '用户消息统计',
         description: '按用户统计消息数量',
-        query: `SELECT user_name, COUNT(*) as message_count FROM message_queue 
+        query: `SELECT user_name, COUNT(*) as message_count FROM message_queue
                 GROUP BY user_name ORDER BY message_count DESC LIMIT 20`
       }
     ]
@@ -187,15 +187,15 @@ const neo4jPresetQueries = ref({
       {
         name: '活跃节点',
         description: '显示最活跃的30个认知节点',
-        query: `MATCH (n:CognitiveNode) 
-                RETURN n.uid as id, n.name, n.conv_id, n.act_lv, n.created_at 
+        query: `MATCH (n:CognitiveNode)
+                RETURN n.uid as id, n.name, n.conv_id, n.act_lv, n.created_at
                 ORDER BY n.act_lv DESC LIMIT 30`
       },
       {
         name: '会话统计',
         description: '按会话ID统计节点数量',
-        query: `MATCH (n:CognitiveNode) 
-                RETURN n.conv_id as conversation_id, COUNT(n) as node_count 
+        query: `MATCH (n:CognitiveNode)
+                RETURN n.conv_id as conversation_id, COUNT(n) as node_count
                 ORDER BY node_count DESC`
       }
     ]
@@ -206,15 +206,15 @@ const neo4jPresetQueries = ref({
       {
         name: '强关联',
         description: '显示关联强度最高的30个关系',
-        query: `MATCH (n:CognitiveNode)-[r:ASSOCIATED_WITH]->(m:CognitiveNode) 
-                RETURN n.name as source, m.name as target, r.strength as strength 
+        query: `MATCH (n:CognitiveNode)-[r:ASSOCIATED_WITH]->(m:CognitiveNode)
+                RETURN n.name as source, m.name as target, r.strength as strength
                 ORDER BY r.strength DESC LIMIT 30`
       },
       {
         name: '关系最多的节点',
         description: '显示拥有最多关系的10个节点',
-        query: `MATCH (n:CognitiveNode)-[r:ASSOCIATED_WITH]->() 
-                RETURN n.name as node_name, COUNT(r) as relationship_count 
+        query: `MATCH (n:CognitiveNode)-[r:ASSOCIATED_WITH]->()
+                RETURN n.name as node_name, COUNT(r) as relationship_count
                 ORDER BY relationship_count DESC LIMIT 10`
       }
     ]
@@ -240,7 +240,7 @@ const fetchDataSources = async () => {
       try {
         const response = await getNodeLabels()
         const labels = []
-        
+
         if (response.data && response.data.results) {
           response.data.results.forEach(row => {
             if (row[0] && Array.isArray(row[0])) {
@@ -252,7 +252,7 @@ const fetchDataSources = async () => {
             }
           })
         }
-        
+
         currentTables.value = labels
       } catch (e) {
         console.error('获取Neo4j标签失败:', e)
@@ -304,14 +304,14 @@ const runPresetCypher = (query) => {
       if (response.data && response.data.results) {
         const rows = []
         const columns = new Set()
-        
+
         // 处理返回特定属性的查询结果
         response.data.metadata.forEach(meta => {
           if (meta && meta.name) {
             columns.add(meta.name)
           }
         })
-        
+
         response.data.results.forEach(row => {
           const rowData = {}
           row.forEach((value, index) => {
@@ -321,13 +321,13 @@ const runPresetCypher = (query) => {
           })
           rows.push(rowData)
         })
-        
+
         queryResult.value = {
           columns: Array.from(columns),
           rows: rows
         }
       }
-      
+
       ElMessage.success('查询执行成功')
     })
     .catch(error => {

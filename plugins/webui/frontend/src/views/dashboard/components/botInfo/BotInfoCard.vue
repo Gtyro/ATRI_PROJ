@@ -5,7 +5,7 @@
       <span class="bot-id">{{ bot.id }}</span>
       <el-tag size="small" type="success" class="status-tag">在线</el-tag>
     </div>
-    
+
     <div class="bot-info-grid">
       <!-- 第一行：平台和昵称 -->
       <div class="info-row">
@@ -19,7 +19,7 @@
             <div class="info-value">{{ bot.platform }}</div>
           </div>
         </div>
-        
+
         <!-- 昵称 -->
         <div class="info-item">
           <div class="info-icon nickname-icon">
@@ -31,7 +31,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 第二行：群组数量和好友数量 -->
       <div class="info-row">
         <!-- 群组数量 -->
@@ -44,7 +44,7 @@
             <div class="info-value">{{ bot.group_count }}</div>
           </div>
         </div>
-        
+
         <!-- 好友数量 -->
         <div class="info-item">
           <div class="info-icon friend-icon">
@@ -56,7 +56,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 第三行：今日插件调用和今日消息数 -->
       <div class="info-row">
         <!-- 今日插件调用 -->
@@ -69,7 +69,7 @@
             <div class="info-value">{{ bot.plugin_calls_today }}</div>
           </div>
         </div>
-        
+
         <!-- 今日消息数 -->
         <div class="info-item">
           <div class="info-icon message-icon">
@@ -81,7 +81,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 第四行：运行时间 (单独一行) -->
       <div class="info-row single-item">
         <!-- 运行时间 -->
@@ -116,6 +116,7 @@ defineProps({
   margin-bottom: 16px;
   flex-shrink: 0;
   height: auto; /* 自适应高度 */
+  box-sizing: border-box; /* 添加盒模型设置 */
 }
 
 /* 卡片头部样式 */
@@ -138,10 +139,14 @@ defineProps({
   font-weight: 600;
   color: #303133;
   flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-tag {
   margin-left: 8px;
+  flex-shrink: 0;
 }
 
 /* 网格布局改为固定行布局 */
@@ -149,17 +154,21 @@ defineProps({
   display: flex;
   flex-direction: column;
   gap: 8px; /* 减少行间距 */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .info-row {
   display: flex;
   gap: 8px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .info-row .info-item {
   flex: 1;
   min-width: 0; /* 避免内容溢出 */
+  box-sizing: border-box;
 }
 
 .info-row.single-item {
@@ -178,6 +187,8 @@ defineProps({
   padding: 8px; /* 减小内边距 */
   border-radius: 6px;
   transition: all 0.3s;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .info-item:hover {

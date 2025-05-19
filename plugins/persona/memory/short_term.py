@@ -5,10 +5,11 @@
 """
 
 import logging
-from typing import Dict, List, Optional, Any
 from time import time
+from typing import Any, Dict, List, Optional
 
 from ..storage.message_repository import MessageRepository
+
 
 class ShortTermMemory:
     """短期记忆管理器

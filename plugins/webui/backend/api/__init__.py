@@ -1,17 +1,19 @@
 import logging
 import os
-from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, status, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.security import OAuth2PasswordRequestForm
-
-from .core.config import settings
-from .auth import auth_router
-from .db import db_router
-from .dashboard import dashboard_router
-from .auth.utils import authenticate_user, create_access_token
 from datetime import timedelta
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+
+from .auth import auth_router
+from .auth.utils import authenticate_user, create_access_token
+from .core.config import settings
+from .dashboard import dashboard_router
+from .db import db_router
+
 
 # 创建FastAPI应用的工厂函数
 def create_app():

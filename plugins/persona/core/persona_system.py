@@ -11,24 +11,27 @@
 - conversation: 会话，指一个群组或者两个用户之间的私聊
 - node: 节点，指会话中的关键词(概念、对象、主题、标签等含义)，用来检索长期记忆
 '''
+import logging
 import os
+import random
 import re
 import time
-import logging
-import random
-from typing import Dict, List, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
+
 import yaml
 
-from ..utils.config import check_config, load_config
-from ..storage.message_repository import MessageRepository
-from ..storage.memory_repository import MemoryRepository
-from ..memory.short_term import ShortTermMemory
-from ..memory.long_term import LongTermMemory
-from ..memory.decay import DecayManager
-from ..processing.message_processor import MessageProcessor
-from .memory_retriever import LongTermRetriever
 from plugins.models import GroupPluginConfig
+
+from ..memory.decay import DecayManager
+from ..memory.long_term import LongTermMemory
+from ..memory.short_term import ShortTermMemory
 from ..processing.ai_processor import AIProcessor
+from ..processing.message_processor import MessageProcessor
+from ..storage.memory_repository import MemoryRepository
+from ..storage.message_repository import MessageRepository
+from ..utils.config import check_config, load_config
+from .memory_retriever import LongTermRetriever
+
 
 class PersonaSystem:
     """人格系统主类，负责协调各个子系统"""

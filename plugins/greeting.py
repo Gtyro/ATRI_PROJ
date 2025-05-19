@@ -1,9 +1,11 @@
 from nonebot import on_command, on_keyword
-from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, MessageSegment, Message
-from nonebot.typing import T_State
+from nonebot.adapters.onebot.v11 import (Bot, GroupMessageEvent, Message,
+                                         MessageEvent, MessageSegment)
 from nonebot.params import CommandArg
-from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
+from nonebot.rule import to_me
+from nonebot.typing import T_State
+
 # 注册一个问候命令处理器（使用命令方式）
 greeting_cmd = on_command("你好", aliases={"hello", "hi"}, permission=SUPERUSER, priority=5, block=True)
 

@@ -1,8 +1,10 @@
+from datetime import datetime
+from typing import Any, Dict, List
+
 from pydantic import BaseModel
-from typing import List, Dict, Any
 from tortoise import fields
 from tortoise.models import Model
-from datetime import datetime
+
 
 # Pydantic模型用于API请求/响应
 class SQLQuery(BaseModel):

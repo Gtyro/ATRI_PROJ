@@ -1,13 +1,16 @@
-from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, Message, MessageSegment
-from nonebot.params import CommandArg
-from nonebot.rule import to_me
-import httpx
 import json
-from nonebot.permission import SUPERUSER
-import pandas as pd
 import os
+
+import httpx
+import pandas as pd
 import yaml
+from nonebot import on_command
+from nonebot.adapters.onebot.v11 import (Bot, GroupMessageEvent, Message,
+                                         MessageEvent, MessageSegment)
+from nonebot.params import CommandArg
+from nonebot.permission import SUPERUSER
+from nonebot.rule import to_me
+
 
 # 加载配置文件
 def load_config():

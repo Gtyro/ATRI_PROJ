@@ -1,7 +1,8 @@
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, Message, MessageSegment
-from nonebot.rule import to_me
+from nonebot.adapters.onebot.v11 import (Bot, GroupMessageEvent, Message,
+                                         MessageEvent, MessageSegment)
 from nonebot.permission import SUPERUSER
+from nonebot.rule import to_me
 
 # 注册帮助命令处理器
 help_cmd = on_command("帮助", aliases={"help", "菜单", "功能"},permission=SUPERUSER,rule=to_me(), priority=1, block=True)

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import logging
+import os
+from datetime import datetime
+
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBot11Adapter
-import os
-import logging
-from datetime import datetime
 
 datestr = datetime.now().strftime("%Y-%m-%d %H:%M")
 # 设置日志级别为DEBUG，方便排查问题

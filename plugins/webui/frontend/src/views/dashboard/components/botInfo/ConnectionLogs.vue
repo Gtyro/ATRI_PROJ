@@ -2,9 +2,9 @@
   <div class="connection-logs-container">
     <h4>连接日志</h4>
     <el-table :data="logs" style="width: 100%" stripe>
-      <el-table-column prop="date" label="日期" width="120"></el-table-column>
-      <el-table-column prop="account" label="账号" width="120"></el-table-column>
-      <el-table-column prop="duration" label="连接时长"></el-table-column>
+      <el-table-column prop="date" label="日期" min-width="30%"></el-table-column>
+      <el-table-column prop="account" label="账号" min-width="30%"></el-table-column>
+      <el-table-column prop="duration" label="连接时长" min-width="40%"></el-table-column>
     </el-table>
   </div>
 </template>
@@ -22,6 +22,8 @@ defineProps({
 <style scoped>
 .connection-logs-container {
   width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 h4 {
@@ -30,9 +32,20 @@ h4 {
   color: #606266;
 }
 
+:deep(.el-table th) {
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+:deep(.el-table td) {
+  font-size: 10px;
+  padding: 6px 0;
+}
+
 /* 滚动条样式 */
 .connection-logs-container::-webkit-scrollbar {
   width: 6px;
+  height: 0; /* 隐藏横向滚动条 */
 }
 
 .connection-logs-container::-webkit-scrollbar-track {

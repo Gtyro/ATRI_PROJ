@@ -1,9 +1,10 @@
 import logging
-from typing import Dict, List, Optional, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+from ..storage.memory_models import CognitiveNode, Memory
 from ..storage.memory_repository import MemoryRepository
-from ..storage.memory_models import Memory, CognitiveNode
+
 
 class LongTermRetriever:
     """记忆检索器

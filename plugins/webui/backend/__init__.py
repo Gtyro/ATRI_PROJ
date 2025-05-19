@@ -1,9 +1,10 @@
 import nonebot
-from nonebot.plugin import PluginMetadata
-from nonebot.plugin.manager import PluginManager
-from nonebot.log import logger
 from fastapi import FastAPI
 from nonebot import get_driver
+from nonebot.log import logger
+from nonebot.plugin import PluginMetadata
+from nonebot.plugin.manager import PluginManager
+
 from .api.core import waitfor_nonebot_app
 
 # 全局驱动器
@@ -12,9 +13,9 @@ driver = get_driver()
 # 导入webui运行模块
 try:
     # from .run import main as run_webui
-    from .api import create_app, auth_router, db_router
-    from .api.dashboard import dashboard_router
+    from .api import auth_router, create_app, db_router
     from .api.core.config import settings
+    from .api.dashboard import dashboard_router
 except ImportError as e:
     logger.error(f"无法导入WebUI模块: {e}")
     raise

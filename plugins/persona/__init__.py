@@ -1,6 +1,7 @@
 import inspect
-import sys
 import os
+import sys
+
 
 # 判断当前代码是否在脚本模式下执行
 def is_running_as_script():
@@ -29,8 +30,9 @@ if not is_running_as_script():
     __all__ = ["PersonaSystem"]
 else:
     # 仅导出迁移脚本所需的最小模块和函数
-    from .utils.config import load_config, check_config, save_config
-    from .storage import MemoryRepository, MessageRepository, MessageQueue, Memory, CognitiveNode, NodeAssociation
+    from .storage import (CognitiveNode, Memory, MemoryRepository,
+                          MessageQueue, MessageRepository, NodeAssociation)
+    from .utils.config import check_config, load_config, save_config
 
     __all__ = ["load_config", "check_config", "save_config", "MemoryRepository", "MessageRepository", "MessageQueue", "Memory", "CognitiveNode", "NodeAssociation"]
 

@@ -62,7 +62,7 @@ python run.py
 ## 项目结构
 
 ```
-├── backend/              # 后端代码 
+├── backend/              # 后端代码
 │   ├── __init__.py       # Backend package initialization
 │   ├── api/              # FastAPI应用和路由
 │   │   ├── __init__.py   # API modules initialization

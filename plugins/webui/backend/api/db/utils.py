@@ -1,10 +1,13 @@
-from tortoise.expressions import Q, RawSQL
-from tortoise import Tortoise
-from fastapi import HTTPException
-import re
 import logging
+import re
+
+from fastapi import HTTPException
+from tortoise import Tortoise
+from tortoise.expressions import Q, RawSQL
+
 # 改为从shared模块导入
 from ..core.shared import table_to_model_map
+
 # from ..core.database import execute_checkpoint
 
 async def execute_select_query(query: str):
@@ -156,6 +159,7 @@ def convert_id_value(id_value, pk_field):
     """根据字段名转换ID值为正确的类型"""
     try:
         from uuid import UUID
+
         # 如果id字段名包含uuid，尝试将其转换为UUID对象
         if "uuid" in pk_field.lower() and isinstance(id_value, str):
             return UUID(id_value)

@@ -1,7 +1,10 @@
 import os
+
 from tortoise import Tortoise, run_async
+
 from .api.core.config import settings
-from .api.db.models import User, Log, Statistic
+from .api.db.models import Log, Statistic, User
+
 
 async def initialize_database():
     """初始化示例数据库"""

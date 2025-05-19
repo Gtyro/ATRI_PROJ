@@ -1,16 +1,19 @@
-from fastapi import APIRouter, Depends
-
-from ..auth.utils import get_current_active_user
-from ..auth.models import User
-from .models import SQLQuery, Neo4jQuery
-from .utils import execute_select_query, get_tables, get_table_structure, execute_insert_query, execute_update_query, execute_delete_query
-from .neo4j_utils import (
-    execute_neo4j_query, get_cognitive_nodes, get_associations, 
-    get_node_by_id, create_cognitive_node, update_cognitive_node, delete_cognitive_node,
-    create_association, update_association, delete_association, get_conversations
-)
-from fastapi import Body, Path, HTTPException
 import re
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
+
+from ..auth.models import User
+from ..auth.utils import get_current_active_user
+from .models import Neo4jQuery, SQLQuery
+from .neo4j_utils import (create_association, create_cognitive_node,
+                          delete_association, delete_cognitive_node,
+                          execute_neo4j_query, get_associations,
+                          get_cognitive_nodes, get_conversations,
+                          get_node_by_id, update_association,
+                          update_cognitive_node)
+from .utils import (execute_delete_query, execute_insert_query,
+                    execute_select_query, execute_update_query,
+                    get_table_structure, get_tables)
 
 # 支持UUID模式的正则表达式
 UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
@@ -134,9 +137,9 @@ async def delete_memory_node(
 
 @router.get("/memory/associations")
 async def get_memory_associations(
-    conv_id: str = '', 
-    node_ids: str = None, 
-    limit: int = 200, 
+    conv_id: str = '',
+    node_ids: str = None,
+    limit: int = 200,
     current_user: User = Depends(get_current_active_user)
 ):
     """获取节点之间的关联数据
@@ -152,7 +155,7 @@ async def get_memory_associations(
 
 @router.post("/memory/association")
 async def create_memory_association(
-    data: dict = Body(...), 
+    data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
     """创建节点关联关系
@@ -167,15 +170,15 @@ async def create_memory_association(
     source_id = data.get("source_id")
     target_id = data.get("target_id")
     strength = data.get("strength", 1.0)
-    
+
     if not source_id or not target_id:
         raise HTTPException(status_code=400, detail="必须提供source_id和target_id")
-    
+
     return await create_association(source_id, target_id, strength)
 
 @router.put("/memory/association")
 async def update_memory_association(
-    data: dict = Body(...), 
+    data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
     """更新节点关联关系强度
@@ -190,10 +193,10 @@ async def update_memory_association(
     source_id = data.get("source_id")
     target_id = data.get("target_id")
     strength = data.get("strength")
-    
+
     if not source_id or not target_id or strength is None:
         raise HTTPException(status_code=400, detail="必须提供source_id、target_id和strength")
-    
+
     return await update_association(source_id, target_id, float(strength))
 
 @router.delete("/memory/association")
@@ -205,7 +208,7 @@ async def delete_memory_association(
     """删除节点关联关系"""
     if not source_id or not target_id:
         raise HTTPException(status_code=400, detail="必须提供source_id和target_id")
-    
+
     return await delete_association(source_id, target_id)
 
 @router.get("/memory/conversations")

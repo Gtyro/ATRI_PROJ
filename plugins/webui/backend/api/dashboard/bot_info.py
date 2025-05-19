@@ -1,12 +1,12 @@
 import random
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 import nonebot
 from fastapi import APIRouter
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
 from nonebot_plugin_uninfo import SceneType, Uninfo, get_interface
 from nonebot_plugin_uninfo.model import BasicInfo
-
+from pydantic import BaseModel
 
 # 定义API路由
 router = APIRouter(
@@ -62,19 +62,19 @@ async def get_bot_info(bot) -> BotInfo:
     group_count = 0
     friend_count = 0
     nickname = None
-    
+
     # 获取机器人ID
     bot_id = bot.self_id
-    
+
     # 获取平台
     platform = await get_platform(bot)
-    
+
     # 获取群组数量
     group_count = await get_group_list(bot, True)
-    
+
     # 获取好友数量
     friend_count = await get_friend_list(bot)
-    
+
     # 获取昵称（QQ平台）
     if platform.lower() == "onebot":
         try:
@@ -82,17 +82,17 @@ async def get_bot_info(bot) -> BotInfo:
             nickname = login_info.get("nickname", None)
         except Exception:
             pass
-    
+
     # 生成随机数据（临时）
     plugin_calls = random.randint(100, 1000)
     messages = random.randint(500, 5000)
-    
+
     # 连接日期和运行时间（临时）
     connected_date = datetime.now().strftime("%Y-%m-%d")
     hours = random.randint(1, 24)
     minutes = random.randint(0, 59)
     uptime = f"{hours}小时{minutes}分钟"
-    
+
     return BotInfo(
         id=bot_id,
         platform=platform,
@@ -110,11 +110,11 @@ async def get_bot_info(bot) -> BotInfo:
 async def get_all_bots_info():
     result = []
     bots = nonebot.get_bots()
-    
+
     for bot_id, bot in bots.items():
         bot_info = await get_bot_info(bot)
         result.append(bot_info)
-    
+
     return result
 
 # 获取连接日志的模型
@@ -128,7 +128,7 @@ class ConnectionLog(BaseModel):
 async def get_connection_logs():
     logs = []
     today = datetime.now()
-    
+
     # 生成模拟数据
     for i in range(5):
         date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -136,11 +136,11 @@ async def get_connection_logs():
         hours = random.randint(1, 24)
         minutes = random.randint(0, 59)
         duration = f"{hours}小时{minutes}分钟"
-        
+
         logs.append(ConnectionLog(
             date=date,
             account=account,
             duration=duration
         ))
-    
+
     return logs 

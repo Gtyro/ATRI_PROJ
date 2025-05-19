@@ -1,14 +1,15 @@
 import logging
 import os
-from nonebot import on_message, on_command, get_driver
+
+from nonebot import get_driver, on_command, on_message
 from nonebot.adapters.onebot.v11 import Bot, Event, Message
+from nonebot.exception import MatcherException
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
-from nonebot.exception import MatcherException
 from nonebot.typing import T_State
 
-from ..psstate import is_enabled
 from .. import psstate
+from ..psstate import is_enabled
 
 # 状态查询命令
 persona_stats = on_command("队列状态", aliases={"人格状态"}, permission=SUPERUSER, rule=to_me(), priority=5, block=True)

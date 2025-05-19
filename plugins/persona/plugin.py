@@ -68,7 +68,7 @@ async def init_persona_system():
     if psstate.persona_system:
         try:
             # 模型已由db_core插件集中注册，这里不再单独注册
-            
+
             # 初始化数据库和组件
             await psstate.persona_system.initialize(reply_callback=persona_callback)
             psstate.PERSONA_SYSTEM_ENABLED = True

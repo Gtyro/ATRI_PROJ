@@ -1,12 +1,14 @@
 """消息处理器，负责处理消息并生成回复"""
 
 import logging
-import time
 import random
-from typing import Dict, List, Optional, Any, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+from plugins.models import GroupPluginConfig
 
 from .ai_processor import AIProcessor
-from plugins.models import GroupPluginConfig
+
 
 class MessageProcessor:
     """

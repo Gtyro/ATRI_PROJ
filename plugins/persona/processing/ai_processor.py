@@ -1,11 +1,12 @@
-from datetime import datetime
-import logging
 import json
+import logging
 import re
 import uuid
-from typing import Dict, List, Any, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from .prompt import TOPIC_EXTRACTION_PROMPT
+
 
 class AIProcessor:
     """AI处理器，负责调用大语言模型进行处理"""

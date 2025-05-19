@@ -1,5 +1,7 @@
-import requests
 import json
+
+import requests
+
 
 def test_api():
     """测试API功能是否正常工作"""

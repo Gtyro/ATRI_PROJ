@@ -6,15 +6,13 @@
 - 它们之间的关系
 """
 
-import uuid
 import time
+import uuid
 from datetime import datetime
-from neomodel import (
-    StructuredNode, StringProperty, FloatProperty,
-    DateTimeProperty, BooleanProperty, UniqueIdProperty,
-    RelationshipTo, RelationshipFrom, StructuredRel,
-    config
-)
+
+from neomodel import (BooleanProperty, DateTimeProperty, FloatProperty,
+                      RelationshipFrom, RelationshipTo, StringProperty,
+                      StructuredNode, StructuredRel, UniqueIdProperty, config)
 
 # 配置在MemoryRepository.initialize()方法中设置
 # 正确格式: bolt://user:password@host:port

@@ -7,7 +7,7 @@
           <el-radio label="neo4j">Neo4j/OGM</el-radio>
         </el-radio-group>
       </el-form-item>
-      
+
       <el-form-item label="选择表">
         <el-select v-model="selectedTable" placeholder="请选择表" @change="handleTableChange">
           <el-option
@@ -176,11 +176,11 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import { Delete } from '@element-plus/icons-vue'
-import { 
-  addRecord, updateRecord, deleteRecord, 
+import {
+  addRecord, updateRecord, deleteRecord,
   executeQuery, executeCypherQuery,
   getTables, getNodeLabels,
-  createCognitiveNode, updateCognitiveNode, deleteCognitiveNode 
+  createCognitiveNode, updateCognitiveNode, deleteCognitiveNode
 } from '@/api/db'
 import { useDbStore } from '@/stores/db'
 
@@ -268,12 +268,12 @@ const fetchDataSources = async () => {
     // 获取SQL表
     const tablesResp = await getTables()
     sqlTables.value = tablesResp.data.tables || []
-    
+
     // 获取Neo4j标签
     try {
       const response = await getNodeLabels()
       let labels = []
-      
+
       if (response.data && response.data.results) {
         response.data.results.forEach(row => {
           if (row[0] && Array.isArray(row[0])) {
@@ -285,7 +285,7 @@ const fetchDataSources = async () => {
           }
         })
       }
-      
+
       // 确保预定义的模型始终可见
       const predefinedModels = ['CognitiveNode', 'Memory', 'NodeAssociation']
       predefinedModels.forEach(model => {
@@ -293,7 +293,7 @@ const fetchDataSources = async () => {
           labels.push(model)
         }
       })
-      
+
       neo4jLabels.value = labels
     } catch (error) {
       console.error('Neo4j标签获取失败:', error)
@@ -312,7 +312,7 @@ const handleDataSourceChange = async () => {
   tableColumns.value = []
   selectedColumns.value = []
   resultData.value = { columns: [], rows: [] }
-  
+
   // 重新设置store中的数据源
   dbStore.setDataSource(dataSource.value)
 }
@@ -321,7 +321,7 @@ const handleDataSourceChange = async () => {
 const handleTableChange = async (tableName) => {
   if (!tableName) return
   loading.value = true
-  
+
   try {
     if (dataSource.value === 'sql') {
       // SQL表结构获取
@@ -332,7 +332,7 @@ const handleTableChange = async (tableName) => {
       // Neo4j节点属性获取 (使用示例查询获取一个节点的所有属性)
       const query = `MATCH (n:${tableName}) RETURN n LIMIT 1`
       const response = await executeCypherQuery(query)
-      
+
       if (response.data && response.data.results && response.data.results.length > 0) {
         const nodeProps = []
         // 处理结果，提取节点属性
@@ -346,12 +346,12 @@ const handleTableChange = async (tableName) => {
           // 添加ID属性
           nodeProps.push({ name: 'id', type: 'string' })
         }
-        
+
         tableColumns.value = nodeProps
         selectedColumns.value = tableColumns.value.map(col => col.name)
       } else {
         // 如果没有结果，使用默认属性
-        const defaultProps = dataSource.value === 'neo4j' && tableName === 'CognitiveNode' 
+        const defaultProps = dataSource.value === 'neo4j' && tableName === 'CognitiveNode'
           ? [
               { name: 'uid', type: 'string' },
               { name: 'name', type: 'string' },
@@ -362,12 +362,12 @@ const handleTableChange = async (tableName) => {
               { name: 'is_permanent', type: 'boolean' }
             ]
           : [{ name: 'id', type: 'string' }]
-          
+
         tableColumns.value = defaultProps
         selectedColumns.value = tableColumns.value.map(col => col.name)
       }
     }
-    
+
     // 自动执行查询
     buildAndExecuteQuery()
   } catch (error) {
@@ -384,7 +384,7 @@ const handleTableChange = async (tableName) => {
     } else if (error.message) {
       errorMessage += ': ' + error.message
     }
-    
+
     ElMessage.error(errorMessage)
   } finally {
     loading.value = false
@@ -514,21 +514,21 @@ const buildAndExecuteQuery = async () => {
     } else {
       const query = buildCypherQuery()
       const response = await executeCypherQuery(query)
-      
+
       // 处理Neo4j查询结果
       if (response.data && response.data.results) {
         const rows = []
         const columns = new Set()
-        
+
         // 如果是返回整个节点的查询
         if (response.data.results.length > 0 && response.data.results[0].length === 1 && typeof response.data.results[0][0] === 'object') {
           response.data.results.forEach(row => {
             if (row[0] && row[0].properties) {
               const nodeData = { ...row[0].properties, id: row[0].identity.toString() }
-              
+
               // 收集所有可能的列
               Object.keys(nodeData).forEach(key => columns.add(key))
-              
+
               rows.push(nodeData)
             }
           })
@@ -539,7 +539,7 @@ const buildAndExecuteQuery = async () => {
               columns.add(meta.name)
             }
           })
-          
+
           response.data.results.forEach(row => {
             const rowData = {}
             row.forEach((value, index) => {
@@ -550,7 +550,7 @@ const buildAndExecuteQuery = async () => {
             rows.push(rowData)
           })
         }
-        
+
         resultData.value = {
           columns: Array.from(columns),
           rows: rows
@@ -559,10 +559,10 @@ const buildAndExecuteQuery = async () => {
         resultData.value = { columns: [], rows: [] }
       }
     }
-    
+
     // 重置分页
     currentPage.value = 1
-    
+
     // 回调返回结果
     props.onResult(resultData.value)
   } catch (error) {
@@ -577,7 +577,7 @@ const buildAndExecuteQuery = async () => {
     } else if (error.message) {
       errorMessage += ': ' + error.message
     }
-    
+
     ElMessage.error(errorMessage)
   } finally {
     loading.value = false
@@ -630,29 +630,29 @@ const isPrimaryKey = (columnName) => {
 const getPrimaryKeyInfo = (row) => {
   // 寻找主键字段
   let pkColumn = tableColumns.value.find(col => col.pk === 1)
-  
+
   // 如果没有明确的主键，尝试使用id或uid字段
   if (!pkColumn) {
-    pkColumn = tableColumns.value.find(col => 
+    pkColumn = tableColumns.value.find(col =>
       col.name.toLowerCase() === 'id' || col.name.toLowerCase() === 'uid'
     )
   }
-  
+
   if (!pkColumn) {
     return { name: 'id', value: row.id || null }
   }
-  
+
   return { name: pkColumn.name, value: row[pkColumn.name] }
 }
 
 // 处理添加记录
 const handleAdd = async () => {
   if (!selectedTable.value) return
-  
+
   try {
     loading.value = true
     let response
-    
+
     if (dataSource.value === 'sql') {
       response = await addRecord(selectedTable.value, formData.value)
     } else {
@@ -665,16 +665,16 @@ const handleAdd = async () => {
           .filter(([k, v]) => v !== null && v !== undefined && k !== 'id' && k !== 'uid')
           .map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : v}`)
           .join(', ')
-          
+
         const query = `CREATE (n:${selectedTable.value} {${properties}}) RETURN n`
         response = await executeCypherQuery(query)
       }
     }
-    
+
     ElMessage.success('添加成功')
     showAddForm.value = false
     formData.value = {}
-    
+
     // 刷新数据
     buildAndExecuteQuery()
   } catch (error) {
@@ -689,21 +689,21 @@ const handleAdd = async () => {
 const handleEdit = (row) => {
   // 复制行数据到表单
   formData.value = { ...row }
-  
+
   // 获取主键信息
   const pkInfo = getPrimaryKeyInfo(row)
   editingId.value = pkInfo.value
-  
+
   showEditForm.value = true
 }
 
 // 处理更新记录
 const handleUpdate = async () => {
   if (!selectedTable.value || !editingId.value) return
-  
+
   try {
     loading.value = true
-    
+
     if (dataSource.value === 'sql') {
       await updateRecord(selectedTable.value, editingId.value, formData.value)
     } else {
@@ -716,17 +716,17 @@ const handleUpdate = async () => {
           .filter(([k, v]) => v !== null && v !== undefined && k !== 'id' && k !== 'uid')
           .map(([k, v]) => `n.${k} = ${typeof v === 'string' ? `'${v}'` : v}`)
           .join(', ')
-          
+
         const query = `MATCH (n:${selectedTable.value}) WHERE n.uid = '${editingId.value}' SET ${properties} RETURN n`
         await executeCypherQuery(query)
       }
     }
-    
+
     ElMessage.success('更新成功')
     showEditForm.value = false
     formData.value = {}
     editingId.value = null
-    
+
     // 刷新数据
     buildAndExecuteQuery()
   } catch (error) {
@@ -740,17 +740,17 @@ const handleUpdate = async () => {
 // 处理删除操作
 const handleDelete = async (row) => {
   if (!selectedTable.value) return
-  
+
   // 获取主键信息
   const pkInfo = getPrimaryKeyInfo(row)
   if (!pkInfo.value) {
     ElMessage.error('无法确定要删除的记录ID')
     return
   }
-  
+
   try {
     loading.value = true
-    
+
     if (dataSource.value === 'sql') {
       await deleteRecord(selectedTable.value, pkInfo.value)
     } else {
@@ -763,9 +763,9 @@ const handleDelete = async (row) => {
         await executeCypherQuery(query)
       }
     }
-    
+
     ElMessage.success('删除成功')
-    
+
     // 刷新数据
     buildAndExecuteQuery()
   } catch (error) {

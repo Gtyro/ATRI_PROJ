@@ -3,10 +3,11 @@
 负责加载、检查和验证配置
 """
 
-import os
 import logging
+import os
+from typing import Any, Dict
+
 import yaml
-from typing import Dict, Any
 
 # 定义配置文件路径
 CONFIG_PATH = "data/persona.yaml"

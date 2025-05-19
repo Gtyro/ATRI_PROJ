@@ -1,7 +1,7 @@
 // store/modules/db.js
 import { defineStore } from 'pinia'
-import { 
-  getTables, getTableStructure, executeQuery, 
+import {
+  getTables, getTableStructure, executeQuery,
   executeCypherQuery, getNodeLabels
 } from '@/api/db'
 
@@ -12,12 +12,12 @@ export const useDbStore = defineStore('db', {
     currentTable: null,
     tableStructure: null,
     queryResult: { columns: [], rows: [] },
-    
+
     // Neo4j数据相关
     nodeLabels: [],
     currentNodeLabel: null,
     cypherResult: { results: [], metadata: [] },
-    
+
     // 通用状态
     dataSource: 'sql', // 'sql' 或 'neo4j'
     isLoading: false
@@ -28,9 +28,9 @@ export const useDbStore = defineStore('db', {
     setDataSource(source) {
       this.dataSource = source
     },
-    
+
     // === SQL数据库操作 ===
-    
+
     async fetchTables() {
       this.isLoading = true
       try {
@@ -73,9 +73,9 @@ export const useDbStore = defineStore('db', {
         this.isLoading = false
       }
     },
-    
+
     // === Neo4j数据库操作 ===
-    
+
     async fetchNodeLabels() {
       this.isLoading = true
       try {
@@ -101,7 +101,7 @@ export const useDbStore = defineStore('db', {
         this.isLoading = false
       }
     },
-    
+
     async executeCypherQuery(cypherQuery) {
       this.isLoading = true
       try {
@@ -117,15 +117,15 @@ export const useDbStore = defineStore('db', {
         this.isLoading = false
       }
     },
-    
+
     // 获取所有可用数据源（合并SQL表和Neo4j节点标签）
     async getAllDataSources() {
       // 获取SQL表
       await this.fetchTables()
-      
+
       // 获取Neo4j节点标签
       await this.fetchNodeLabels()
-      
+
       // 返回合并后的数据源列表，带有类型标识
       return {
         sql: this.sqlTables.map(table => ({ name: table, type: 'sql' })),

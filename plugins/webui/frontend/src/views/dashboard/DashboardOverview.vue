@@ -50,7 +50,7 @@ import ChatInfoPanel from './ChatInfoPanel.vue'
     flex-direction: column;
     height: auto;
   }
-  
+
   .dashboard-column {
     margin-bottom: 20px;
     width: 100%; /* 在小屏幕上占满宽度 */

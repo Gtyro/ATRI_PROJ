@@ -17,13 +17,13 @@ async def initialize_database_system():
         global DB_URL
         # 设置数据库URL
         DB_URL = f"sqlite://{settings.DATABASE_PATH}"
-        
+
         # 初始化Tortoise ORM
         await initialize_database(db_url=DB_URL)
-        
+
         # 初始化Neo4j
         await initialize_neo4j()
-        
+
         logging.info(f"所有数据库连接已初始化")
     except Exception as e:
         logging.error(f"数据库初始化失败: {e}")
@@ -44,10 +44,10 @@ async def close_database():
     try:
         # 关闭数据库连接
         await shutdown_database()
-        
+
         # 关闭Neo4j连接
         await close_neo4j()
-        
+
         logging.info("所有数据库连接已关闭")
     except Exception as e:
         logging.error(f"关闭数据库连接失败: {e}")

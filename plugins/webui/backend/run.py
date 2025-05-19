@@ -1,9 +1,11 @@
-import uvicorn
 import os
 import sqlite3
+
+import uvicorn
 from api import create_app
 from api.core.config import settings
 from init_db import initialize_database
+
 
 def main():
     print("启动数据库管理WebUI...")

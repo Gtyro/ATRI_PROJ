@@ -1,8 +1,8 @@
+import psutil
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import Bot, MessageEvent
-from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
-import psutil
+from nonebot.rule import to_me
 
 # 注册系统状态命令处理器
 status_cmd = on_command("系统状态", aliases={"status", "状态"}, permission=SUPERUSER, rule=to_me(), priority=1, block=True)

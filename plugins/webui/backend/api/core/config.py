@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Optional
+
 from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     """应用配置设置"""
