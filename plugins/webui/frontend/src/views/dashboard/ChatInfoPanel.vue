@@ -2,17 +2,16 @@
   <div class="panel-container">
     <h3>聊天信息</h3>
     <div class="panel-content">
-      <el-descriptions direction="vertical" :column="1" border>
-        <el-descriptions-item label="今日消息数">58</el-descriptions-item>
-        <el-descriptions-item label="总消息数">1,245</el-descriptions-item>
-        <el-descriptions-item label="活跃会话">3</el-descriptions-item>
-      </el-descriptions>
+      <!-- 消息吞吐量组件 -->
+      <message-throughput />
+      
+      <!-- 未来可添加更多组件 -->
     </div>
   </div>
 </template>
 
 <script setup>
-// 聊天信息面板组件
+import { MessageThroughput } from './components/chatInfo';
 </script>
 
 <style scoped>
@@ -33,5 +32,6 @@
 
 .panel-content {
   margin-top: 15px;
+  width: 100%;
 }
 </style> 
