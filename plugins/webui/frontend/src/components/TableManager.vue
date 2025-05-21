@@ -3,8 +3,8 @@
     <el-form>
       <el-form-item label="数据源">
         <el-radio-group v-model="dataSource" @change="handleDataSourceChange">
-          <el-radio label="sql">SQL/ORM</el-radio>
-          <el-radio label="neo4j">Neo4j/OGM</el-radio>
+          <el-radio :value="'sql'">SQL/ORM</el-radio>
+          <el-radio :value="'neo4j'">Neo4j/OGM</el-radio>
         </el-radio-group>
       </el-form-item>
 

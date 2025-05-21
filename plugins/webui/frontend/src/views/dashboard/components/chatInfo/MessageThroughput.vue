@@ -4,8 +4,8 @@
       <h4 class="title">Message Throughput</h4>
       <div class="view-switcher">
         <el-radio-group v-model="currentView" size="small">
-          <el-radio-button label="hour">Hour</el-radio-button>
-          <el-radio-button label="day">Day</el-radio-button>
+          <el-radio-button value="hour">Hour</el-radio-button>
+          <el-radio-button value="day">Day</el-radio-button>
         </el-radio-group>
       </div>
     </div>
