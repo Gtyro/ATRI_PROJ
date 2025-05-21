@@ -16,6 +16,9 @@ def register_all_models():
     # 注册核心模型
     db_manager.register_models("models", ["plugins.models"])
 
+    # 注册message_basic相关模型
+    db_manager.register_models("models", ["plugins.message_basic.models"])
+
     # 注册persona相关模型
     db_manager.register_models("models", ["plugins.persona.storage.message_models"])
 

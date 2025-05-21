@@ -26,7 +26,7 @@ def UserName():
     return Depends(dependency)
 
 # 消息记录器，处理所有接收到的消息
-message_handler = on_message(priority=10)
+message_handler = on_message(priority=15)
 @message_handler.handle()
 async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     """
