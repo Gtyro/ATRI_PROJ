@@ -5,29 +5,20 @@ from nonebot.log import logger
 from nonebot.plugin import PluginMetadata
 from nonebot.plugin.manager import PluginManager
 
-from .api.core import waitfor_nonebot_app
-
 # 全局驱动器
 driver = get_driver()
 
 # 导入webui运行模块
 try:
-    # from .run import main as run_webui
-    from .api import auth_router, create_app, db_router
-    from .api.core.config import settings
-    from .api.dashboard import dashboard_router
+    from .api import create_app, configure_app
+    from .api.core.database import initialize_database_system, close_database
 except ImportError as e:
     logger.error(f"无法导入WebUI模块: {e}")
     raise
 
-# WebUI服务线程
-webui_thread = None
-
 @driver.on_startup
 async def start_webui():
-
     """启动WebUI服务"""
-    global webui_thread
     logger.info("正在启动WebUI管理面板...")
 
     try:
@@ -35,11 +26,11 @@ async def start_webui():
         nonebot_app: FastAPI = nonebot.get_app()
         logger.info("nonebot_app is {}".format(nonebot_app))
 
-        # 添加路由
-        nonebot_app.include_router(auth_router)
-        nonebot_app.include_router(db_router)
-        nonebot_app.include_router(dashboard_router)
-        await waitfor_nonebot_app(nonebot_app)
+        # 配置应用（使用统一配置函数）
+        configure_app(nonebot_app, is_nonebot_app=True)
+        
+        # 初始化数据库
+        await initialize_database_system()
 
         logger.success("WebUI管理面板已启动，访问 http://127.0.0.1:8080/webui")
     except Exception as e:
@@ -48,10 +39,9 @@ async def start_webui():
 @driver.on_shutdown
 async def stop_webui():
     """关闭WebUI服务"""
-    global webui_thread
-
-    if webui_thread and webui_thread.is_alive():
-        logger.info("正在关闭WebUI管理面板...")
-        # 由于使用daemon=True，主线程结束时WebUI也会自动关闭
-        # 如果需要更优雅的关闭，可以在此添加相应代码
-        logger.success("WebUI管理面板已关闭")
+    try:
+        # 关闭数据库连接
+        await close_database()
+        logger.success("WebUI数据库连接已关闭")
+    except Exception as e:
+        logger.error(f"关闭WebUI数据库连接失败: {e}")

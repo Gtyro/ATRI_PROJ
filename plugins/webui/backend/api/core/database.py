@@ -29,16 +29,6 @@ async def initialize_database_system():
         logging.error(f"数据库初始化失败: {e}")
         raise HTTPException(status_code=500, detail=f"数据库连接错误: {str(e)}")
 
-async def register_models():
-    """注册WebUI设置，不再单独注册模型"""
-    try:
-        global DB_URL
-        # 设置数据库URL
-        DB_URL = f"sqlite://{settings.DATABASE_PATH}"
-    except Exception as e:
-        logging.error(f"WebUI数据库设置失败: {e}")
-        raise HTTPException(status_code=500, detail=f"数据库设置错误: {str(e)}")
-
 async def close_database():
     """关闭所有数据库连接"""
     try:
@@ -51,10 +41,3 @@ async def close_database():
         logging.info("所有数据库连接已关闭")
     except Exception as e:
         logging.error(f"关闭数据库连接失败: {e}")
-
-# async def execute_checkpoint():
-#     """执行checkpoint以确保数据对其他进程可见"""
-#     try:
-#         await Tortoise.execute_raw("PRAGMA wal_checkpoint(PASSIVE);")
-#     except Exception as e:
-#         logging.error(f"执行checkpoint失败: {e}")
