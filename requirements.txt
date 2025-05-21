@@ -1,7 +1,10 @@
+# 核心依赖
 nonebot2>=2.1.0
 nonebot-adapter-onebot>=2.3.0
 nonebot-plugin-apscheduler
 nonebot-plugin-uninfo
+
+# FastAPI 等相关依赖
 fastapi>=0.100.0
 uvicorn>=0.23.0
 httpx>=0.24.1
@@ -11,10 +14,16 @@ python-dotenv>=0.21.0
 pyyaml>=6.0.1
 pandas>=2.0.3
 openpyxl>=3.1.2
+
+# 系统依赖
+psutil>=5.9.0
+
 # WebUI 依赖
-python-jose>=3.3.0
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.5
+requests==2.28.1
+pydantic==1.9.0
 passlib>=1.7.4
 bcrypt>=4.0.1
-python-multipart>=0.0.5
 PyJWT>=2.0.0
 tortoise-orm>=0.17.0
