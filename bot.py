@@ -20,6 +20,21 @@ logging.basicConfig(
     ]
 )
 
+# 添加过滤器，用于过滤system-info API请求日志
+class SystemInfoLogFilter(logging.Filter):
+    def filter(self, record):
+        # 检查日志是否包含system-info请求
+        message = str(record.msg) + str(getattr(record, "args", ""))
+        if "GET /api/dashboard/system-info" in message and "httptools_impl.py" in message:
+            return False  # 不记录system-info请求
+        return True  # 记录其他所有日志
+
+# 获取特定的日志记录器，如果存在的话
+for logger_name in ["uvicorn", "uvicorn.access", "httptools_impl"]:
+    logger = logging.getLogger(logger_name)
+    if logger:
+        logger.addFilter(SystemInfoLogFilter())
+
 # 加载环境变量
 config_path = os.path.join(os.path.dirname(__file__), ".env.dev")
 if os.path.exists(config_path):
