@@ -3,36 +3,48 @@
 
 import logging
 import os
+import re
 from datetime import datetime
 
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBot11Adapter
 
+# 创建一个更有效的日志过滤器类
+class SystemInfoLogFilter(logging.Filter):
+    def filter(self, record):
+        print(record.msg)
+        print(record.args)
+        print(record.getMessage())
+        return '/api/dashboard/system-info' not in record.getMessage()
+
+# 创建自定义的FileHandler，应用过滤器
+class FilteredFileHandler(logging.FileHandler):
+    def __init__(self, filename, mode='a', encoding=None, delay=False):
+        super().__init__(filename, mode, encoding, delay)
+        self.addFilter(SystemInfoLogFilter())
+
+# 设置日志记录
 datestr = datetime.now().strftime("%Y-%m-%d %H:%M")
-# 设置日志级别为DEBUG，方便排查问题
+
+# 创建并配置根记录器
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(filename)s - %(lineno)d %(message)s",
     datefmt="%m-%d %H:%M:%S",
     handlers=[
-        logging.FileHandler(f"logs/{datestr}.log"),
-        logging.StreamHandler()
+        FilteredFileHandler(f"logs/{datestr}.log"),  # 使用过滤后的文件处理器
+        logging.StreamHandler()  # 控制台输出不过滤，便于调试
     ]
 )
 
-# 添加过滤器，用于过滤system-info API请求日志
-class SystemInfoLogFilter(logging.Filter):
-    def filter(self, record):
-        # 检查日志是否包含system-info请求
-        message = str(record.msg) + str(getattr(record, "args", ""))
-        if "GET /api/dashboard/system-info" in message and "httptools_impl.py" in message:
-            return False  # 不记录system-info请求
-        return True  # 记录其他所有日志
-
-# 获取特定的日志记录器，如果存在的话
-for logger_name in ["uvicorn", "uvicorn.access", "httptools_impl"]:
-    logger = logging.getLogger(logger_name)
-    if logger:
+# 确保所有相关日志记录器都应用过滤器
+for name in ['', 'uvicorn', 'uvicorn.access', 'fastapi', 'httptools_impl']:
+    logger = logging.getLogger(name)
+    for handler in logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            handler.addFilter(SystemInfoLogFilter())
+    # 如果记录器没有处理器，直接添加过滤器
+    if not logger.handlers:
         logger.addFilter(SystemInfoLogFilter())
 
 # 加载环境变量
