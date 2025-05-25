@@ -66,7 +66,7 @@ async def handle_switch_persona(bot: Bot, event: Event):
     # 更新群组配置
     try:
         config = await psstate.persona_system.group_config.get_config(
-            gid=f"group_{group_id}",
+            gid=group_id,
             plugin_name="persona"
         )
         config.plugin_config["prompt_file"] = file_path

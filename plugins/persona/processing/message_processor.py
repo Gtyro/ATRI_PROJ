@@ -71,7 +71,8 @@ class MessageProcessor:
             # 获取群组的回复概率
             try:
                 response_rate = 0.3  # 默认回复概率
-                config = await self.group_config.get_config(conv_id, "persona")
+                group_id = conv_id.split("_")[1]
+                config = await self.group_config.get_config(group_id, "persona")
                 if config and config.plugin_config:
                     response_rate = config.plugin_config.get("response_rate", 0.3)
 

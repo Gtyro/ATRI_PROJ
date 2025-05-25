@@ -266,7 +266,8 @@ class PersonaSystem:
             if conv_id.startswith('group_'):
                 # 如果群组不需要回复，下次处理时间设置为30分钟
                 logging.info(f"会话 {conv_id} 不需要回复，下次处理时间设置为30分钟")
-                gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
+                group_id = conv_id.split("_")[1]
+                gpconfig = await self.group_config.get_config(group_id, self.plugin_name)
                 gpconfig.plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)
                 await gpconfig.save()
             return None
@@ -279,7 +280,8 @@ class PersonaSystem:
         # 调整下次处理时间（如果是群组）
         try:
             if conv_id.startswith('group_'):
-                gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
+                group_id = conv_id.split("_")[1]
+                gpconfig = await self.group_config.get_config(group_id, self.plugin_name)
                 gpconfig.plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)
                 await gpconfig.save()
                 logging.info(f"会话 {conv_id} 调整下次处理时间完成")
@@ -315,24 +317,24 @@ class PersonaSystem:
     async def schedule_maintenance(self) -> None:
         """定期维护任务"""
         # 获取所有需要处理的群组
-        distinct_convs = await self.group_config.get_distinct_group_ids(self.plugin_name)
+        distinct_gids = await self.group_config.get_distinct_group_ids(self.plugin_name)
 
-        for conv_id in distinct_convs:
+        for group_id in distinct_gids:
             # 检查是否到达处理时间
-            gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
+            gpconfig = await self.group_config.get_config(group_id, self.plugin_name)
             plugin_config = gpconfig.plugin_config or {}
 
             next_process_time = plugin_config.get('next_process_time', 0)
             if time.time() > next_process_time or logging.getLogger().getEffectiveLevel() == logging.DEBUG:
                 # 处理该会话
-                await self.process_conversation(conv_id, "")
+                await self.process_conversation(f"group_{group_id}", "")
 
                 # 更新下次处理时间
                 plugin_config['next_process_time'] = time.time() + self.config.get('batch_interval', 30*60)
                 gpconfig.plugin_config = plugin_config
                 await gpconfig.save()
             else:
-                logging.info(f"会话 {conv_id} 未到处理时间，跳过")
+                logging.info(f"群组 {group_id} 未到处理时间，跳过")
 
         # 执行记忆衰减
         await self.decay_manager.apply_decay()
@@ -372,17 +374,18 @@ class PersonaSystem:
 
         # 如果指定了conv_id，获取该会话的下次处理时间
         if conv_id:
-            gpconfig = await self.group_config.get_config(conv_id, self.plugin_name)
+            group_id = conv_id.split("_")[1]
+            gpconfig = await self.group_config.get_config(group_id, self.plugin_name)
             plugin_config = gpconfig.plugin_config or {}
             next_process_time = plugin_config.get('next_process_time', 0)
             next_process_in = max(0, int(next_process_time - time.time()))
         else:
             # 获取所有会话的下一次处理时间中最早的
-            distinct_convs = await self.group_config.get_distinct_group_ids(self.plugin_name)
+            distinct_gids = await self.group_config.get_distinct_group_ids(self.plugin_name)
             next_times = []
 
-            for conv in distinct_convs:
-                gpconfig = await self.group_config.get_config(conv, self.plugin_name)
+            for group_id in distinct_gids:
+                gpconfig = await self.group_config.get_config(group_id, self.plugin_name)
                 plugin_config = gpconfig.plugin_config or {}
                 next_process_time = plugin_config.get('next_process_time', 0)
                 if next_process_time > 0:

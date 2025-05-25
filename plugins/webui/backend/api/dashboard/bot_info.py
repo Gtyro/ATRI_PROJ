@@ -21,7 +21,22 @@ async def get_platform(bot):
     info: BasicInfo = interface.basic_info()
     return info["scope"]
 
-async def get_group_list(bot, count_only=False):
+async def get_group_list(bot, count_only=False) -> list[dict[str, Any]]:
+    """
+    获取群组列表
+
+    Args:
+        bot: 机器人实例
+        count_only: 是否只返回群组数量
+
+    Returns:
+        群组列表，每个群组包含以下字段:
+            - group_id: 群号 不是conv_id
+            - group_name: 群名
+            - group_remark: 群备注
+            - member_count: 成员数量
+            - max_member_count: 最大成员数量
+    """
     # 尝试获取群组列表
     interface = get_interface(bot)
     scenes = await interface.get_scenes(SceneType.GROUP)

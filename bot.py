@@ -12,9 +12,6 @@ from nonebot.adapters.onebot.v11 import Adapter as OneBot11Adapter
 # 创建一个更有效的日志过滤器类
 class SystemInfoLogFilter(logging.Filter):
     def filter(self, record):
-        print(record.msg)
-        print(record.args)
-        print(record.getMessage())
         return '/api/dashboard/system-info' not in record.getMessage()
 
 # 创建自定义的FileHandler，应用过滤器

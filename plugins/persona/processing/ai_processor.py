@@ -84,6 +84,7 @@ class AIProcessor:
             response = await self._call_api(
                 system_prompt,
                 [{"role": "user", "content": f"消息历史:\n{history_str}"}],
+                max_tokens=1600,
                 temperature=0.2
             )
             logging.info(f"提取话题响应: \n{response}")
