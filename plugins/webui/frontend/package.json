@@ -15,7 +15,8 @@
     "axios": "^0.27.2",
     "element-plus": "^2.2.8",
     "@element-plus/icons-vue": "^2.0.6",
-    "echarts": "^5.5.0"
+    "echarts": "^5.4.3",
+    "echarts-wordcloud": "^2.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
