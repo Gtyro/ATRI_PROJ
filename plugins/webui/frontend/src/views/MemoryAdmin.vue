@@ -233,10 +233,10 @@ const formatGraphData = () => {
   });
 };
 
-// 获取节点ID列表作为字符串
-const getNodeIdsString = () => {
-  if (!nodes.value || !nodes.value.length) return '';
-  return nodes.value.map(node => node.id).join(',');
+// 获取节点ID列表
+const getNodeIds = () => {
+  if (!nodes.value || !nodes.value.length) return [];
+  return nodes.value.map(node => node.id);
 };
 
 // 加载图表数据
@@ -249,8 +249,8 @@ const loadGraphData = async () => {
     const nodesResponse = await getCognitiveNodes(selectedConvId.value, nodeLimit.value);
     nodes.value = nodesResponse.data.rows || [];
 
-    // 获取节点ID字符串
-    const nodeIds = getNodeIdsString();
+    // 获取节点ID数组
+    const nodeIds = getNodeIds();
 
     // 然后获取这些节点之间的关联数据
     const linksResponse = await getAssociations(selectedConvId.value, nodeIds);
@@ -278,8 +278,8 @@ const loadConvOptions = async () => {
     convOptions.value = [
       { label: '公共图谱', value: '' },  // 将值改为空字符串
       ...conversations.map(conv => ({
-        label: `会话 ${conv.gid} (${conv.name})`,
-        value: conv.gid
+        label: `会话 ${conv.id} (${conv.name})`,
+        value: conv.id
       }))
     ];
   } catch (err) {

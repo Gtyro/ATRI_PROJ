@@ -135,23 +135,25 @@ async def delete_memory_node(
     """删除认知节点"""
     return await delete_cognitive_node(node_id)
 
-@router.get("/memory/associations")
-async def get_memory_associations(
-    conv_id: str = '',
-    node_ids: str = None,
-    limit: int = 200,
+@router.post("/memory/associations")
+async def post_memory_associations(
+    data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
     """获取节点之间的关联数据
 
-    Args:
-        conv_id: 可选，如果提供则获取特定会话的关联，否则获取公共关联
-        node_ids: 可选，逗号分隔的节点ID列表，如果提供则只获取这些节点之间的关联
-        limit: 返回的最大关联数量，默认200个
+    请求体格式:
+    {
+        "conv_id": "会话ID", // 可选
+        "node_ids": ["节点ID1", "节点ID2", ...], // 可选
+        "limit": 200 // 可选，默认200
+    }
     """
-    # 处理节点ID列表
-    node_id_list = node_ids.split(',') if node_ids else None
-    return await get_associations(conv_id, node_id_list, limit)
+    conv_id = data.get("conv_id", "")
+    node_ids = data.get("node_ids")
+    limit = data.get("limit", 200)
+    
+    return await get_associations(conv_id, node_ids, limit)
 
 @router.post("/memory/association")
 async def create_memory_association(

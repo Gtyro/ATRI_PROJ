@@ -37,10 +37,10 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         return
 
     user_id = event.get_user_id()
-    message = event.get_plaintext() # 目前只处理纯文本消息
+    message = event.get_plaintext().strip() # 目前只处理纯文本消息
 
     # 忽略空消息
-    if not message.strip():
+    if not message:
         return
 
     # 正确区分群聊和私聊

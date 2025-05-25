@@ -90,27 +90,18 @@ export function deleteCognitiveNode(nodeId) {
 
 // 获取节点关联数据
 export function getAssociations(convId = '', nodeIds = null, limit = 200) {
-  let url = '/db/memory/associations';
-  const params = new URLSearchParams();
-
-  if (convId) {
-    params.append('conv_id', convId);
-  }
-
+  const url = '/db/memory/associations';
+  const data = {
+    conv_id: convId,
+    limit: limit
+  };
+  
   if (nodeIds) {
-    params.append('node_ids', nodeIds);
+    // 向后兼容，如果 nodeIds 是字符串，则将其转换为数组
+    data.node_ids = typeof nodeIds === 'string' ? nodeIds.split(',') : nodeIds;
   }
-
-  if (limit) {
-    params.append('limit', limit);
-  }
-
-  const queryString = params.toString();
-  if (queryString) {
-    url += `?${queryString}`;
-  }
-
-  return axios.get(url);
+  
+  return axios.post(url, data);
 }
 
 // 创建节点关联
