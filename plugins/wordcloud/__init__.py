@@ -10,6 +10,8 @@ from .word_analyzer import generate_word_cloud_data
 from .command import wordcloud_cmd  # 导入命令
 from .backend import register_router  # 导入路由注册函数
 
+require("db_core") # ORM模型会由db_core插件初始化
+
 __plugin_meta__ = PluginMetadata(
     name="词云插件",
     description="生成聊天内容词云",

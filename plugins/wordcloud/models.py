@@ -20,13 +20,6 @@ class WordCloudData(Model):
     class Meta:
         table = "wordcloud_data"
 
-async def init_wordcloud_db():
-    """初始化词云数据表"""
-    from tortoise import Tortoise
-    if not Tortoise._inited:
-        await Tortoise.init(db_url="sqlite://data/persona.db", modules={"models": ["plugins.wordcloud.models"]})
-    await Tortoise.generate_schemas()
-
 async def get_messages(hours=24):
     """从数据库中获取指定时间段内的消息"""
     time_limit = datetime.now() - timedelta(hours=hours)
