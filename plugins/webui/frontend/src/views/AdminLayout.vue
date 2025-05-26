@@ -15,8 +15,12 @@
           <span>数据库管理</span>
         </el-menu-item>
         <el-menu-item index="/dashboard/memory-admin">
-          <el-icon><Document /></el-icon>
+          <el-icon><Share /></el-icon>
           <span>记忆管理</span>
+        </el-menu-item>
+        <el-menu-item index="/dashboard/wordcloud">
+          <el-icon><Connection /></el-icon>
+          <span>聊天词云</span>
         </el-menu-item>
       </el-menu>
     </div>
@@ -34,7 +38,7 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Menu, Document, DataBoard } from '@element-plus/icons-vue'
+import { Menu, DataBoard, Share, Connection } from '@element-plus/icons-vue'
 import Navbar from '@/components/NavbarHeader.vue'
 
 const router = useRouter()

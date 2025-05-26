@@ -7,6 +7,7 @@ const AdminLayout = () => import('@/views/AdminLayout.vue')
 const DBAdmin = () => import('@/views/DBAdmin.vue')
 const MemoryAdmin = () => import('@/views/MemoryAdmin.vue')
 const DashboardOverview = () => import('@/views/dashboard/DashboardOverview.vue')
+const WordCloudPage = () => import('@/views/wordcloud/WordCloudPage.vue')
 
 // 路由配置
 const routes = [
@@ -41,6 +42,11 @@ const routes = [
       {
         path: 'memory-admin',
         component: MemoryAdmin,
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'wordcloud',
+        component: WordCloudPage,
         meta: { requiresAuth: true }
       }
     ]
