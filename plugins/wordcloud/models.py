@@ -61,17 +61,4 @@ async def get_word_cloud_data(date=None, hour=None):
     elif date:
         return await WordCloudData.filter(date=date).order_by('-hour').first()
     else:
-        return await get_latest_word_cloud_data()
-
-def save_word_data_to_file(word_data, date, hour):
-    """将词云数据保存到文件"""
-    data_dir = Path("data/wordcloud")
-    data_dir.mkdir(exist_ok=True, parents=True)
-    
-    filename = f"{date.strftime('%m-%d')}-{hour}.json"
-    file_path = data_dir / filename
-    
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(word_data, f, ensure_ascii=False, indent=2)
-    
-    return file_path 
+        return await get_latest_word_cloud_data() 

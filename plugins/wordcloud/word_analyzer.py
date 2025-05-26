@@ -10,7 +10,7 @@ import jieba.analyse
 from nonebot import get_driver
 
 from .config import Config
-from .models import get_messages, save_word_cloud_data, save_word_data_to_file
+from .models import get_messages, save_word_cloud_data
 
 # 获取配置
 driver = get_driver()
@@ -184,9 +184,6 @@ async def generate_word_cloud_data(word_limit=None, hours=None):
     
     # 保存到数据库
     await save_word_cloud_data(result, current_date, current_hour)
-    
-    # 保存到文件
-    save_word_data_to_file(result, current_date, current_hour)
     
     return result
 
