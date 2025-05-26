@@ -28,10 +28,6 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # 暴露API
 @driver.on_startup
 async def _():
-    # 确保词云数据表已创建
-    from .models import init_wordcloud_db
-    await init_wordcloud_db()
-    
     # 获取 FastAPI 实例并注册路由
     from nonebot.drivers.fastapi import Driver
     app = nonebot.get_app()
@@ -42,4 +38,17 @@ from nonebot_plugin_apscheduler import scheduler
 @scheduler.scheduled_job("cron", hour="*", minute=0)
 async def gen_wordcloud_data():
     """每小时整点执行一次，生成词云数据"""
-    await generate_word_cloud_data()
+    from plugins.message_basic.models import BasicMessage
+    from tortoise.functions import Distinct
+    
+    # 获取所有活跃的会话ID
+    query = BasicMessage.all().distinct().values('conv_id')
+    results = await query
+    conv_ids = [item['conv_id'] for item in results]
+    
+    # 为每个会话生成词云数据
+    for conv_id in conv_ids:
+        try:
+            await generate_word_cloud_data(conv_id)
+        except Exception as e:
+            nonebot.logger.error(f"为会话 {conv_id} 生成词云数据时出错: {e}")

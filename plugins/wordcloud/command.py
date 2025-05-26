@@ -1,36 +1,72 @@
 from nonebot import on_command
 from nonebot.adapters import Message
 from nonebot.params import CommandArg
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters.onebot.v11 import MessageSegment, GroupMessageEvent
 from nonebot.permission import SUPERUSER
 
 from .word_analyzer import get_word_cloud_data
+from .models import get_all_conversations
 
 # 词云命令
 wordcloud_cmd = on_command("wordcloud", aliases={"词云"}, permission=SUPERUSER, priority=5)
 
 @wordcloud_cmd.handle()
-async def handle_wordcloud(args: Message = CommandArg()):
+async def handle_wordcloud(event: GroupMessageEvent, args: Message = CommandArg()):
     """处理词云命令"""
+    # 获取当前会话ID
+    conv_id = str(event.group_id) if hasattr(event, 'group_id') else str(event.user_id)
+    
     arg_str = args.extract_plain_text().strip()
     limit = None
+    custom_conv_id = None
     
-    # 解析参数
-    if arg_str and arg_str.isdigit():
-        limit = int(arg_str)
+    # 解析参数，格式: [会话ID] [数量限制]
+    parts = arg_str.split()
+    if len(parts) >= 1:
+        if parts[0].isdigit() and len(parts) == 1:
+            # 只有一个参数且为数字，视为数量限制
+            limit = int(parts[0])
+        else:
+            # 第一个参数视为会话ID
+            custom_conv_id = parts[0]
+            # 如果有第二个参数且为数字，视为数量限制
+            if len(parts) >= 2 and parts[1].isdigit():
+                limit = int(parts[1])
+    
+    # 使用自定义会话ID或当前会话ID
+    conv_id = custom_conv_id or conv_id
     
     # 获取词云数据
-    word_data = await get_word_cloud_data(limit=limit)
+    word_data = await get_word_cloud_data(conv_id, limit=limit)
     
     if not word_data:
-        await wordcloud_cmd.finish("暂无词云数据")
+        await wordcloud_cmd.finish(f"会话 {conv_id} 暂无词云数据")
     
     # 格式化输出
-    result = "当前热门词汇：\n"
+    result = f"会话 {conv_id} 当前热门词汇：\n"
     for i, item in enumerate(word_data[:15], 1):  # 只显示前15个
         result += f"{i}. {item['word']} ({item['weight']})\n"
     
     await wordcloud_cmd.finish(result)
+
+# 列出所有会话词云命令
+wordcloud_list_cmd = on_command("wordcloud_list", aliases={"词云列表"}, permission=SUPERUSER, priority=5)
+
+@wordcloud_list_cmd.handle()
+async def handle_wordcloud_list():
+    """处理词云列表命令"""
+    conv_ids = await get_all_conversations()
+    
+    if not conv_ids:
+        await wordcloud_list_cmd.finish("暂无任何会话的词云数据")
+    
+    result = "可用的会话词云列表：\n"
+    for i, conv_id in enumerate(conv_ids, 1):
+        result += f"{i}. {conv_id}\n"
+    
+    result += "\n使用 '词云 [会话ID]' 查看特定会话的词云"
+    
+    await wordcloud_list_cmd.finish(result)
 
 # 这里预留词云图片生成功能的实现
 # 如果需要实现图片生成，可以使用wordcloud库
@@ -41,7 +77,7 @@ async def handle_wordcloud(args: Message = CommandArg()):
 # from io import BytesIO
 # import base64
 # 
-# async def generate_wordcloud_image(word_data):
+# async def generate_wordcloud_image(conv_id, word_data):
 #     # 创建词频字典
 #     word_freq = {item["word"]: item["weight"] for item in word_data}
 #     
@@ -70,14 +106,20 @@ async def handle_wordcloud(args: Message = CommandArg()):
 # wordcloud_img_cmd = on_command("wordcloud_img", aliases={"词云图"}, priority=5)
 # 
 # @wordcloud_img_cmd.handle()
-# async def handle_wordcloud_img():
-#     word_data = await get_word_cloud_data()
+# async def handle_wordcloud_img(event: GroupMessageEvent, args: Message = CommandArg()):
+#     conv_id = str(event.group_id) if hasattr(event, 'group_id') else str(event.user_id)
+#     
+#     arg_str = args.extract_plain_text().strip()
+#     if arg_str:
+#         conv_id = arg_str
+#     
+#     word_data = await get_word_cloud_data(conv_id)
 #     
 #     if not word_data:
-#         await wordcloud_img_cmd.finish("暂无词云数据")
+#         await wordcloud_img_cmd.finish(f"会话 {conv_id} 暂无词云数据")
 #     
 #     # 生成词云图片
-#     img_buffer = await generate_wordcloud_image(word_data)
+#     img_buffer = await generate_wordcloud_image(conv_id, word_data)
 #     
 #     # 发送图片
 #     await wordcloud_img_cmd.finish(MessageSegment.image(img_buffer)) 

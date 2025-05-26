@@ -122,11 +122,12 @@ def discover_new_words(texts, top_n=20):
     jieba.load_userdict(str(user_dict_path))
 
 # 生成词云数据
-async def generate_word_cloud_data(word_limit=None, hours=None):
+async def generate_word_cloud_data(conv_id, word_limit=None, hours=None):
     """
     生成词云数据
     
     参数:
+        conv_id: 会话ID
         word_limit: 词云中显示的词数量，None表示使用配置中的默认值
         hours: 获取多少小时前的消息，None表示使用配置中的默认值
     
@@ -144,7 +145,7 @@ async def generate_word_cloud_data(word_limit=None, hours=None):
     init_jieba()
     
     # 获取消息
-    messages = await get_messages(hours)
+    messages = await get_messages(conv_id, hours)
     
     if not messages:
         return []
@@ -183,16 +184,17 @@ async def generate_word_cloud_data(word_limit=None, hours=None):
     current_hour = now.hour
     
     # 保存到数据库
-    await save_word_cloud_data(result, current_date, current_hour)
+    await save_word_cloud_data(result, conv_id, current_date, current_hour)
     
     return result
 
 # 获取词云数据函数（提供给前端和命令使用）
-async def get_word_cloud_data(limit=None):
+async def get_word_cloud_data(conv_id, limit=None):
     """
     获取词云数据
     
     参数:
+        conv_id: 会话ID
         limit: 返回的词数量，None表示使用配置中的默认值
     
     返回:
@@ -201,11 +203,11 @@ async def get_word_cloud_data(limit=None):
     from .models import get_latest_word_cloud_data
     
     # 获取最新的词云数据
-    data = await get_latest_word_cloud_data()
+    data = await get_latest_word_cloud_data(conv_id)
     
     if not data:
         # 如果没有缓存的数据，则实时生成
-        return await generate_word_cloud_data(word_limit=limit)
+        return await generate_word_cloud_data(conv_id, word_limit=limit)
     
     word_data = data.word_data
     
