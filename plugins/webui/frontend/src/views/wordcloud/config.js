@@ -34,6 +34,7 @@ export default {
     showRefreshButton: true,
     showHistorySelector: true,
     showLimitSlider: true,
+    showConversationSelector: false, // 是否显示会话选择器
     maxLimit: 100,
     defaultLimit: 50,
   },

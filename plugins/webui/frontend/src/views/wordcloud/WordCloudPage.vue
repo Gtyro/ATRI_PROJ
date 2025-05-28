@@ -10,6 +10,21 @@
         <div class="card-header">
           <span>词频统计</span>
           <div class="header-actions">
+            <el-select 
+              v-model="selectedConversation" 
+              placeholder="选择会话" 
+              filterable
+              @change="onConversationChange"
+              class="conversation-select"
+            >
+              <el-option 
+                v-for="conv in conversations" 
+                :key="conv" 
+                :label="conv" 
+                :value="conv"
+              ></el-option>
+            </el-select>
+            
             <el-tooltip content="生成新词云数据" placement="top">
               <el-button type="primary" size="small" @click="generateNewData" :loading="generating">
                 生成新数据
@@ -83,7 +98,7 @@ import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import WordCloudComponent from './WordCloudComponent.vue'
-import { generateWordCloud } from '@/api/wordcloud'
+import { generateWordCloud, getConversations } from '@/api/wordcloud'
 
 export default {
   name: 'WordCloudPage',
@@ -100,6 +115,8 @@ export default {
     const wordLimit = ref(80)
     const generating = ref(false)
     const showConfig = ref(false)
+    const selectedConversation = ref('') // 当前选择的会话
+    const conversations = ref([]) // 所有会话列表
     
     // 配置表单
     const configForm = reactive({
@@ -138,8 +155,51 @@ export default {
       })
     }
     
+    // 获取会话列表
+    const fetchConversations = async () => {
+      try {
+        const response = await getConversations()
+        if (response.data.success) {
+          conversations.value = response.data.data || []
+          // 如果有会话且未选择会话，自动选择第一个
+          if (conversations.value.length > 0 && !selectedConversation.value) {
+            selectedConversation.value = conversations.value[0]
+            if (wordCloudRef.value) {
+              wordCloudRef.value.selectedConversation = selectedConversation.value
+              wordCloudRef.value.loadData()
+            }
+          }
+        }
+      } catch (err) {
+        console.error('获取会话列表失败', err)
+        ElNotification({
+          title: '错误',
+          message: '获取会话列表失败',
+          type: 'error'
+        })
+      }
+    }
+    
+    // 会话切换
+    const onConversationChange = (convId) => {
+      selectedConversation.value = convId
+      if (wordCloudRef.value) {
+        wordCloudRef.value.selectedConversation = convId
+        wordCloudRef.value.loadData()
+      }
+    }
+    
     // 生成新词云数据
     const generateNewData = async () => {
+      if (!selectedConversation.value) {
+        ElNotification({
+          title: '提示',
+          message: '请先选择会话',
+          type: 'warning'
+        })
+        return
+      }
+      
       try {
         generating.value = true
         
@@ -153,7 +213,11 @@ export default {
           }
         )
         
-        const response = await generateWordCloud(configForm.wordLimit, configForm.hours)
+        const response = await generateWordCloud(
+          selectedConversation.value,
+          configForm.wordLimit, 
+          configForm.hours
+        )
         
         if (response.data.success) {
           ElNotification({
@@ -206,6 +270,7 @@ export default {
     onMounted(() => {
       adjustHeight()
       window.addEventListener('resize', adjustHeight)
+      fetchConversations()
     })
     
     return {
@@ -216,10 +281,14 @@ export default {
       showConfig,
       configForm,
       customConfig,
+      selectedConversation,
+      conversations,
       generateNewData,
       applyConfig,
       onDataLoaded,
-      onDataError
+      onDataError,
+      onConversationChange,
+      fetchConversations
     }
   }
 }
@@ -258,6 +327,11 @@ export default {
 .header-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.conversation-select {
+  min-width: 180px;
 }
 
 .wordcloud-wrapper {

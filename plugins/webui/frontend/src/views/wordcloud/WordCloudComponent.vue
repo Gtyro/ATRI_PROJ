@@ -18,6 +18,23 @@
     <div id="wordcloud" ref="wordcloudRef" class="wordcloud"></div>
     
     <div v-if="config.controlPanel.show" :class="['control-panel', `control-panel-${config.controlPanel.position}`]">
+      <div v-if="config.controlPanel.showConversationSelector" class="conversation-selector">
+        <span>会话: </span>
+        <el-select 
+          v-model="selectedConversation"
+          placeholder="选择会话"
+          @change="onConversationChange"
+          filterable
+        >
+          <el-option 
+            v-for="conv in conversations" 
+            :key="conv" 
+            :label="conv" 
+            :value="conv"
+          ></el-option>
+        </el-select>
+      </div>
+      
       <el-button v-if="config.controlPanel.showRefreshButton" @click="refreshData" size="small" type="primary" :loading="refreshing">
         刷新数据
       </el-button>
@@ -67,7 +84,7 @@ import { Loading, WarningFilled, Document } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import 'echarts-wordcloud'
 import defaultConfig from './config'
-import { getWordCloudData, getWordCloudHistory, generateWordCloud } from '@/api/wordcloud'
+import { getWordCloudData, getWordCloudHistory, getConversations } from '@/api/wordcloud'
 
 export default {
   name: 'WordCloudComponent',
@@ -127,6 +144,8 @@ export default {
     const limit = ref(props.initialLimit || config.value.controlPanel.defaultLimit)
     const selectedDate = ref('')
     const selectedHour = ref(null)
+    const selectedConversation = ref('')
+    const conversations = ref([])
     const resizeObserver = ref(null)
     const autoRefreshTimer = ref(null)
     
@@ -213,15 +232,52 @@ export default {
       }
     }
     
+    // 获取会话列表
+    const fetchConversations = async () => {
+      try {
+        const response = await getConversations()
+        if (response.data.success) {
+          conversations.value = response.data.data || []
+          
+          // 如果有会话且当前未选择会话，则选择第一个
+          if (conversations.value.length > 0 && !selectedConversation.value) {
+            selectedConversation.value = conversations.value[0]
+            await loadData()
+          }
+        }
+      } catch (err) {
+        console.error('获取会话列表失败', err)
+      }
+    }
+    
+    // 会话变更处理
+    const onConversationChange = (value) => {
+      selectedConversation.value = value
+      loadData()
+    }
+    
     // 加载数据
     const loadData = async (forceRefresh = false) => {
+      if (!selectedConversation.value) {
+        error.value = '请先选择会话'
+        return
+      }
+      
       try {
         loading.value = true
         error.value = null
         
-        console.log('开始加载词云数据', { limit: limit.value, forceRefresh })
+        console.log('开始加载词云数据', { 
+          convId: selectedConversation.value,
+          limit: limit.value, 
+          forceRefresh 
+        })
         
-        const response = await getWordCloudData(limit.value, forceRefresh)
+        const response = await getWordCloudData(
+          selectedConversation.value,
+          limit.value, 
+          forceRefresh
+        )
         console.log('词云数据加载响应', response.data)
         
         if (response.data.success) {
@@ -250,17 +306,22 @@ export default {
     
     // 加载历史数据
     const loadHistoryData = async () => {
-      if (!selectedDate.value) return
+      if (!selectedConversation.value || !selectedDate.value) return
       
       try {
         loading.value = true
         error.value = null
         
-        const response = await getWordCloudHistory(selectedDate.value, selectedHour.value)
+        const response = await getWordCloudHistory(
+          selectedConversation.value,
+          selectedDate.value, 
+          selectedHour.value
+        )
         
         if (response.data.success) {
           words.value = response.data.data || []
           emit('history-loaded', {
+            convId: selectedConversation.value,
             date: selectedDate.value,
             hour: selectedHour.value,
             data: words.value
@@ -337,10 +398,8 @@ export default {
       nextTick(() => {
         initChart()
         
-        // 自动加载数据
-        if (props.autoLoad) {
-          loadData()
-        }
+        // 获取会话列表
+        fetchConversations()
         
         // 设置自动刷新
         setupAutoRefresh()
@@ -386,10 +445,14 @@ export default {
       limit,
       selectedDate,
       selectedHour,
+      selectedConversation,
+      conversations,
       loadData,
       refreshData,
       onLimitChange,
-      loadHistoryData
+      loadHistoryData,
+      onConversationChange,
+      fetchConversations
     }
   }
 }
@@ -498,6 +561,18 @@ export default {
   margin-left: 16px;
 }
 
+.conversation-selector {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-panel-top .conversation-selector,
+.control-panel-bottom .conversation-selector {
+  margin-left: 16px;
+}
+
 @media (max-width: 768px) {
   .control-panel {
     position: relative;
@@ -519,7 +594,9 @@ export default {
   .control-panel-top .limit-slider,
   .control-panel-bottom .limit-slider,
   .control-panel-top .history-selector,
-  .control-panel-bottom .history-selector {
+  .control-panel-bottom .history-selector,
+  .control-panel-top .conversation-selector,
+  .control-panel-bottom .conversation-selector {
     margin-left: 0;
     margin-top: 16px;
   }

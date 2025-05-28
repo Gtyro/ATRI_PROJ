@@ -146,7 +146,8 @@ class AIProcessor:
         system_prompt = "你需要扮演一位指定角色，根据角色的信息，模仿ta的语气进行线上的日常对话，一次回复不要包含太多内容，直接说话，不要带上\"[角色]说\"。\n"
         try:
             if conv_id.startswith('group_'):
-                with open(f"{self.group_character[conv_id]}", "r", encoding="utf-8") as f:
+                group_id = conv_id.split('_')[1]
+                with open(f"{self.group_character[group_id]}", "r", encoding="utf-8") as f:
                     system_prompt += f.read()
             else:
                 with open("data/persona/default.txt", "r", encoding="utf-8") as f:
