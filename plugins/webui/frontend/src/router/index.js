@@ -13,7 +13,7 @@ const WordCloudPage = () => import('@/views/wordcloud/WordCloudPage.vue')
 const routes = [
   {
     path: '/',
-    redirect: '/dashboard'
+    redirect: '/admin'
   },
   {
     path: '/login',
@@ -21,16 +21,16 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/dashboard',
+    path: '/admin',
     component: AdminLayout,
     meta: { requiresAuth: true },
     children: [
       {
         path: '',
-        redirect: '/dashboard/overview'
+        redirect: '/admin/dashboard'
       },
       {
-        path: 'overview',
+        path: 'dashboard',
         component: DashboardOverview,
         meta: { requiresAuth: true }
       },
@@ -69,7 +69,7 @@ router.beforeEach((to, from, next) => {
     next('/login')
   } else if (to.path === '/login' && isAuthenticated) {
     // 已登录但尝试访问登录页，重定向到首页
-    next('/dashboard')
+    next('/admin')
   } else {
     // 其他情况正常通过
     next()

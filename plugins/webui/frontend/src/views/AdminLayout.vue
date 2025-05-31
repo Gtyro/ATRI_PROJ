@@ -6,19 +6,19 @@
         class="sidebar-menu"
         router
       >
-        <el-menu-item index="/dashboard/overview">
+        <el-menu-item index="/admin/dashboard">
           <el-icon><DataBoard /></el-icon>
           <span>仪表盘</span>
         </el-menu-item>
-        <el-menu-item index="/dashboard/db-admin">
+        <el-menu-item index="/admin/db-admin">
           <el-icon><Menu /></el-icon>
           <span>数据库管理</span>
         </el-menu-item>
-        <el-menu-item index="/dashboard/memory-admin">
+        <el-menu-item index="/admin/memory-admin">
           <el-icon><Share /></el-icon>
           <span>记忆管理</span>
         </el-menu-item>
-        <el-menu-item index="/dashboard/wordcloud">
+        <el-menu-item index="/admin/wordcloud">
           <el-icon><Connection /></el-icon>
           <span>聊天词云</span>
         </el-menu-item>

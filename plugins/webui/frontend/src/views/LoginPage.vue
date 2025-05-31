@@ -80,7 +80,7 @@ const submitForm = () => {
       authStore.login(loginForm.username, loginForm.password)
         .then(() => {
           ElMessage.success('登录成功')
-          router.push('/dashboard')
+          router.push('/admin')
         })
         .catch(error => {
           console.error('登录错误:', error)
