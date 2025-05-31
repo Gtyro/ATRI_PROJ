@@ -39,12 +39,9 @@ from nonebot_plugin_apscheduler import scheduler
 async def gen_wordcloud_data():
     """每小时整点执行一次，生成词云数据"""
     from plugins.message_basic.models import BasicMessage
-    from tortoise.functions import Distinct
     
     # 获取所有活跃的会话ID
-    query = BasicMessage.all().distinct().values('conv_id')
-    results = await query
-    conv_ids = [item['conv_id'] for item in results]
+    conv_ids = await BasicMessage.all().distinct().values_list('conv_id', flat=True)
     
     # 为每个会话生成词云数据
     for conv_id in conv_ids:
