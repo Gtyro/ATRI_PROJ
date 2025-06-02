@@ -18,6 +18,10 @@
           <el-icon><Share /></el-icon>
           <span>记忆管理</span>
         </el-menu-item>
+        <el-menu-item index="/admin/memory-timeline">
+          <el-icon><Clock /></el-icon>
+          <span>记忆脉络</span>
+        </el-menu-item>
         <el-menu-item index="/admin/wordcloud">
           <el-icon><Connection /></el-icon>
           <span>聊天词云</span>
@@ -38,7 +42,7 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Menu, DataBoard, Share, Connection } from '@element-plus/icons-vue'
+import { Menu, DataBoard, Share, Connection, Clock } from '@element-plus/icons-vue'
 import Navbar from '@/components/NavbarHeader.vue'
 
 const router = useRouter()

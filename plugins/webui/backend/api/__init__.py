@@ -12,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from .auth.router import router as auth_router
 from .dashboard import dashboard_router
 from .db.router import router as db_router
+from .memory import router as memory_router
 from .core.config import settings
 from .core.database import close_database, initialize_database_system
 
@@ -43,6 +44,7 @@ def configure_app(app: FastAPI, is_nonebot_app: bool = False):
     app.include_router(auth_router)
     app.include_router(db_router)
     app.include_router(dashboard_router)
+    app.include_router(memory_router)
     
     # 注册主页重定向
     @app.get("/")

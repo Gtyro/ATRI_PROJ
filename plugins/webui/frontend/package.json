@@ -16,7 +16,9 @@
     "element-plus": "^2.2.8",
     "@element-plus/icons-vue": "^2.0.6",
     "echarts": "^5.4.3",
-    "echarts-wordcloud": "^2.1.0"
+    "echarts-wordcloud": "^2.1.0",
+    "three": "^0.161.0",
+    "@tweenjs/tween.js": "^23.1.1"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
