@@ -72,18 +72,8 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     # 异步处理消息
     try:
         reply_dict = await psstate.persona_system.process_message(message_data)
-
-        # 如果有回复内容，发送回复
-        if reply_dict:
-            reply_content = reply_dict["reply_content"]
-
-            if isinstance(reply_content, list):
-                for reply in reply_content:
-                    await bot.send(event, reply)
-                    sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
-                    await asyncio.sleep(sleep_time)
-            else:
-                await bot.send(event, reply_content)
+        # 注意：此处不需要再次发送回复，因为在persona_system的process_conversation中
+        # 已经调用了reply_callback函数，会自动发送回复
     except Exception as e:
         logging.error(f"消息处理异常: {e}")
 
