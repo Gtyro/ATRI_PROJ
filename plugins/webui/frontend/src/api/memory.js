@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { request } from './index'
 
 // 获取记忆时间线数据
 export function getMemoryTimeline(convId = '', startTime = null, endTime = null, limit = 100) {
@@ -19,18 +19,18 @@ export function getMemoryTimeline(convId = '', startTime = null, endTime = null,
   
   params.limit = limit;
   
-  return axios.get(url, { params });
+  return request.get(url, params);
 }
 
 // 获取记忆详情
 export function getMemoryDetail(memoryId) {
-  return axios.get(`/api/memory/detail/${memoryId}`);
+  return request.get(`/api/memory/detail/${memoryId}`);
 }
 
 // 获取记忆统计数据
 export function getMemoryStats(convId = '') {
   const params = convId ? { conv_id: convId } : {};
-  return axios.get('/api/memory/stats', { params });
+  return request.get('/api/memory/stats', params);
 }
 
 // 使用现有的会话API，重用db.js中的getConversations方法

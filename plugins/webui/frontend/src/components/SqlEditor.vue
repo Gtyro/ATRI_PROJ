@@ -20,7 +20,7 @@
 <script setup>
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import { request } from '@/api'
 
 const props = defineProps({
   onResult: {
@@ -45,7 +45,7 @@ const executeQuery = () => {
 
   loading.value = true
 
-  axios.post('/db/query', { query: sql.value })
+  request.post('/db/query', { query: sql.value })
     .then(response => {
       props.onResult(response.data)
       ElMessage.success('查询执行成功')

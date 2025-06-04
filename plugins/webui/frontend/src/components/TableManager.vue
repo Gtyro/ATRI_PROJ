@@ -174,7 +174,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import { request } from '@/api'
 import { Delete } from '@element-plus/icons-vue'
 import {
   addRecord, updateRecord, deleteRecord,
@@ -325,7 +325,7 @@ const handleTableChange = async (tableName) => {
   try {
     if (dataSource.value === 'sql') {
       // SQL表结构获取
-      const response = await axios.get(`/db/table/${tableName}`)
+      const response = await request.get(`/db/table/${tableName}`)
       tableColumns.value = response.data.columns
       selectedColumns.value = tableColumns.value.map(col => col.name)
     } else {

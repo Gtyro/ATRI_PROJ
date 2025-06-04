@@ -1,63 +1,56 @@
-import axios from 'axios'
+import { request } from './index'
 
 // 获取词云数据
 export function getWordCloudData(convId, limit = null, refresh = false) {
-  let url = '/api/wordcloud/data';
-  const params = new URLSearchParams();
+  const url = '/api/wordcloud/data';
+  const params = {};
 
-  params.append('conv_id', convId);
+  params.conv_id = convId;
 
   if (limit) {
-    params.append('limit', limit);
+    params.limit = limit;
   }
 
   if (refresh) {
-    params.append('refresh', refresh);
+    params.refresh = refresh;
   }
 
-  const queryString = params.toString();
-  if (queryString) {
-    url += `?${queryString}`;
-  }
-
-  return axios.get(url);
+  return request.get(url, params);
 }
 
 // 获取历史词云数据
 export function getWordCloudHistory(convId, date, hour = null) {
-  let url = `/api/wordcloud/history?conv_id=${convId}&date=${date}`;
+  const params = {
+    conv_id: convId,
+    date: date
+  };
   
   if (hour !== null) {
-    url += `&hour=${hour}`;
+    params.hour = hour;
   }
   
-  return axios.get(url);
+  return request.get('/api/wordcloud/history', params);
 }
 
 // 手动生成词云数据
 export function generateWordCloud(convId, wordLimit = null, hours = null) {
-  let url = '/api/wordcloud/generate';
-  const params = new URLSearchParams();
-  
-  params.append('conv_id', convId);
+  const url = '/api/wordcloud/generate';
+  const params = {
+    conv_id: convId
+  };
   
   if (wordLimit) {
-    params.append('word_limit', wordLimit);
+    params.word_limit = wordLimit;
   }
   
   if (hours) {
-    params.append('hours', hours);
+    params.hours = hours;
   }
   
-  const queryString = params.toString();
-  if (queryString) {
-    url += `?${queryString}`;
-  }
-  
-  return axios.post(url);
+  return request.post(url, null, { params });
 }
 
 // 获取所有会话ID
 export function getConversations() {
-  return axios.get('/api/wordcloud/conversations');
+  return request.get('/api/wordcloud/conversations');
 } 

@@ -18,7 +18,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import axios from 'axios';
+import { request } from '@/api';
 import BotInfoCard from './components/botInfo/BotInfoCard.vue';
 import ConnectionLogs from './components/botInfo/ConnectionLogs.vue';
 
@@ -56,7 +56,7 @@ const botsToDisplay = computed(() => {
 // 加载机器人信息
 const loadBotInfo = async () => {
   try {
-    const response = await axios.get('/api/dashboard/bot-info');
+    const response = await request.get('/api/dashboard/bot-info');
     bots.value = response.data;
     loading.value = false;
   } catch (err) {
@@ -69,7 +69,7 @@ const loadBotInfo = async () => {
 // 加载连接日志
 const loadConnectionLogs = async () => {
   try {
-    const response = await axios.get('/api/dashboard/bot-connections');
+    const response = await request.get('/api/dashboard/bot-connections');
     connectionLogs.value = response.data;
   } catch (err) {
     console.error('获取连接日志失败:', err);
