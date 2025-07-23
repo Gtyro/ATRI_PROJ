@@ -3,6 +3,7 @@ nonebot2>=2.1.0
 nonebot-adapter-onebot>=2.3.0
 nonebot-plugin-apscheduler
 nonebot-plugin-uninfo
+nonebot_plugin_alconna
 
 # FastAPI 等相关依赖
 fastapi>=0.100.0
@@ -22,7 +23,8 @@ psutil>=5.9.0
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.5
 requests==2.28.1
-pydantic==1.9.0
+pydantic>=1.10.0,<2.0.0
+pydantic-settings>=2.0.0
 passlib>=1.7.4
 bcrypt>=4.0.1
 PyJWT>=2.0.0
@@ -32,3 +34,6 @@ tzlocal>=4.2
 
 # 词云依赖
 jieba>=0.42.1
+
+# 其他缺失依赖
+neomodel>=5.0.0

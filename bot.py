@@ -27,7 +27,7 @@ datestr = datetime.now().strftime("%Y-%m-%d %H:%M")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(filename)s - %(lineno)d %(message)s",
-    datefmt="%m-%d %H:%M:%S",
+    datefmt="%m-%d_%H:%M:%S",
     handlers=[
         FilteredFileHandler(f"logs/{datestr}.log"),  # 使用过滤后的文件处理器
         logging.StreamHandler()  # 控制台输出不过滤，便于调试
