@@ -48,24 +48,23 @@ class RestartManager:
         
         Args:
             reason: 重启原因
-            delay_seconds: 延迟秒数
+            delay_seconds: 延迟时间（秒）
         """
         try:
-            logging.info(f"开始重启流程，原因: {reason}")
+            logging.info(f"开始执行重启操作，原因: {reason}")
             
             # 记录重启信息
-            await self.record_restart(reason)
+            await self._record_restart_info(reason)
             
-            # 延迟执行
+            # 如果有延迟，等待
             if delay_seconds > 0:
-                logging.info(f"等待 {delay_seconds} 秒后重启...")
                 await asyncio.sleep(delay_seconds)
             
             # 执行重启
             await self._execute_restart()
             
         except Exception as e:
-            logging.error(f"重启执行失败: {e}")
+            logging.error(f"重启操作失败: {e}")
             raise
     
     async def _execute_restart(self) -> None:
@@ -277,52 +276,220 @@ rm -f "{os.path.abspath(restart_script_path)}"
             sys.exit(1)
     
     async def record_startup(self) -> None:
-        """记录启动信息"""
+        """记录启动时间"""
         try:
-            status_data = await self._load_status()
-            status_data['last_startup'] = datetime.now().isoformat()
-            status_data['start_time'] = self.start_time
-            await self._save_status(status_data)
+            status_data = {}
+            
+            # 读取现有状态
+            if os.path.exists(self.status_file):
+                with open(self.status_file, 'r', encoding='utf-8') as f:
+                    status_data = json.load(f)
+            
+            # 更新启动信息
+            status_data.update({
+                "last_startup": datetime.now().isoformat(),
+                "start_time": self.start_time
+            })
+            
+            # 保存状态
+            with open(self.status_file, 'w', encoding='utf-8') as f:
+                json.dump(status_data, f, indent=2, ensure_ascii=False)
+                
+            logging.info("启动时间已记录")
             
         except Exception as e:
-            logging.error(f"记录启动信息失败: {e}")
+            logging.error(f"记录启动时间失败: {e}")
     
-    async def record_restart(self, reason: str) -> None:
+    async def _record_restart_info(self, reason: str) -> None:
         """记录重启信息"""
         try:
-            status_data = await self._load_status()
+            status_data = {
+                "last_restart": datetime.now().isoformat(),
+                "restart_reason": reason,
+                "restart_count": 0,
+                "need_notification": self.config.restart_notification_enabled,
+                "notification_sent": False
+            }
             
-            # 更新重启信息
-            status_data['last_restart'] = datetime.now().isoformat()
-            status_data['restart_reason'] = reason
-            status_data['restart_count'] = status_data.get('restart_count', 0) + 1
+            # 如果状态文件存在，读取计数器
+            if os.path.exists(self.status_file):
+                with open(self.status_file, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+                    status_data["restart_count"] = existing_data.get("restart_count", 0) + 1
+            else:
+                status_data["restart_count"] = 1
             
-            await self._save_status(status_data)
+            # 保存状态
+            with open(self.status_file, 'w', encoding='utf-8') as f:
+                json.dump(status_data, f, indent=2, ensure_ascii=False)
+                
+            logging.info(f"重启信息已记录: {reason}")
             
         except Exception as e:
             logging.error(f"记录重启信息失败: {e}")
     
+    async def check_and_send_restart_notification(self) -> None:
+        """检查并发送重启完成通知"""
+        try:
+            if not os.path.exists(self.status_file):
+                return
+            
+            with open(self.status_file, 'r', encoding='utf-8') as f:
+                status_data = json.load(f)
+            
+            # 检查是否需要发送通知且未发送
+            need_notification = status_data.get("need_notification", False)
+            notification_sent = status_data.get("notification_sent", False)
+            
+            if need_notification and not notification_sent:
+                # 尝试发送通知
+                success = await self._send_restart_notification(status_data)
+                
+                # 只有在发送成功时才标记为已发送
+                if success:
+                    status_data["notification_sent"] = True
+                    status_data["notification_time"] = datetime.now().isoformat()
+                    
+                    with open(self.status_file, 'w', encoding='utf-8') as f:
+                        json.dump(status_data, f, indent=2, ensure_ascii=False)
+                    
+                    logging.info("重启完成通知已成功发送并记录")
+                else:
+                    logging.warning("重启通知发送失败，状态未更新，将在下次连接时重试")
+            
+        except Exception as e:
+            logging.error(f"检查重启通知失败: {e}")
+    
+    async def _send_restart_notification(self, status_data: Dict[str, Any]) -> bool:
+        """发送重启完成通知给超级用户
+        
+        Returns:
+            bool: 是否发送成功（至少发送给一个超级用户）
+        """
+        try:
+            from nonebot import get_driver, get_bots
+            
+            # 获取超级用户列表
+            driver = get_driver()
+            superusers = driver.config.superusers
+            
+            if not superusers:
+                logging.warning("没有配置超级用户，无法发送重启通知")
+                return False
+            
+            # 获取当前机器人实例
+            bots = get_bots()
+            if not bots:
+                logging.warning("没有活跃的机器人实例，无法发送重启通知")
+                return False
+            
+            # 使用第一个可用的机器人
+            bot = next(iter(bots.values()))
+            
+            # 构建通知消息
+            restart_reason = status_data.get("restart_reason", "未知原因")
+            restart_count = status_data.get("restart_count", 0)
+            last_restart = status_data.get("last_restart", "未知时间")
+            
+            # 计算运行时长
+            start_time = status_data.get("start_time", time.time())
+            uptime_seconds = time.time() - start_time
+            uptime_minutes = int(uptime_seconds // 60)
+            uptime_hours = int(uptime_minutes // 60)
+            
+            if uptime_hours > 0:
+                uptime_str = f"{uptime_hours}小时{uptime_minutes % 60}分钟"
+            else:
+                uptime_str = f"{uptime_minutes}分钟"
+            
+            notification_text = f"""
+🎉 机器人重启完成通知
+
+🔹 重启原因: {restart_reason}
+🔹 重启时间: {last_restart[:19].replace('T', ' ')}
+🔹 当前运行时长: {uptime_str}
+🔹 总重启次数: {restart_count}
+
+✅ 系统已恢复正常运行！
+""".strip()
+            
+            # 发送通知给所有超级用户
+            success_count = 0
+            for user_id in superusers:
+                try:
+                    await bot.send_private_msg(user_id=int(user_id), message=notification_text)
+                    success_count += 1
+                    logging.info(f"重启通知已发送给超级用户: {user_id}")
+                except Exception as e:
+                    logging.error(f"向超级用户 {user_id} 发送重启通知失败: {e}")
+            
+            if success_count > 0:
+                logging.info(f"重启完成通知发送成功，共发送给 {success_count} 个超级用户")
+                return True
+            else:
+                logging.error("重启通知发送失败，没有成功发送给任何超级用户")
+                return False
+            
+        except Exception as e:
+            logging.error(f"发送重启通知失败: {e}")
+            return False
+    
     async def get_status_info(self) -> Dict[str, Any]:
         """获取状态信息"""
         try:
-            status_data = await self._load_status()
+            status_data = {}
+            
+            if os.path.exists(self.status_file):
+                with open(self.status_file, 'r', encoding='utf-8') as f:
+                    status_data = json.load(f)
             
             # 计算运行时长
-            uptime_seconds = time.time() - self.start_time
-            uptime = str(timedelta(seconds=int(uptime_seconds)))
+            start_time = status_data.get('start_time', self.start_time)
+            uptime_seconds = time.time() - start_time
+            uptime_minutes = int(uptime_seconds // 60)
+            uptime_hours = int(uptime_minutes // 60)
+            uptime_days = int(uptime_hours // 24)
+            
+            if uptime_days > 0:
+                uptime_str = f"{uptime_days}天{uptime_hours % 24}小时{uptime_minutes % 60}分钟"
+            elif uptime_hours > 0:
+                uptime_str = f"{uptime_hours}小时{uptime_minutes % 60}分钟"
+            else:
+                uptime_str = f"{uptime_minutes}分钟"
+            
+            # 格式化最后重启时间
+            last_restart = status_data.get('last_restart', '从未重启')
+            if last_restart != '从未重启':
+                last_restart = last_restart[:19].replace('T', ' ')
+            
+            # 格式化最后启动时间
+            last_startup = status_data.get('last_startup', '未知')
+            if last_startup != '未知':
+                last_startup = last_startup[:19].replace('T', ' ')
             
             return {
-                'last_startup': status_data.get('last_startup', '未知'),
-                'last_restart': status_data.get('last_restart', '从未重启'),
+                'last_startup': last_startup,
+                'last_restart': last_restart,
                 'restart_reason': status_data.get('restart_reason', '无'),
                 'restart_count': status_data.get('restart_count', 0),
-                'uptime': uptime,
-                'start_time': datetime.fromtimestamp(self.start_time).isoformat()
+                'uptime': uptime_str,
+                'notification_enabled': self.config.restart_notification_enabled,
+                'notification_sent': status_data.get('notification_sent', False),
+                'notification_time': status_data.get('notification_time', '未发送')
             }
             
         except Exception as e:
             logging.error(f"获取状态信息失败: {e}")
-            return {}
+            return {
+                'last_startup': '未知',
+                'last_restart': '未知', 
+                'restart_reason': '未知',
+                'restart_count': 0,
+                'uptime': '未知',
+                'notification_enabled': False,
+                'notification_sent': False,
+                'notification_time': '未发送'
+            }
     
     async def _load_status(self) -> Dict[str, Any]:
         """加载状态数据"""

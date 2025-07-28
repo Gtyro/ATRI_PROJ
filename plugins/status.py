@@ -36,6 +36,6 @@ async def handle_status(bot: Bot, event: MessageEvent):
 🔹 磁盘使用情况:
   - 总空间: {disk_total:.2f} GB
   - 已使用: {disk_used:.2f} GB ({disk_percent:.1f}%)
-    """
+    """.strip()
 
     await status_cmd.finish(status_text) 

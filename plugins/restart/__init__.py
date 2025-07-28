@@ -46,8 +46,23 @@ async def init_restart_system():
         # 设置定时重启任务
         setup_scheduled_restart()
         
+        # 注意：不在这里发送重启通知，因为机器人可能还未连接
+        
     except Exception as e:
         logging.error(f"重启系统初始化失败: {e}")
+
+# 监听机器人连接事件，用于发送重启完成通知
+@driver.on_bot_connect
+async def on_bot_connect(bot: Bot):
+    """机器人连接成功时发送重启通知"""
+    global restart_manager
+    
+    if restart_manager:
+        try:
+            # 检查并发送重启完成通知
+            await restart_manager.check_and_send_restart_notification()
+        except Exception as e:
+            logging.error(f"发送重启通知失败: {e}")
 
 def setup_scheduled_restart():
     """设置定时重启任务"""
@@ -118,16 +133,38 @@ async def handle_restart_status(bot: Bot, event: MessageEvent):
     
     status_info = await restart_manager.get_status_info()
     
+    # 构建状态文本
     status_text = f"""
 🔄 重启系统状态
 ------------------------
 🔹 自动重启: {'✅ 已启用' if restart_config.auto_restart_enabled else '❌ 已禁用'}
 🔹 重启时间: {restart_config.restart_time}
 🔹 启动脚本: {restart_config.startup_script_path}
-🔹 最后重启: {status_info.get('last_restart', '未知')}
+🔹 重启通知: {'✅ 已启用' if restart_config.restart_notification_enabled else '❌ 已禁用'}
+
+📊 运行状态
+------------------------
+🔹 最后启动: {status_info.get('last_startup', '未知')}
+🔹 最后重启: {status_info.get('last_restart', '从未重启')}
+🔹 重启原因: {status_info.get('restart_reason', '无')}
 🔹 运行时长: {status_info.get('uptime', '未知')}
 🔹 重启次数: {status_info.get('restart_count', 0)}
 """.strip()
+    
+    # 如果启用了通知，显示通知状态
+    if restart_config.restart_notification_enabled:
+        notification_sent = status_info.get('notification_sent', False)
+        notification_time = status_info.get('notification_time', '未发送')
+        
+        if notification_time != '未发送' and notification_time != '未知':
+            notification_time = notification_time[:19].replace('T', ' ')
+        
+        status_text += f"""
+
+📬 通知状态
+------------------------
+🔹 通知状态: {'✅ 已发送' if notification_sent else '⏳ 待发送'}
+🔹 发送时间: {notification_time}"""
     
     await restart_status_cmd.finish(status_text)
 

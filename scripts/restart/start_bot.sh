@@ -6,7 +6,7 @@
 set -e
 
 # 配置变量
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VENV_PATH="$PROJECT_DIR/.venv"
 SCREEN_SESSION="atri"
 BOT_SCRIPT="bot.py"
