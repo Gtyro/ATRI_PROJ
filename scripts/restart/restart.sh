@@ -51,10 +51,10 @@ case "$1" in
             echo -e "✅ 机器人正在运行"
             screen -list | grep atri
             
-            if [ -f "data/restart/config.json" ]; then
+            if [ -f "data/restart/config.yaml" ]; then
                 echo ""
                 echo -e "${BLUE}重启配置：${NC}"
-                cat data/restart/config.json | jq . 2>/dev/null || cat data/restart/config.json
+                cat data/restart/config.yaml
             fi
             
             if [ -f "data/restart/status.json" ]; then

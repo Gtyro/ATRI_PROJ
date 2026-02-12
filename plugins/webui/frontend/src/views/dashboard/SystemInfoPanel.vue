@@ -3,5 +3,5 @@
 </template>
 
 <script setup>
-import { SystemInfoPanel } from './components/SystemInfoPanel'
-</script> 
+import { SystemInfoPanel } from "./components/SystemInfoPanel";
+</script>

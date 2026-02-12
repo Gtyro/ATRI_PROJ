@@ -10,6 +10,10 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "author": "User",
         "version": "1.0.0",
+        "policy": {
+            "manageable": True,
+            "default_enabled": True,
+        },
     },
 )
 
@@ -18,4 +22,4 @@ driver = get_driver()
 @driver.on_startup
 async def _():
     # 在这里可以进行插件启动时的初始化操作
-    pass 
+    pass

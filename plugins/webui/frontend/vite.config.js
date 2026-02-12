@@ -1,12 +1,14 @@
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import { resolve } from 'path'
-import AutoImport from 'unplugin-auto-import/vite'
-import Components from 'unplugin-vue-components/vite'
-import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import { resolve } from "path";
+import AutoImport from "unplugin-auto-import/vite";
+import Components from "unplugin-vue-components/vite";
+import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // 生产构建挂载在 /webui 下，开发环境保持根路径
+  base: command === "build" ? "/webui/" : "/",
   plugins: [
     vue(),
     AutoImport({
@@ -20,31 +22,31 @@ export default defineConfig({
   // 路径别名
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
-    }
+      "@": resolve(__dirname, "src"),
+    },
   },
 
   // 开发服务器配置
   server: {
     proxy: {
-      '/auth': {
-        target: 'http://localhost:8080', // 后端API地址
-        changeOrigin: true
+      "/auth": {
+        target: "http://localhost:8080", // 后端API地址
+        changeOrigin: true,
       },
-      '/db': {
-        target: 'http://localhost:8080', // 后端API地址
-        changeOrigin: true
+      "/db": {
+        target: "http://localhost:8080", // 后端API地址
+        changeOrigin: true,
       },
-      '/api': {
-        target: 'http://localhost:8080', // 后端API地址
-        changeOrigin: true
-      }
-    }
+      "/api": {
+        target: "http://localhost:8080", // 后端API地址
+        changeOrigin: true,
+      },
+    },
   },
 
   // 构建配置
   build: {
-    outDir: '../static/webui', // 构建输出到static/webui目录
-    emptyOutDir: true
-  }
-})
+    outDir: "../static/webui", // 构建输出到static/webui目录
+    emptyOutDir: true,
+  },
+}));

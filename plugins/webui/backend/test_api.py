@@ -96,4 +96,4 @@ if __name__ == "__main__":
     except requests.exceptions.ConnectionError:
         print("❌ 连接失败: 请确保API服务正在运行 (python run.py)")
     except Exception as e:
-        print(f"❌ 测试过程中发生错误: {str(e)}") 
+        print(f"❌ 测试过程中发生错误: {str(e)}")

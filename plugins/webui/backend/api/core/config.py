@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key"  # 在生产环境中请更改此密钥
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # 项目根目录
     PROJECT_ROOT: str = str(Path(__file__).parent.parent.parent.parent.parent)

@@ -34,12 +34,10 @@
       </template>
 
       <div class="memory-content">
-        <el-alert
-          title="记忆管理面板"
-          type="info"
-          :closable="false"
-        >
-          这里是知识图谱可视化区域，您可以查看系统的认知节点和关联。节点按激活水平降序排列，显示前{{ nodeLimit }}个节点。
+        <el-alert title="记忆管理面板" type="info" :closable="false">
+          这里是知识图谱可视化区域，您可以查看系统的认知节点和关联。节点按激活水平降序排列，显示前{{
+            nodeLimit
+          }}个节点。
         </el-alert>
 
         <div class="graph-info-container">
@@ -51,7 +49,7 @@
 
           <div class="graph-legend">
             <div class="legend-item">
-              <div class="legend-color" style="background-color: #5470c6;"></div>
+              <div class="legend-color" style="background-color: #5470c6"></div>
               <span>节点大小 - 表示激活水平(act_lv)</span>
             </div>
             <div class="legend-item">
@@ -68,17 +66,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { getCognitiveNodes, getAssociations, getConversations } from '../api/db';
-import * as echarts from 'echarts';
+import { ref, onMounted, computed } from "vue";
+import {
+  getCognitiveNodes,
+  getAssociations,
+  getConversations,
+} from "../api/db";
+import * as echarts from "echarts";
 
 // 数据与状态
 const graphContainer = ref(null);
 const chart = ref(null);
-const selectedConvId = ref('');  // 默认为空字符串，代表公共图谱
-const nodeLimit = ref(50);  // 默认限制50个节点
+const selectedConvId = ref(""); // 默认为空字符串，代表公共图谱
+const nodeLimit = ref(50); // 默认限制50个节点
 const convOptions = ref([
-  { label: '公共图谱', value: '' }  // 将值改为空字符串
+  { label: "公共图谱", value: "" }, // 将值改为空字符串
 ]);
 const nodes = ref([]);
 const links = ref([]);
@@ -89,7 +91,9 @@ const error = ref(null);
 const nodeCount = computed(() => (nodes.value && nodes.value.length) || 0);
 const linkCount = computed(() => (links.value && links.value.length) || 0);
 const graphTitle = computed(() =>
-  selectedConvId.value ? `会话 ${selectedConvId.value} 知识图谱` : '公共知识图谱'
+  selectedConvId.value
+    ? `会话 ${selectedConvId.value} 知识图谱`
+    : "公共知识图谱",
 );
 
 // 初始化图表
@@ -110,18 +114,18 @@ const initChart = () => {
   const option = {
     title: {
       text: graphTitle.value,
-      subtext: '节点大小表示激活水平，线条粗细表示关联强度',
-      top: 'bottom',
-      left: 'right'
+      subtext: "节点大小表示激活水平，线条粗细表示关联强度",
+      top: "bottom",
+      left: "right",
     },
     tooltip: {
-      trigger: 'item',
+      trigger: "item",
       formatter: (params) => {
-        if (params.dataType === 'node') {
+        if (params.dataType === "node") {
           return `
             <div style="font-weight:bold">${params.name}</div>
             <div>激活水平: ${params.data.value.toFixed(2)}</div>
-            <div>会话ID: ${params.data.convId || '公共'}</div>
+            <div>会话ID: ${params.data.convId || "公共"}</div>
           `;
         } else {
           return `
@@ -131,49 +135,51 @@ const initChart = () => {
             <div>强度: ${params.data.value.toFixed(2)}</div>
           `;
         }
-      }
+      },
     },
     legend: {
-      show: false
+      show: false,
     },
     animationDurationUpdate: 1500,
-    animationEasingUpdate: 'quinticInOut',
-    series: [{
-      type: 'graph',
-      layout: 'force',
-      force: {
-        repulsion: 100,
-        gravity: 0.1,
-        edgeLength: [50, 200],
-        layoutAnimation: true
-      },
-      roam: true,
-      label: {
-        show: true,
-        position: 'right',
-        formatter: '{b}'
-      },
-      lineStyle: {
-        color: 'source',
-        curveness: 0.3,
-        width: 1
-      },
-      emphasis: {
-        focus: 'adjacency',
+    animationEasingUpdate: "quinticInOut",
+    series: [
+      {
+        type: "graph",
+        layout: "force",
+        force: {
+          repulsion: 100,
+          gravity: 0.1,
+          edgeLength: [50, 200],
+          layoutAnimation: true,
+        },
+        roam: true,
+        label: {
+          show: true,
+          position: "right",
+          formatter: "{b}",
+        },
         lineStyle: {
-          width: 3
-        }
+          color: "source",
+          curveness: 0.3,
+          width: 1,
+        },
+        emphasis: {
+          focus: "adjacency",
+          lineStyle: {
+            width: 3,
+          },
+        },
+        data: [],
+        edges: [],
       },
-      data: [],
-      edges: []
-    }]
+    ],
   };
 
   // 应用配置
   chart.value.setOption(option);
 
   // 添加窗口大小调整事件
-  window.addEventListener('resize', () => {
+  window.addEventListener("resize", () => {
     chart.value && chart.value.resize();
   });
 
@@ -187,56 +193,63 @@ const formatGraphData = () => {
     // 应用空数据
     chart.value.setOption({
       title: {
-        text: graphTitle.value
+        text: graphTitle.value,
       },
-      series: [{
-        data: [],
-        edges: []
-      }]
+      series: [
+        {
+          data: [],
+          edges: [],
+        },
+      ],
     });
     return;
   }
 
   // 格式化节点数据
-  const graphNodes = nodes.value.map(node => ({
+  const graphNodes = nodes.value.map((node) => ({
     id: node.id,
     name: node.name,
     convId: node.conv_id,
     value: parseFloat(node.act_lv) || 1.0,
     symbolSize: Math.max(20, parseFloat(node.act_lv || 1.0) * 30),
     itemStyle: {
-      color: '#5470c6'
-    }
+      color: "#5470c6",
+    },
   }));
 
   // 格式化关联数据
-  const graphLinks = links.value && links.value.length ? links.value.map(link => ({
-    source: link.source_id,
-    target: link.target_id,
-    sourceName: link.source_name,
-    targetName: link.target_name,
-    value: parseFloat(link.strength) || 1.0,
-    lineStyle: {
-      width: Math.max(1, parseFloat(link.strength || 1.0) * 3)
-    }
-  })) : [];
+  const graphLinks =
+    links.value && links.value.length
+      ? links.value.map((link) => ({
+          source: link.source_id,
+          target: link.target_id,
+          sourceName: link.source_name,
+          targetName: link.target_name,
+          value: parseFloat(link.strength) || 1.0,
+          lineStyle: {
+            width: Math.max(1, parseFloat(link.strength || 1.0) * 3),
+          },
+        }))
+      : [];
 
   // 更新图表数据
   chart.value.setOption({
     title: {
-      text: graphTitle.value
+      text: graphTitle.value,
     },
-    series: [{
-      data: graphNodes,
-      edges: graphLinks
-    }]
+    series: [
+      {
+        data: graphNodes,
+        edges: graphLinks,
+      },
+    ],
   });
 };
 
 // 获取节点ID列表
 const getNodeIds = () => {
   if (!nodes.value || !nodes.value.length) return [];
-  return nodes.value.map(node => node.id);
+  return nodes.value.map((node) => node.id);
 };
 
 // 加载图表数据
@@ -246,7 +259,10 @@ const loadGraphData = async () => {
 
   try {
     // 首先获取节点数据
-    const nodesResponse = await getCognitiveNodes(selectedConvId.value, nodeLimit.value);
+    const nodesResponse = await getCognitiveNodes(
+      selectedConvId.value,
+      nodeLimit.value,
+    );
     nodes.value = nodesResponse.data.rows || [];
 
     // 获取节点ID数组
@@ -259,8 +275,8 @@ const loadGraphData = async () => {
     // 更新图表
     formatGraphData();
   } catch (err) {
-    console.error('加载图表数据失败:', err);
-    error.value = '加载数据失败，请稍后再试';
+    console.error("加载图表数据失败:", err);
+    error.value = "加载数据失败，请稍后再试";
   } finally {
     loading.value = false;
   }
@@ -276,14 +292,14 @@ const loadConvOptions = async () => {
 
     // 更新选项
     convOptions.value = [
-      { label: '公共图谱', value: '' },  // 将值改为空字符串
-      ...conversations.map(conv => ({
+      { label: "公共图谱", value: "" }, // 将值改为空字符串
+      ...conversations.map((conv) => ({
         label: `会话 ${conv.id} (${conv.name})`,
-        value: conv.id
-      }))
+        value: conv.id,
+      })),
     ];
   } catch (err) {
-    console.error('加载会话ID选项失败:', err);
+    console.error("加载会话ID选项失败:", err);
   }
 };
 
@@ -299,8 +315,8 @@ onMounted(async () => {
     // 然后加载图表数据
     await loadGraphData();
   } catch (err) {
-    console.error('初始化组件时出错:', err);
-    error.value = '初始化组件时出错，请刷新页面重试';
+    console.error("初始化组件时出错:", err);
+    error.value = "初始化组件时出错，请刷新页面重试";
   }
 });
 </script>
@@ -361,4 +377,4 @@ onMounted(async () => {
   height: 2px;
   background-color: #5470c6;
 }
-</style> 
+</style>

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class Token(BaseModel):
     """令牌模型"""
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str
 
 class TokenData(BaseModel):

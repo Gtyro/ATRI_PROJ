@@ -10,26 +10,26 @@
         ></el-input>
       </el-form-item>
       <el-form-item>
-        <el-button
-          type="primary"
-          :loading="loading"
-          @click="executeQuery"
-        >
+        <el-button type="primary" :loading="loading" @click="executeQuery">
           执行查询
         </el-button>
-        <el-button @click="query = ''">
-          清空
-        </el-button>
+        <el-button @click="query = ''"> 清空 </el-button>
       </el-form-item>
     </el-form>
 
     <div class="examples" v-if="showExamples">
       <h4>常用Cypher查询示例：</h4>
       <div class="example-list">
-        <div v-for="(example, index) in examples" :key="index" class="example-item">
+        <div
+          v-for="(example, index) in examples"
+          :key="index"
+          class="example-item"
+        >
           <div class="example-header">
             <span class="example-title">{{ example.title }}</span>
-            <el-button size="small" @click="useExample(example.query)">使用</el-button>
+            <el-button size="small" @click="useExample(example.query)"
+              >使用</el-button
+            >
           </div>
           <pre class="example-query">{{ example.query }}</pre>
           <p class="example-description">{{ example.description }}</p>
@@ -57,138 +57,146 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { executeCypherQuery } from '@/api/db'
+import { ref } from "vue";
+import { ElMessage } from "element-plus";
+import { executeCypherQuery } from "@/api/db";
 
 // 定义props
 const props = defineProps({
   onResult: {
     type: Function,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const query = ref('')
-const loading = ref(false)
-const showExamples = ref(true)
+const query = ref("");
+const loading = ref(false);
+const showExamples = ref(true);
 
 // 查询示例
 const examples = [
   {
-    title: '获取所有节点标签',
-    query: 'MATCH (n) RETURN DISTINCT labels(n) as labels',
-    description: '返回数据库中所有节点的标签类型'
+    title: "获取所有节点标签",
+    query: "MATCH (n) RETURN DISTINCT labels(n) as labels",
+    description: "返回数据库中所有节点的标签类型",
   },
   {
-    title: '获取认知节点',
-    query: 'MATCH (n:CognitiveNode) RETURN n.uid as id, n.name, n.conv_id, n.act_lv ORDER BY n.act_lv DESC LIMIT 20',
-    description: '返回激活水平最高的20个认知节点'
+    title: "获取认知节点",
+    query:
+      "MATCH (n:CognitiveNode) RETURN n.uid as id, n.name, n.conv_id, n.act_lv ORDER BY n.act_lv DESC LIMIT 20",
+    description: "返回激活水平最高的20个认知节点",
   },
   {
-    title: '获取节点关联',
-    query: 'MATCH (n:CognitiveNode)-[r:ASSOCIATED_WITH]->(m:CognitiveNode) RETURN n.name as source, m.name as target, r.strength as strength ORDER BY r.strength DESC LIMIT 20',
-    description: '返回强度最高的20个节点关联关系'
+    title: "获取节点关联",
+    query:
+      "MATCH (n:CognitiveNode)-[r:ASSOCIATED_WITH]->(m:CognitiveNode) RETURN n.name as source, m.name as target, r.strength as strength ORDER BY r.strength DESC LIMIT 20",
+    description: "返回强度最高的20个节点关联关系",
   },
   {
-    title: '按会话ID查询节点',
-    query: 'MATCH (n:CognitiveNode) WHERE n.conv_id = "YOUR_CONV_ID" RETURN n.uid as id, n.name, n.act_lv ORDER BY n.act_lv DESC',
-    description: '返回特定会话ID的所有节点（需要替换YOUR_CONV_ID）'
+    title: "按会话ID查询节点",
+    query:
+      'MATCH (n:CognitiveNode) WHERE n.conv_id = "YOUR_CONV_ID" RETURN n.uid as id, n.name, n.act_lv ORDER BY n.act_lv DESC',
+    description: "返回特定会话ID的所有节点（需要替换YOUR_CONV_ID）",
   },
   {
-    title: '添加新的认知节点',
-    query: 'CREATE (n:CognitiveNode {name: "新节点", conv_id: "", act_lv: 1.0, is_permanent: false}) RETURN n',
-    description: '创建一个新的认知节点并返回'
-  }
-]
+    title: "添加新的认知节点",
+    query:
+      'CREATE (n:CognitiveNode {name: "新节点", conv_id: "", act_lv: 1.0, is_permanent: false}) RETURN n',
+    description: "创建一个新的认知节点并返回",
+  },
+];
 
 // 使用示例查询
 const useExample = (exampleQuery) => {
-  query.value = exampleQuery
-}
+  query.value = exampleQuery;
+};
 
 // 执行Neo4j查询
 const executeQuery = async () => {
   if (!query.value.trim()) {
-    ElMessage.warning('请输入查询语句')
-    return
+    ElMessage.warning("请输入查询语句");
+    return;
   }
 
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await executeCypherQuery(query.value)
+    const response = await executeCypherQuery(query.value);
 
     // 处理Neo4j查询结果
     if (response.data && response.data.results) {
-      const rows = []
-      const columns = new Set()
+      const rows = [];
+      const columns = new Set();
 
       // 如果是返回整个节点的查询
-      if (response.data.results.length > 0 &&
-          response.data.results[0].length === 1 &&
-          typeof response.data.results[0][0] === 'object' &&
-          response.data.results[0][0]?.properties) {
-
-        response.data.results.forEach(row => {
+      if (
+        response.data.results.length > 0 &&
+        response.data.results[0].length === 1 &&
+        typeof response.data.results[0][0] === "object" &&
+        response.data.results[0][0]?.properties
+      ) {
+        response.data.results.forEach((row) => {
           if (row[0] && row[0].properties) {
             const nodeData = {
               ...row[0].properties,
-              id: row[0].identity ? row[0].identity.toString() : 'unknown',
-              labels: JSON.stringify(row[0].labels || [])
-            }
+              id: row[0].identity ? row[0].identity.toString() : "unknown",
+              labels: JSON.stringify(row[0].labels || []),
+            };
 
             // 收集所有可能的列
-            Object.keys(nodeData).forEach(key => columns.add(key))
+            Object.keys(nodeData).forEach((key) => columns.add(key));
 
-            rows.push(nodeData)
+            rows.push(nodeData);
           }
-        })
+        });
       } else {
         // 处理返回特定属性的查询结果
-        response.data.metadata.forEach(meta => {
+        response.data.metadata.forEach((meta) => {
           if (meta && meta.name) {
-            columns.add(meta.name)
+            columns.add(meta.name);
           }
-        })
+        });
 
-        response.data.results.forEach(row => {
-          const rowData = {}
+        response.data.results.forEach((row) => {
+          const rowData = {};
           row.forEach((value, index) => {
-            if (response.data.metadata[index] && response.data.metadata[index].name) {
-              const colName = response.data.metadata[index].name
+            if (
+              response.data.metadata[index] &&
+              response.data.metadata[index].name
+            ) {
+              const colName = response.data.metadata[index].name;
               // 如果值是对象或数组，转换为JSON字符串
-              if (typeof value === 'object' && value !== null) {
-                rowData[colName] = JSON.stringify(value)
+              if (typeof value === "object" && value !== null) {
+                rowData[colName] = JSON.stringify(value);
               } else {
-                rowData[colName] = value
+                rowData[colName] = value;
               }
             }
-          })
-          rows.push(rowData)
-        })
+          });
+          rows.push(rowData);
+        });
       }
 
       const result = {
         columns: Array.from(columns),
-        rows: rows
-      }
+        rows: rows,
+      };
 
       // 调用回调函数，传递查询结果
-      props.onResult(result)
-      ElMessage.success('查询执行成功')
+      props.onResult(result);
+      ElMessage.success("查询执行成功");
     } else {
       // 没有数据
-      props.onResult({ columns: [], rows: [] })
-      ElMessage.info('查询执行成功，但没有返回数据')
+      props.onResult({ columns: [], rows: [] });
+      ElMessage.info("查询执行成功，但没有返回数据");
     }
   } catch (error) {
-    console.error('查询执行失败:', error)
-    const detail = error.response?.data?.detail
-    ElMessage.error('查询执行失败: ' + (detail || error.message))
+    console.error("查询执行失败:", error);
+    const detail = error.response?.data?.detail;
+    ElMessage.error("查询执行失败: " + (detail || error.message));
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 </script>
 
 <style scoped>
@@ -244,4 +252,4 @@ const executeQuery = async () => {
   font-size: 12px;
   color: #666;
 }
-</style> 
+</style>

@@ -13,9 +13,9 @@
 </template>
 
 <script setup>
-import BotInfoPanel from './BotInfoPanel.vue'
-import SystemInfoPanel from './SystemInfoPanel.vue'
-import ChatInfoPanel from './ChatInfoPanel.vue'
+import BotInfoPanel from "./BotInfoPanel.vue";
+import SystemInfoPanel from "./SystemInfoPanel.vue";
+import ChatInfoPanel from "./ChatInfoPanel.vue";
 </script>
 
 <style scoped>
@@ -57,4 +57,4 @@ import ChatInfoPanel from './ChatInfoPanel.vue'
     flex: none;
   }
 }
-</style> 
+</style>

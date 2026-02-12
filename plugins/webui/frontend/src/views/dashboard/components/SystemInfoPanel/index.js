@@ -1,13 +1,8 @@
-import SystemInfoPanel from './index.vue'
-import ResourceCharts from './ResourceCharts.vue'
-import ResourceMetrics from './ResourceMetrics.vue'
-import SystemDetails from './SystemDetails.vue'
+import SystemInfoPanel from "./index.vue";
+import ResourceCharts from "./ResourceCharts.vue";
+import ResourceMetrics from "./ResourceMetrics.vue";
+import SystemDetails from "./SystemDetails.vue";
 
-export {
-  SystemInfoPanel,
-  ResourceCharts,
-  ResourceMetrics,
-  SystemDetails
-}
+export { SystemInfoPanel, ResourceCharts, ResourceMetrics, SystemDetails };
 
-export default SystemInfoPanel 
+export default SystemInfoPanel;

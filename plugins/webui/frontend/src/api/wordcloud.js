@@ -1,8 +1,8 @@
-import { request } from './index'
+import { request } from "./index";
 
 // 获取词云数据
 export function getWordCloudData(convId, limit = null, refresh = false) {
-  const url = '/api/wordcloud/data';
+  const url = "/api/wordcloud/data";
   const params = {};
 
   params.conv_id = convId;
@@ -22,35 +22,35 @@ export function getWordCloudData(convId, limit = null, refresh = false) {
 export function getWordCloudHistory(convId, date, hour = null) {
   const params = {
     conv_id: convId,
-    date: date
+    date: date,
   };
-  
+
   if (hour !== null) {
     params.hour = hour;
   }
-  
-  return request.get('/api/wordcloud/history', params);
+
+  return request.get("/api/wordcloud/history", params);
 }
 
 // 手动生成词云数据
 export function generateWordCloud(convId, wordLimit = null, hours = null) {
-  const url = '/api/wordcloud/generate';
+  const url = "/api/wordcloud/generate";
   const params = {
-    conv_id: convId
+    conv_id: convId,
   };
-  
+
   if (wordLimit) {
     params.word_limit = wordLimit;
   }
-  
+
   if (hours) {
     params.hours = hours;
   }
-  
+
   return request.post(url, null, { params });
 }
 
 // 获取所有会话ID
 export function getConversations() {
-  return request.get('/api/wordcloud/conversations');
-} 
+  return request.get("/api/wordcloud/conversations");
+}

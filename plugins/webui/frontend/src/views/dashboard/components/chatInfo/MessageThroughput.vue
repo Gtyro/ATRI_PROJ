@@ -9,7 +9,7 @@
         </el-radio-group>
       </div>
     </div>
-    
+
     <div class="chart-container">
       <hour-chart v-if="currentView === 'hour'" />
       <day-heatmap v-else />
@@ -18,12 +18,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import HourChart from './HourChart.vue';
-import DayHeatmap from './DayHeatmap.vue';
+import { ref } from "vue";
+import HourChart from "./HourChart.vue";
+import DayHeatmap from "./DayHeatmap.vue";
 
 // 当前视图模式："hour" 或 "day"
-const currentView = ref('day');
+const currentView = ref("day");
 </script>
 
 <style scoped>
@@ -48,4 +48,4 @@ const currentView = ref('day');
 .chart-container {
   width: 100%;
 }
-</style> 
+</style>

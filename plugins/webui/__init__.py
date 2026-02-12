@@ -15,5 +15,10 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     homepage="https://github.com/yourusername/nonebot-plugin-webui",
     config=None,
-    supported_adapters={"~onebot.v11"}
+    supported_adapters={"~onebot.v11"},
+    extra={
+        "policy": {
+            "manageable": False,
+        }
+    }
 )

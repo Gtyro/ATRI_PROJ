@@ -1,11 +1,37 @@
 import psutil
-from nonebot import on_command
 from nonebot.adapters.onebot.v11 import Bot, MessageEvent
+from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER
 from nonebot.permission import SUPERUSER
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 
+from src.adapters.nonebot.command_registry import register_command
+
+# 插件元信息
+__plugin_meta__ = PluginMetadata(
+    name="系统状态",
+    description="查询系统资源使用情况",
+    usage="系统状态/status",
+    type="application",
+    supported_adapters={"~all"},
+    extra={
+        "policy": {
+            "manageable": False,
+            "default_enabled": True,
+        }
+    },
+)
+
 # 注册系统状态命令处理器
-status_cmd = on_command("系统状态", aliases={"status", "状态"}, permission=SUPERUSER, rule=to_me(), priority=1, block=True)
+status_cmd = register_command(
+    "系统状态",
+    aliases={"status", "状态"},
+    role="admin",
+    permission=GROUP_ADMIN | GROUP_OWNER | SUPERUSER,
+    rule=to_me(),
+    priority=1,
+    block=True,
+)
 
 @status_cmd.handle()
 async def handle_status(bot: Bot, event: MessageEvent):
@@ -38,4 +64,4 @@ async def handle_status(bot: Bot, event: MessageEvent):
   - 已使用: {disk_used:.2f} GB ({disk_percent:.1f}%)
     """.strip()
 
-    await status_cmd.finish(status_text) 
+    await status_cmd.finish(status_text)

@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
-from ..storage.memory_models import CognitiveNode, Memory
-from ..storage.memory_repository import MemoryRepository
+from src.infra.db.neo4j.memory_models import Memory
+from src.infra.db.neo4j.memory_repository import MemoryRepository
 
 
 class LongTermRetriever:
@@ -20,7 +20,13 @@ class LongTermRetriever:
         """
         self.memory_repo = memory_repo
 
-    async def search_for_memories(self, query: str, user_id: Optional[str] = None, limit: int = 5, conv_id: Optional[str] = None) -> List[Dict]:
+    async def search_for_memories(
+        self,
+        query: str,
+        user_id: Optional[str] = None,
+        limit: int = 5,
+        conv_id: Optional[str] = None,
+    ) -> List[Dict]:
         """搜索相关记忆
 
         Args:
@@ -40,7 +46,7 @@ class LongTermRetriever:
         if topics:
             # 添加source标记
             for topic in topics:
-                topic['source'] = 'topic'
+                topic["source"] = "topic"
             results.extend(topics)
 
         # 2. 通过节点搜索关联记忆
@@ -48,25 +54,25 @@ class LongTermRetriever:
         if memories:
             # 添加source标记
             for memory in memories:
-                memory['source'] = 'node'
+                memory["source"] = "node"
             results.extend(memories)
 
         # 3. 按id过滤重复数据
         unique_results = []
         seen_ids = set()
         for result in results:
-            if result['id'] not in seen_ids:
+            if result["id"] not in seen_ids:
                 unique_results.append(result)
-                seen_ids.add(result['id'])
+                seen_ids.add(result["id"])
         results = unique_results
 
         # 4. 按权重排序
-        results.sort(key=lambda x: x['weight'], reverse=True)
+        results.sort(key=lambda x: x["weight"], reverse=True)
 
         # 5. 限制结果数量
         return results[:limit]
 
-    async def _search_topics(self, query: str, limit: int, conv_id: str) -> List[Dict]:
+    async def _search_topics(self, query: str, limit: int, conv_id: Optional[str]) -> List[Dict]:
         """搜索相关话题内容
 
         Args:
@@ -96,7 +102,7 @@ class LongTermRetriever:
             params = {
                 "conv_id": conv_id,
                 "query_pattern": query_pattern,
-                "limit": limit
+                "limit": limit,
             }
 
             results, meta = await self.memory_repo.run_cypher(cypher_query, params)
@@ -110,7 +116,9 @@ class LongTermRetriever:
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
-                    "created_at": memory.created_at.timestamp() if memory.created_at else datetime.now().timestamp()
+                    "created_at": memory.created_at.timestamp()
+                    if memory.created_at
+                    else datetime.now().timestamp(),
                 })
 
             return memories
@@ -124,7 +132,7 @@ class LongTermRetriever:
         Args:
             query: 搜索查询
             limit: 数量限制
-            conv_id: 会话ID，用于限制搜索范围
+            conv_id: 会话ID
 
         Returns:
             记忆列表
@@ -150,7 +158,7 @@ class LongTermRetriever:
             params = {
                 "conv_id": conv_id,
                 "query_pattern": query_pattern,
-                "limit": limit
+                "limit": limit,
             }
 
             results, meta = await self.memory_repo.run_cypher(cypher_query, params)
@@ -164,13 +172,20 @@ class LongTermRetriever:
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
-                    "created_at": memory.created_at.timestamp() if memory.created_at else datetime.now().timestamp()
+                    "created_at": memory.created_at.timestamp()
+                    if memory.created_at
+                    else datetime.now().timestamp(),
                 })
 
             # 如果没有足够的结果，尝试查找间接关联记忆
             if len(memories) < limit:
                 additional_limit = limit - len(memories)
-                indirect_memories = await self._search_indirect_memories(query, additional_limit, conv_id, [m["id"] for m in memories])
+                indirect_memories = await self._search_indirect_memories(
+                    query,
+                    additional_limit,
+                    conv_id,
+                    [m["id"] for m in memories],
+                )
                 memories.extend(indirect_memories)
 
             return memories
@@ -178,7 +193,13 @@ class LongTermRetriever:
             logging.error(f"通过节点搜索记忆失败: {e}")
             return []
 
-    async def _search_indirect_memories(self, query: str, limit: int, conv_id: Optional[str], excluded_ids: List[str]) -> List[Dict]:
+    async def _search_indirect_memories(
+        self,
+        query: str,
+        limit: int,
+        conv_id: Optional[str],
+        excluded_ids: List[str],
+    ) -> List[Dict]:
         """搜索间接关联记忆 (通过节点关联)
 
         Args:
@@ -214,7 +235,7 @@ class LongTermRetriever:
                 "conv_id": conv_id,
                 "query_pattern": query_pattern,
                 "excluded_ids": excluded_ids,
-                "limit": limit
+                "limit": limit,
             }
 
             results, meta = await self.memory_repo.run_cypher(cypher_query, params)
@@ -228,10 +249,12 @@ class LongTermRetriever:
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
-                    "created_at": memory.created_at.timestamp() if memory.created_at else datetime.now().timestamp()
+                    "created_at": memory.created_at.timestamp()
+                    if memory.created_at
+                    else datetime.now().timestamp(),
                 })
 
             return memories
         except Exception as e:
             logging.error(f"搜索间接关联记忆失败: {e}")
-            return [] 
+            return []

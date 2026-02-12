@@ -108,4 +108,4 @@ class DBManager:
         return self._registered_module_set.copy()
 
 # 全局单例实例
-db_manager = DBManager.get_instance() 
+db_manager = DBManager.get_instance()

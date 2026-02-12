@@ -12,6 +12,7 @@
 ## 安装与启动
 
 ### 需求
+
 - Python 3.7+
 - 数据库文件位于 `~/ATRI_PROJ/data/persona.db`
 
@@ -19,6 +20,7 @@
 
 1. 克隆仓库
 2. 安装依赖
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -26,6 +28,7 @@ pip install -r requirements.txt
 ### 启动
 
 直接运行启动脚本：
+
 ```bash
 python run.py
 ```
@@ -106,4 +109,4 @@ python run.py
 ## 注意事项
 
 - 统计数据存储在 `~/ATRI_PROJ/data/persona.db` 中
-- 默认仅允许管理员用户访问WebUI 
+- 默认仅允许管理员用户访问WebUI

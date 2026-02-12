@@ -1,10 +1,10 @@
 <template>
   <div class="memory-timeline-page">
     <h1 class="page-title">记忆脉络</h1>
-    
+
     <el-row :gutter="20">
       <el-col :span="24">
-        <MemoryFilter 
+        <MemoryFilter
           :conversations="memoryStore.conversations"
           :default-conv-id="memoryStore.currentConvId"
           :time-range="memoryStore.timeRange"
@@ -14,15 +14,17 @@
         />
       </el-col>
     </el-row>
-    
+
     <el-row :gutter="20" class="main-content">
       <el-col :md="16" :sm="24" class="timeline-container">
         <div class="timeline-card">
           <div class="card-header">
             <h2>时间轴可视化</h2>
-            <el-tag type="info">共 {{ memoryStore.timelineData.length }} 条记忆</el-tag>
+            <el-tag type="info"
+              >共 {{ memoryStore.timelineData.length }} 条记忆</el-tag
+            >
           </div>
-          
+
           <div class="timeline-view">
             <MemoryTimeline3D
               :memories="memoryStore.timelineData"
@@ -33,18 +35,18 @@
           </div>
         </div>
       </el-col>
-      
+
       <el-col :md="8" :sm="24" class="detail-container">
         <div class="detail-card">
           <div class="card-header">
             <h2>记忆详情</h2>
           </div>
-          
+
           <MemoryDetail :memory="memoryStore.selectedMemory" />
         </div>
       </el-col>
     </el-row>
-    
+
     <el-row v-if="memoryStore.error" class="error-message">
       <el-col :span="24">
         <el-alert
@@ -59,11 +61,11 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount } from 'vue';
-import { useMemoryStore } from '@/stores/memory';
-import MemoryFilter from '@/components/memory/MemoryFilter.vue';
-import MemoryTimeline3D from '@/components/memory/MemoryTimeline3D.vue';
-import MemoryDetail from '@/components/memory/MemoryDetail.vue';
+import { onMounted, onBeforeUnmount } from "vue";
+import { useMemoryStore } from "@/stores/memory";
+import MemoryFilter from "@/components/memory/MemoryFilter.vue";
+import MemoryTimeline3D from "@/components/memory/MemoryTimeline3D.vue";
+import MemoryDetail from "@/components/memory/MemoryDetail.vue";
 
 // 初始化存储
 const memoryStore = useMemoryStore();
@@ -73,7 +75,7 @@ const loadMemoryData = async () => {
   try {
     await memoryStore.fetchMemoryTimeline();
   } catch (error) {
-    console.error('加载记忆数据失败', error);
+    console.error("加载记忆数据失败", error);
   }
 };
 
@@ -82,7 +84,7 @@ const selectMemory = async (memory) => {
   try {
     await memoryStore.fetchMemoryDetail(memory.id);
   } catch (error) {
-    console.error('加载记忆详情失败', error);
+    console.error("加载记忆详情失败", error);
   }
 };
 
@@ -102,9 +104,9 @@ onMounted(async () => {
   try {
     await memoryStore.fetchConversations();
   } catch (error) {
-    console.error('加载会话列表失败', error);
+    console.error("加载会话列表失败", error);
   }
-  
+
   // 加载记忆数据
   loadMemoryData();
 });
@@ -135,12 +137,14 @@ onBeforeUnmount(() => {
   min-height: 600px;
 }
 
-.timeline-container, .detail-container {
+.timeline-container,
+.detail-container {
   height: 100%;
   min-height: 600px;
 }
 
-.timeline-card, .detail-card {
+.timeline-card,
+.detail-card {
   height: 100%;
   background-color: #fff;
   border-radius: 8px;
@@ -176,8 +180,9 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
-  .timeline-container, .detail-container {
+  .timeline-container,
+  .detail-container {
     margin-bottom: 20px;
   }
 }
-</style> 
+</style>

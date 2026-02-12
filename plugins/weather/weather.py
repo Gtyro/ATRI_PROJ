@@ -4,17 +4,15 @@ import os
 import httpx
 import pandas as pd
 import yaml
-from nonebot import on_command
 from nonebot.adapters.onebot.v11 import (Bot, GroupMessageEvent, Message,
                                          MessageEvent, MessageSegment)
 from nonebot.params import CommandArg
-from nonebot.permission import SUPERUSER
-from nonebot.rule import to_me
+from src.adapters.nonebot.command_registry import register_command
 
 
 # 加载配置文件
 def load_config():
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data', 'config.yaml')
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data', 'weather.yaml')
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
@@ -42,7 +40,13 @@ for _, row in city_data.iterrows():
         city_to_adcode[city_name] = str(int(row.iloc[1]))  # adcode
 
 # 注册天气查询命令处理器
-weather = on_command("天气", aliases={"查天气", "weather"}, permission=SUPERUSER, priority=5, block=True)
+weather = register_command(
+    "天气",
+    aliases={"查天气", "weather"},
+    role="normal",
+    priority=5,
+    block=True,
+)
 
 @weather.handle()
 async def handle_weather(bot: Bot, event: MessageEvent, args: Message = CommandArg()):

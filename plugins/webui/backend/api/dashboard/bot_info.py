@@ -158,4 +158,4 @@ async def get_connection_logs():
             duration=duration
         ))
 
-    return logs 
+    return logs

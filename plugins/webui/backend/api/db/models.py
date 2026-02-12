@@ -53,3 +53,8 @@ class Statistic(Model):
     class Meta:
         table = "statistics"
         table_description = "统计信息表"
+
+
+from plugins.db_core.model_registry import register_model_module
+
+register_model_module("models", "plugins.webui.backend.api.db.models")

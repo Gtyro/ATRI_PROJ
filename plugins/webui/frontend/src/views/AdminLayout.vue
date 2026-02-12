@@ -1,11 +1,7 @@
 <template>
   <div class="admin-layout-container">
     <div class="sidebar">
-      <el-menu
-        default-active="1"
-        class="sidebar-menu"
-        router
-      >
+      <el-menu default-active="1" class="sidebar-menu" router>
         <el-menu-item index="/admin/dashboard">
           <el-icon><DataBoard /></el-icon>
           <span>仪表盘</span>
@@ -26,6 +22,10 @@
           <el-icon><Connection /></el-icon>
           <span>聊天词云</span>
         </el-menu-item>
+        <el-menu-item index="/admin/plugin-policy">
+          <el-icon><Setting /></el-icon>
+          <span>插件管理</span>
+        </el-menu-item>
       </el-menu>
     </div>
 
@@ -39,33 +39,42 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { Menu, DataBoard, Share, Connection, Clock } from '@element-plus/icons-vue'
-import Navbar from '@/components/NavbarHeader.vue'
+import { onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import {
+  Menu,
+  DataBoard,
+  Share,
+  Connection,
+  Clock,
+  Setting,
+} from "@element-plus/icons-vue";
+import Navbar from "@/components/NavbarHeader.vue";
 
-const router = useRouter()
-const authStore = useAuthStore()
+const router = useRouter();
+const authStore = useAuthStore();
 
 onMounted(() => {
   // 检查用户是否已登录
   if (!authStore.isAuthenticated) {
-    router.push('/login')
+    router.push("/login");
   }
-})
+});
 </script>
 
 <style scoped>
 .admin-layout-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .right-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .sidebar {
@@ -78,7 +87,10 @@ onMounted(() => {
 .main-content {
   flex: 1;
   padding: 20px;
-  overflow-x: auto;
+  overflow: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 可以添加其他特定于AdminLayout组件的样式 */

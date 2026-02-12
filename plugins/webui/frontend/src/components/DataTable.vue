@@ -32,48 +32,52 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch } from "vue";
 
 const props = defineProps({
   data: {
     type: Object,
-    default: () => ({ columns: [], rows: [] })
+    default: () => ({ columns: [], rows: [] }),
   },
   loading: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
-const columns = computed(() => props.data.columns || [])
-const rows = computed(() => props.data.rows || [])
-const pageSize = ref(10)
-const currentPage = ref(1)
-const hasQueried = ref(false)
+const columns = computed(() => props.data.columns || []);
+const rows = computed(() => props.data.rows || []);
+const pageSize = ref(10);
+const currentPage = ref(1);
+const hasQueried = ref(false);
 
 const displayedRows = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return rows.value.slice(start, end)
-})
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return rows.value.slice(start, end);
+});
 
-watch(() => props.data, () => {
-  if (props.data.columns?.length || props.data.rows?.length) {
-    hasQueried.value = true
-    currentPage.value = 1 // 重置为第一页
-  }
-}, { deep: true })
+watch(
+  () => props.data,
+  () => {
+    if (props.data.columns?.length || props.data.rows?.length) {
+      hasQueried.value = true;
+      currentPage.value = 1; // 重置为第一页
+    }
+  },
+  { deep: true },
+);
 
 const handleSizeChange = (val) => {
-  pageSize.value = val
-  currentPage.value = 1 // 改变每页大小时重置为第一页
-}
+  pageSize.value = val;
+  currentPage.value = 1; // 改变每页大小时重置为第一页
+};
 
 const handleCurrentChange = (val) => {
-  currentPage.value = val
-}
+  currentPage.value = val;
+};
 </script>
 
 <style scoped>
 /* 如果需要组件特定样式可以在这里添加 */
-</style> 
+</style>

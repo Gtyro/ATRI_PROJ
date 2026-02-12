@@ -82,10 +82,10 @@ fi
 # 检查配置文件
 echo ""
 echo -e "${BLUE}检查配置文件：${NC}"
-if [ -f "data/restart/config.json" ]; then
+if [ -f "data/restart/config.yaml" ]; then
     echo -e "✅ 重启配置文件存在"
     echo "配置内容："
-    cat data/restart/config.json | jq . 2>/dev/null || cat data/restart/config.json
+    cat data/restart/config.yaml
 else
     echo -e "⚠️  重启配置文件尚未创建（首次运行时会自动创建）"
 fi

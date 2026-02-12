@@ -4,4 +4,4 @@
 """
 
 # 存储表名到模型类的映射
-table_to_model_map = {} 
+table_to_model_map = {}

@@ -9,7 +9,11 @@
       </el-form-item>
 
       <el-form-item label="选择表">
-        <el-select v-model="selectedTable" placeholder="请选择表" @change="handleTableChange">
+        <el-select
+          v-model="selectedTable"
+          placeholder="请选择表"
+          @change="handleTableChange"
+        >
           <el-option
             v-for="table in availableTables"
             :key="table"
@@ -32,10 +36,20 @@
       </el-form-item>
 
       <el-form-item label="过滤条件" v-if="selectedTable">
-        <el-button type="primary" size="small" @click="addCondition">添加条件</el-button>
+        <el-button type="primary" size="small" @click="addCondition"
+          >添加条件</el-button
+        >
 
-        <div v-for="(condition, index) in conditions" :key="index" class="condition-row">
-          <el-select v-model="condition.column" placeholder="选择列" style="width: 160px">
+        <div
+          v-for="(condition, index) in conditions"
+          :key="index"
+          class="condition-row"
+        >
+          <el-select
+            v-model="condition.column"
+            placeholder="选择列"
+            style="width: 160px"
+          >
             <el-option
               v-for="column in tableColumns"
               :key="column.name"
@@ -44,7 +58,11 @@
             ></el-option>
           </el-select>
 
-          <el-select v-model="condition.operator" placeholder="条件" style="width: 120px">
+          <el-select
+            v-model="condition.operator"
+            placeholder="条件"
+            style="width: 120px"
+          >
             <el-option label="等于" value="="></el-option>
             <el-option label="不等于" value="!="></el-option>
             <el-option label="大于" value=">"></el-option>
@@ -52,28 +70,52 @@
             <el-option label="包含" value="LIKE"></el-option>
           </el-select>
 
-          <el-input v-model="condition.value" placeholder="值" style="width: 160px"></el-input>
+          <el-input
+            v-model="condition.value"
+            placeholder="值"
+            style="width: 160px"
+          ></el-input>
 
-          <el-button type="danger" circle size="small" @click="removeCondition(index)">
+          <el-button
+            type="danger"
+            circle
+            size="small"
+            @click="removeCondition(index)"
+          >
             <el-icon><Delete /></el-icon>
           </el-button>
         </div>
       </el-form-item>
 
       <el-form-item label="限制结果数">
-        <el-input-number v-model="limit" :min="1" :max="1000" :step="10"></el-input-number>
+        <el-input-number
+          v-model="limit"
+          :min="1"
+          :max="1000"
+          :step="10"
+        ></el-input-number>
       </el-form-item>
 
       <el-form-item>
-        <el-button type="primary" @click="buildAndExecuteQuery" :loading="loading">执行查询</el-button>
+        <el-button
+          type="primary"
+          @click="buildAndExecuteQuery"
+          :loading="loading"
+          >执行查询</el-button
+        >
         <el-button @click="clearBuilder">重置</el-button>
         <el-button type="info" @click="showQueryPreview">查看查询</el-button>
-        <el-button type="success" @click="showAddForm = true">添加记录</el-button>
+        <el-button type="success" @click="showAddForm = true"
+          >添加记录</el-button
+        >
       </el-form-item>
     </el-form>
 
     <!-- 数据结果表格 -->
-    <div class="result-table" v-if="resultData.columns && resultData.columns.length">
+    <div
+      class="result-table"
+      v-if="resultData.columns && resultData.columns.length"
+    >
       <h3>查询结果 ({{ resultData.rows ? resultData.rows.length : 0 }} 行)</h3>
       <el-table
         :data="displayedRows"
@@ -92,7 +134,9 @@
         ></el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button size="small" @click="handleEdit(scope.row)"
+              >编辑</el-button
+            >
             <el-popconfirm
               title="确定删除这条记录吗？"
               @confirm="handleDelete(scope.row)"
@@ -105,7 +149,10 @@
         </el-table-column>
       </el-table>
 
-      <div class="pagination" v-if="resultData.rows && resultData.rows.length > 10">
+      <div
+        class="pagination"
+        v-if="resultData.rows && resultData.rows.length > 10"
+      >
         <el-pagination
           layout="total, sizes, prev, pager, next"
           :total="resultData.rows ? resultData.rows.length : 0"
@@ -122,7 +169,9 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="showGeneratedSql = false">关闭</el-button>
-          <el-button type="primary" @click="copyToClipboard">复制到剪贴板</el-button>
+          <el-button type="primary" @click="copyToClipboard"
+            >复制到剪贴板</el-button
+          >
         </span>
       </template>
     </el-dialog>
@@ -136,7 +185,10 @@
           :label="col.name"
           :prop="col.name"
         >
-          <el-input v-model="formData[col.name]" v-if="!isPrimaryKey(col.name)"></el-input>
+          <el-input
+            v-model="formData[col.name]"
+            v-if="!isPrimaryKey(col.name)"
+          ></el-input>
           <el-tag v-else>自动生成</el-tag>
         </el-form-item>
       </el-form>
@@ -157,7 +209,10 @@
           :label="col.name"
           :prop="col.name"
         >
-          <el-input v-model="formData[col.name]" v-if="!isPrimaryKey(col.name)"></el-input>
+          <el-input
+            v-model="formData[col.name]"
+            v-if="!isPrimaryKey(col.name)"
+          ></el-input>
           <el-tag v-else>{{ formData[col.name] }}</el-tag>
         </el-form-item>
       </el-form>
@@ -172,609 +227,659 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { request } from '@/api'
-import { Delete } from '@element-plus/icons-vue'
+import { ref, computed, onMounted, watch } from "vue";
+import { ElMessage } from "element-plus";
+import { request } from "@/api";
+import { Delete } from "@element-plus/icons-vue";
 import {
-  addRecord, updateRecord, deleteRecord,
-  executeQuery, executeCypherQuery,
-  getTables, getNodeLabels,
-  createCognitiveNode, updateCognitiveNode, deleteCognitiveNode
-} from '@/api/db'
-import { useDbStore } from '@/stores/db'
+  addRecord,
+  updateRecord,
+  deleteRecord,
+  executeQuery,
+  executeCypherQuery,
+  getTables,
+  getNodeLabels,
+  createCognitiveNode,
+  updateCognitiveNode,
+  deleteCognitiveNode,
+} from "@/api/db";
+import { useDbStore } from "@/stores/db";
 
 // 使用Store
-const dbStore = useDbStore()
+const dbStore = useDbStore();
 
 const props = defineProps({
   tables: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   onResult: {
     type: Function,
-    required: true
+    required: true,
   },
   initialTable: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
 // 数据源相关状态
-const dataSource = ref('sql') // 默认为SQL
-const sqlTables = ref([])
-const neo4jLabels = ref([])
+const dataSource = ref("sql"); // 默认为SQL
+const sqlTables = ref([]);
+const neo4jLabels = ref([]);
 const availableTables = computed(() => {
-  return dataSource.value === 'sql' ? sqlTables.value : neo4jLabels.value
-})
+  return dataSource.value === "sql" ? sqlTables.value : neo4jLabels.value;
+});
 
-const selectedTable = ref('')
-const tableColumns = ref([])
-const selectedColumns = ref([])
-const conditions = ref([])
-const limit = ref(100)
-const loading = ref(false)
-const showGeneratedSql = ref(false)
+const selectedTable = ref("");
+const tableColumns = ref([]);
+const selectedColumns = ref([]);
+const conditions = ref([]);
+const limit = ref(100);
+const loading = ref(false);
+const showGeneratedSql = ref(false);
 const generatedQuery = computed(() => {
-  return dataSource.value === 'sql' ? buildSqlQuery() : buildCypherQuery()
-})
+  return dataSource.value === "sql" ? buildSqlQuery() : buildCypherQuery();
+});
 const queryDialogTitle = computed(() => {
-  return dataSource.value === 'sql' ? '生成的SQL查询' : '生成的Cypher查询'
-})
+  return dataSource.value === "sql" ? "生成的SQL查询" : "生成的Cypher查询";
+});
 
 // 数据表格相关状态
-const resultData = ref({ columns: [], rows: [] })
-const pageSize = ref(10)
-const currentPage = ref(1)
+const resultData = ref({ columns: [], rows: [] });
+const pageSize = ref(10);
+const currentPage = ref(1);
 const displayedRows = computed(() => {
-  if (!resultData.value.rows) return []
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return resultData.value.rows.slice(start, end)
-})
-const sortConfig = ref({ prop: '', order: '' })
+  if (!resultData.value.rows) return [];
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return resultData.value.rows.slice(start, end);
+});
+const sortConfig = ref({ prop: "", order: "" });
 
 // 表单相关状态
-const showAddForm = ref(false)
-const showEditForm = ref(false)
-const formData = ref({})
-const editingId = ref(null)
+const showAddForm = ref(false);
+const showEditForm = ref(false);
+const formData = ref({});
+const editingId = ref(null);
 
 // 监听初始表名
-watch(() => props.initialTable, (newVal) => {
-  if (newVal && newVal !== selectedTable.value) {
-    selectedTable.value = newVal
-    handleTableChange(newVal)
-  }
-}, { immediate: true })
+watch(
+  () => props.initialTable,
+  (newVal) => {
+    if (newVal && newVal !== selectedTable.value) {
+      selectedTable.value = newVal;
+      handleTableChange(newVal);
+    }
+  },
+  { immediate: true },
+);
 
 // 监听props中的tables变化
-watch(() => props.tables, (newTables) => {
-  if (newTables && newTables.length > 0) {
-    sqlTables.value = newTables
-  }
-}, { immediate: true })
+watch(
+  () => props.tables,
+  (newTables) => {
+    if (newTables && newTables.length > 0) {
+      sqlTables.value = newTables;
+    }
+  },
+  { immediate: true },
+);
 
 // 初始化时获取数据源
 onMounted(async () => {
-  await fetchDataSources()
-})
+  await fetchDataSources();
+});
 
 // 获取所有数据源
 const fetchDataSources = async () => {
   try {
     // 获取SQL表
-    const tablesResp = await getTables()
-    sqlTables.value = tablesResp.data.tables || []
+    const tablesResp = await getTables();
+    sqlTables.value = tablesResp.data.tables || [];
 
     // 获取Neo4j标签
     try {
-      const response = await getNodeLabels()
-      let labels = []
+      const response = await getNodeLabels();
+      let labels = [];
 
       if (response.data && response.data.results) {
-        response.data.results.forEach(row => {
+        response.data.results.forEach((row) => {
           if (row[0] && Array.isArray(row[0])) {
-            row[0].forEach(label => {
+            row[0].forEach((label) => {
               if (!labels.includes(label)) {
-                labels.push(label)
+                labels.push(label);
               }
-            })
+            });
           }
-        })
+        });
       }
 
       // 确保预定义的模型始终可见
-      const predefinedModels = ['CognitiveNode', 'Memory', 'NodeAssociation']
-      predefinedModels.forEach(model => {
+      const predefinedModels = ["CognitiveNode", "Memory", "NodeAssociation"];
+      predefinedModels.forEach((model) => {
         if (!labels.includes(model)) {
-          labels.push(model)
+          labels.push(model);
         }
-      })
+      });
 
-      neo4jLabels.value = labels
+      neo4jLabels.value = labels;
     } catch (error) {
-      console.error('Neo4j标签获取失败:', error)
-      neo4jLabels.value = ['CognitiveNode', 'Memory', 'NodeAssociation'] // 使用默认值
+      console.error("Neo4j标签获取失败:", error);
+      neo4jLabels.value = ["CognitiveNode", "Memory", "NodeAssociation"]; // 使用默认值
     }
   } catch (error) {
-    ElMessage.error('获取数据源失败')
-    console.error(error)
+    ElMessage.error("获取数据源失败");
+    console.error(error);
   }
-}
+};
 
 // 当数据源变更时
 const handleDataSourceChange = async () => {
   // 清空当前选中的表和列
-  selectedTable.value = ''
-  tableColumns.value = []
-  selectedColumns.value = []
-  resultData.value = { columns: [], rows: [] }
+  selectedTable.value = "";
+  tableColumns.value = [];
+  selectedColumns.value = [];
+  resultData.value = { columns: [], rows: [] };
 
   // 重新设置store中的数据源
-  dbStore.setDataSource(dataSource.value)
-}
+  dbStore.setDataSource(dataSource.value);
+};
 
 // 当表选择改变时获取列信息
 const handleTableChange = async (tableName) => {
-  if (!tableName) return
-  loading.value = true
+  if (!tableName) return;
+  loading.value = true;
 
   try {
-    if (dataSource.value === 'sql') {
+    if (dataSource.value === "sql") {
       // SQL表结构获取
-      const response = await request.get(`/db/table/${tableName}`)
-      tableColumns.value = response.data.columns
-      selectedColumns.value = tableColumns.value.map(col => col.name)
+      const response = await request.get(`/db/table/${tableName}`);
+      tableColumns.value = response.data.columns;
+      selectedColumns.value = tableColumns.value.map((col) => col.name);
     } else {
       // Neo4j节点属性获取 (使用示例查询获取一个节点的所有属性)
-      const query = `MATCH (n:${tableName}) RETURN n LIMIT 1`
-      const response = await executeCypherQuery(query)
+      const query = `MATCH (n:${tableName}) RETURN n LIMIT 1`;
+      const response = await executeCypherQuery(query);
 
-      if (response.data && response.data.results && response.data.results.length > 0) {
-        const nodeProps = []
+      if (
+        response.data &&
+        response.data.results &&
+        response.data.results.length > 0
+      ) {
+        const nodeProps = [];
         // 处理结果，提取节点属性
-        const node = response.data.results[0][0]
+        const node = response.data.results[0][0];
         if (node) {
           // 从Neo4j结果中提取属性
-          const properties = Object.keys(node.properties || {})
-          properties.forEach(prop => {
-            nodeProps.push({ name: prop, type: typeof node.properties[prop] })
-          })
+          const properties = Object.keys(node.properties || {});
+          properties.forEach((prop) => {
+            nodeProps.push({ name: prop, type: typeof node.properties[prop] });
+          });
           // 添加ID属性
-          nodeProps.push({ name: 'id', type: 'string' })
+          nodeProps.push({ name: "id", type: "string" });
         }
 
-        tableColumns.value = nodeProps
-        selectedColumns.value = tableColumns.value.map(col => col.name)
+        tableColumns.value = nodeProps;
+        selectedColumns.value = tableColumns.value.map((col) => col.name);
       } else {
         // 如果没有结果，使用默认属性
-        const defaultProps = dataSource.value === 'neo4j' && tableName === 'CognitiveNode'
-          ? [
-              { name: 'uid', type: 'string' },
-              { name: 'name', type: 'string' },
-              { name: 'conv_id', type: 'string' },
-              { name: 'act_lv', type: 'number' },
-              { name: 'created_at', type: 'datetime' },
-              { name: 'last_accessed', type: 'datetime' },
-              { name: 'is_permanent', type: 'boolean' }
-            ]
-          : [{ name: 'id', type: 'string' }]
+        const defaultProps =
+          dataSource.value === "neo4j" && tableName === "CognitiveNode"
+            ? [
+                { name: "uid", type: "string" },
+                { name: "name", type: "string" },
+                { name: "conv_id", type: "string" },
+                { name: "act_lv", type: "number" },
+                { name: "created_at", type: "datetime" },
+                { name: "last_accessed", type: "datetime" },
+                { name: "is_permanent", type: "boolean" },
+              ]
+            : [{ name: "id", type: "string" }];
 
-        tableColumns.value = defaultProps
-        selectedColumns.value = tableColumns.value.map(col => col.name)
+        tableColumns.value = defaultProps;
+        selectedColumns.value = tableColumns.value.map((col) => col.name);
       }
     }
 
     // 自动执行查询
-    buildAndExecuteQuery()
+    buildAndExecuteQuery();
   } catch (error) {
-    console.error('获取表结构失败:', error)
-    let errorMessage = '获取表结构失败'
+    console.error("获取表结构失败:", error);
+    let errorMessage = "获取表结构失败";
 
     if (error.response) {
-      const detail = error.response.data?.detail
+      const detail = error.response.data?.detail;
       if (detail) {
-        errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail)
+        errorMessage +=
+          ": " + (typeof detail === "object" ? JSON.stringify(detail) : detail);
       } else {
-        errorMessage += ': ' + error.response.status
+        errorMessage += ": " + error.response.status;
       }
     } else if (error.message) {
-      errorMessage += ': ' + error.message
+      errorMessage += ": " + error.message;
     }
 
-    ElMessage.error(errorMessage)
+    ElMessage.error(errorMessage);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 添加条件
 const addCondition = () => {
   conditions.value.push({
-    column: tableColumns.value.length ? tableColumns.value[0].name : '',
-    operator: '=',
-    value: ''
-  })
-}
+    column: tableColumns.value.length ? tableColumns.value[0].name : "",
+    operator: "=",
+    value: "",
+  });
+};
 
 // 移除条件
 const removeCondition = (index) => {
-  conditions.value.splice(index, 1)
-}
+  conditions.value.splice(index, 1);
+};
 
 // 构建SQL查询
 const buildSqlQuery = () => {
-  if (!selectedTable.value) return ''
+  if (!selectedTable.value) return "";
 
-  let query = 'SELECT '
+  let query = "SELECT ";
 
   // 处理选择的列
   if (selectedColumns.value.length === 0) {
-    query += '* '
+    query += "* ";
   } else {
-    query += selectedColumns.value.join(', ')
+    query += selectedColumns.value.join(", ");
   }
 
-  query += ` FROM ${selectedTable.value}`
+  query += ` FROM ${selectedTable.value}`;
 
   // 处理条件
   if (conditions.value.length > 0) {
-    query += ' WHERE '
+    query += " WHERE ";
     query += conditions.value
-      .filter(c => c.column && c.operator && c.value !== '')
-      .map(c => {
-        if (c.operator === 'LIKE') {
-          return `${c.column} LIKE '%${c.value}%'`
+      .filter((c) => c.column && c.operator && c.value !== "")
+      .map((c) => {
+        if (c.operator === "LIKE") {
+          return `${c.column} LIKE '%${c.value}%'`;
         }
-        return `${c.column} ${c.operator} '${c.value}'`
+        return `${c.column} ${c.operator} '${c.value}'`;
       })
-      .join(' AND ')
+      .join(" AND ");
   }
 
   // 添加排序
   if (sortConfig.value.prop && sortConfig.value.order) {
-    query += ` ORDER BY ${sortConfig.value.prop} ${sortConfig.value.order === 'ascending' ? 'ASC' : 'DESC'}`
+    query += ` ORDER BY ${sortConfig.value.prop} ${sortConfig.value.order === "ascending" ? "ASC" : "DESC"}`;
   }
 
   // 添加限制
   if (limit.value) {
-    query += ` LIMIT ${limit.value}`
+    query += ` LIMIT ${limit.value}`;
   }
 
-  return query
-}
+  return query;
+};
 
 // 构建Cypher查询
 const buildCypherQuery = () => {
-  if (!selectedTable.value) return ''
+  if (!selectedTable.value) return "";
 
-  let query = `MATCH (n:${selectedTable.value}) `
+  let query = `MATCH (n:${selectedTable.value}) `;
 
   // 处理条件
   if (conditions.value.length > 0) {
-    query += 'WHERE '
+    query += "WHERE ";
     query += conditions.value
-      .filter(c => c.column && c.operator && c.value !== '')
-      .map(c => {
-        if (c.operator === 'LIKE') {
-          return `n.${c.column} =~ '.*${c.value}.*'`
+      .filter((c) => c.column && c.operator && c.value !== "")
+      .map((c) => {
+        if (c.operator === "LIKE") {
+          return `n.${c.column} =~ '.*${c.value}.*'`;
         }
-        return `n.${c.column} ${c.operator} '${c.value}'`
+        return `n.${c.column} ${c.operator} '${c.value}'`;
       })
-      .join(' AND ')
+      .join(" AND ");
   }
 
   // 返回选择的属性
   if (selectedColumns.value.length === 0) {
-    query += 'RETURN n'
+    query += "RETURN n";
   } else {
     // 对于特殊的id列，需要使用节点的id
-    const returnParts = selectedColumns.value.map(col => {
-      if (col.toLowerCase() === 'id' || col.toLowerCase() === 'uid') {
-        return 'n.uid as id'
+    const returnParts = selectedColumns.value.map((col) => {
+      if (col.toLowerCase() === "id" || col.toLowerCase() === "uid") {
+        return "n.uid as id";
       }
-      return `n.${col} as ${col}`
-    })
-    query += `RETURN ${returnParts.join(', ')}`
+      return `n.${col} as ${col}`;
+    });
+    query += `RETURN ${returnParts.join(", ")}`;
   }
 
   // 添加排序
   if (sortConfig.value.prop && sortConfig.value.order) {
-    const prop = sortConfig.value.prop
-    const direction = sortConfig.value.order === 'ascending' ? 'ASC' : 'DESC'
-    query += ` ORDER BY n.${prop} ${direction}`
+    const prop = sortConfig.value.prop;
+    const direction = sortConfig.value.order === "ascending" ? "ASC" : "DESC";
+    query += ` ORDER BY n.${prop} ${direction}`;
   }
 
   // 添加限制
   if (limit.value) {
-    query += ` LIMIT ${limit.value}`
+    query += ` LIMIT ${limit.value}`;
   }
 
-  return query
-}
+  return query;
+};
 
 // 显示查询预览
 const showQueryPreview = () => {
-  showGeneratedSql.value = true
-}
+  showGeneratedSql.value = true;
+};
 
 // 构建并执行查询
 const buildAndExecuteQuery = async () => {
-  if (!selectedTable.value) return
+  if (!selectedTable.value) return;
 
-  loading.value = true
+  loading.value = true;
   try {
-    if (dataSource.value === 'sql') {
-      const query = buildSqlQuery()
-      const response = await executeQuery(query)
-      resultData.value = response.data
+    if (dataSource.value === "sql") {
+      const query = buildSqlQuery();
+      const response = await executeQuery(query);
+      resultData.value = response.data;
     } else {
-      const query = buildCypherQuery()
-      const response = await executeCypherQuery(query)
+      const query = buildCypherQuery();
+      const response = await executeCypherQuery(query);
 
       // 处理Neo4j查询结果
       if (response.data && response.data.results) {
-        const rows = []
-        const columns = new Set()
+        const rows = [];
+        const columns = new Set();
 
         // 如果是返回整个节点的查询
-        if (response.data.results.length > 0 && response.data.results[0].length === 1 && typeof response.data.results[0][0] === 'object') {
-          response.data.results.forEach(row => {
+        if (
+          response.data.results.length > 0 &&
+          response.data.results[0].length === 1 &&
+          typeof response.data.results[0][0] === "object"
+        ) {
+          response.data.results.forEach((row) => {
             if (row[0] && row[0].properties) {
-              const nodeData = { ...row[0].properties, id: row[0].identity.toString() }
+              const nodeData = {
+                ...row[0].properties,
+                id: row[0].identity.toString(),
+              };
 
               // 收集所有可能的列
-              Object.keys(nodeData).forEach(key => columns.add(key))
+              Object.keys(nodeData).forEach((key) => columns.add(key));
 
-              rows.push(nodeData)
+              rows.push(nodeData);
             }
-          })
+          });
         } else {
           // 处理返回特定属性的查询结果
-          response.data.metadata.forEach(meta => {
+          response.data.metadata.forEach((meta) => {
             if (meta && meta.name) {
-              columns.add(meta.name)
+              columns.add(meta.name);
             }
-          })
+          });
 
-          response.data.results.forEach(row => {
-            const rowData = {}
+          response.data.results.forEach((row) => {
+            const rowData = {};
             row.forEach((value, index) => {
-              if (response.data.metadata[index] && response.data.metadata[index].name) {
-                rowData[response.data.metadata[index].name] = value
+              if (
+                response.data.metadata[index] &&
+                response.data.metadata[index].name
+              ) {
+                rowData[response.data.metadata[index].name] = value;
               }
-            })
-            rows.push(rowData)
-          })
+            });
+            rows.push(rowData);
+          });
         }
 
         resultData.value = {
           columns: Array.from(columns),
-          rows: rows
-        }
+          rows: rows,
+        };
       } else {
-        resultData.value = { columns: [], rows: [] }
+        resultData.value = { columns: [], rows: [] };
       }
     }
 
     // 重置分页
-    currentPage.value = 1
+    currentPage.value = 1;
 
     // 回调返回结果
-    props.onResult(resultData.value)
+    props.onResult(resultData.value);
   } catch (error) {
-    console.error('查询执行失败:', error)
-    let errorMessage = '查询执行失败'
+    console.error("查询执行失败:", error);
+    let errorMessage = "查询执行失败";
 
     if (error.response) {
-      const detail = error.response.data?.detail
+      const detail = error.response.data?.detail;
       if (detail) {
-        errorMessage += ': ' + (typeof detail === 'object' ? JSON.stringify(detail) : detail)
+        errorMessage +=
+          ": " + (typeof detail === "object" ? JSON.stringify(detail) : detail);
       }
     } else if (error.message) {
-      errorMessage += ': ' + error.message
+      errorMessage += ": " + error.message;
     }
 
-    ElMessage.error(errorMessage)
+    ElMessage.error(errorMessage);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 清空查询构建器
 const clearBuilder = () => {
-  selectedColumns.value = tableColumns.value.map(col => col.name)
-  conditions.value = []
-  sortConfig.value = { prop: '', order: '' }
-  currentPage.value = 1
-}
+  selectedColumns.value = tableColumns.value.map((col) => col.name);
+  conditions.value = [];
+  sortConfig.value = { prop: "", order: "" };
+  currentPage.value = 1;
+};
 
 // 复制到剪贴板
 const copyToClipboard = () => {
-  navigator.clipboard.writeText(generatedQuery.value)
+  navigator.clipboard
+    .writeText(generatedQuery.value)
     .then(() => {
-      ElMessage.success('查询已复制到剪贴板')
+      ElMessage.success("查询已复制到剪贴板");
     })
     .catch(() => {
-      ElMessage.error('复制失败')
-    })
-}
+      ElMessage.error("复制失败");
+    });
+};
 
 // 处理排序变化
 const handleSortChange = ({ prop, order }) => {
-  sortConfig.value = { prop, order }
-  buildAndExecuteQuery()
-}
+  sortConfig.value = { prop, order };
+  buildAndExecuteQuery();
+};
 
 // 处理分页尺寸变化
 const handleSizeChange = (size) => {
-  pageSize.value = size
-  currentPage.value = 1
-}
+  pageSize.value = size;
+  currentPage.value = 1;
+};
 
 // 处理页码变化
 const handleCurrentChange = (page) => {
-  currentPage.value = page
-}
+  currentPage.value = page;
+};
 
 // 判断是否为主键
 const isPrimaryKey = (columnName) => {
-  const column = tableColumns.value.find(col => col.name === columnName)
-  return column && (column.pk === 1 || columnName.toLowerCase() === 'id' || columnName.toLowerCase() === 'uid')
-}
+  const column = tableColumns.value.find((col) => col.name === columnName);
+  return (
+    column &&
+    (column.pk === 1 ||
+      columnName.toLowerCase() === "id" ||
+      columnName.toLowerCase() === "uid")
+  );
+};
 
 // 获取主键字段名和值
 const getPrimaryKeyInfo = (row) => {
   // 寻找主键字段
-  let pkColumn = tableColumns.value.find(col => col.pk === 1)
+  let pkColumn = tableColumns.value.find((col) => col.pk === 1);
 
   // 如果没有明确的主键，尝试使用id或uid字段
   if (!pkColumn) {
-    pkColumn = tableColumns.value.find(col =>
-      col.name.toLowerCase() === 'id' || col.name.toLowerCase() === 'uid'
-    )
+    pkColumn = tableColumns.value.find(
+      (col) =>
+        col.name.toLowerCase() === "id" || col.name.toLowerCase() === "uid",
+    );
   }
 
   if (!pkColumn) {
-    return { name: 'id', value: row.id || null }
+    return { name: "id", value: row.id || null };
   }
 
-  return { name: pkColumn.name, value: row[pkColumn.name] }
-}
+  return { name: pkColumn.name, value: row[pkColumn.name] };
+};
 
 // 处理添加记录
 const handleAdd = async () => {
-  if (!selectedTable.value) return
+  if (!selectedTable.value) return;
 
   try {
-    loading.value = true
-    let response
+    loading.value = true;
+    let response;
 
-    if (dataSource.value === 'sql') {
-      response = await addRecord(selectedTable.value, formData.value)
+    if (dataSource.value === "sql") {
+      response = await addRecord(selectedTable.value, formData.value);
     } else {
       // 针对Neo4j的CognitiveNode特殊处理
-      if (selectedTable.value === 'CognitiveNode') {
-        response = await createCognitiveNode(formData.value)
+      if (selectedTable.value === "CognitiveNode") {
+        response = await createCognitiveNode(formData.value);
       } else {
         // 通用Neo4j创建 - 构建Cypher查询
         const properties = Object.entries(formData.value)
-          .filter(([k, v]) => v !== null && v !== undefined && k !== 'id' && k !== 'uid')
-          .map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : v}`)
-          .join(', ')
+          .filter(
+            ([k, v]) =>
+              v !== null && v !== undefined && k !== "id" && k !== "uid",
+          )
+          .map(([k, v]) => `${k}: ${typeof v === "string" ? `'${v}'` : v}`)
+          .join(", ");
 
-        const query = `CREATE (n:${selectedTable.value} {${properties}}) RETURN n`
-        response = await executeCypherQuery(query)
+        const query = `CREATE (n:${selectedTable.value} {${properties}}) RETURN n`;
+        response = await executeCypherQuery(query);
       }
     }
 
-    ElMessage.success('添加成功')
-    showAddForm.value = false
-    formData.value = {}
+    ElMessage.success("添加成功");
+    showAddForm.value = false;
+    formData.value = {};
 
     // 刷新数据
-    buildAndExecuteQuery()
+    buildAndExecuteQuery();
   } catch (error) {
-    console.error('添加失败:', error)
-    ElMessage.error('添加失败: ' + (error.response?.data?.detail || error.message))
+    console.error("添加失败:", error);
+    ElMessage.error(
+      "添加失败: " + (error.response?.data?.detail || error.message),
+    );
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 处理编辑操作
 const handleEdit = (row) => {
   // 复制行数据到表单
-  formData.value = { ...row }
+  formData.value = { ...row };
 
   // 获取主键信息
-  const pkInfo = getPrimaryKeyInfo(row)
-  editingId.value = pkInfo.value
+  const pkInfo = getPrimaryKeyInfo(row);
+  editingId.value = pkInfo.value;
 
-  showEditForm.value = true
-}
+  showEditForm.value = true;
+};
 
 // 处理更新记录
 const handleUpdate = async () => {
-  if (!selectedTable.value || !editingId.value) return
+  if (!selectedTable.value || !editingId.value) return;
 
   try {
-    loading.value = true
+    loading.value = true;
 
-    if (dataSource.value === 'sql') {
-      await updateRecord(selectedTable.value, editingId.value, formData.value)
+    if (dataSource.value === "sql") {
+      await updateRecord(selectedTable.value, editingId.value, formData.value);
     } else {
       // 针对Neo4j的CognitiveNode特殊处理
-      if (selectedTable.value === 'CognitiveNode') {
-        await updateCognitiveNode(editingId.value, formData.value)
+      if (selectedTable.value === "CognitiveNode") {
+        await updateCognitiveNode(editingId.value, formData.value);
       } else {
         // 通用Neo4j更新 - 构建Cypher查询
         const properties = Object.entries(formData.value)
-          .filter(([k, v]) => v !== null && v !== undefined && k !== 'id' && k !== 'uid')
-          .map(([k, v]) => `n.${k} = ${typeof v === 'string' ? `'${v}'` : v}`)
-          .join(', ')
+          .filter(
+            ([k, v]) =>
+              v !== null && v !== undefined && k !== "id" && k !== "uid",
+          )
+          .map(([k, v]) => `n.${k} = ${typeof v === "string" ? `'${v}'` : v}`)
+          .join(", ");
 
-        const query = `MATCH (n:${selectedTable.value}) WHERE n.uid = '${editingId.value}' SET ${properties} RETURN n`
-        await executeCypherQuery(query)
+        const query = `MATCH (n:${selectedTable.value}) WHERE n.uid = '${editingId.value}' SET ${properties} RETURN n`;
+        await executeCypherQuery(query);
       }
     }
 
-    ElMessage.success('更新成功')
-    showEditForm.value = false
-    formData.value = {}
-    editingId.value = null
+    ElMessage.success("更新成功");
+    showEditForm.value = false;
+    formData.value = {};
+    editingId.value = null;
 
     // 刷新数据
-    buildAndExecuteQuery()
+    buildAndExecuteQuery();
   } catch (error) {
-    console.error('更新失败:', error)
-    ElMessage.error('更新失败: ' + (error.response?.data?.detail || error.message))
+    console.error("更新失败:", error);
+    ElMessage.error(
+      "更新失败: " + (error.response?.data?.detail || error.message),
+    );
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 处理删除操作
 const handleDelete = async (row) => {
-  if (!selectedTable.value) return
+  if (!selectedTable.value) return;
 
   // 获取主键信息
-  const pkInfo = getPrimaryKeyInfo(row)
+  const pkInfo = getPrimaryKeyInfo(row);
   if (!pkInfo.value) {
-    ElMessage.error('无法确定要删除的记录ID')
-    return
+    ElMessage.error("无法确定要删除的记录ID");
+    return;
   }
 
   try {
-    loading.value = true
+    loading.value = true;
 
-    if (dataSource.value === 'sql') {
-      await deleteRecord(selectedTable.value, pkInfo.value)
+    if (dataSource.value === "sql") {
+      await deleteRecord(selectedTable.value, pkInfo.value);
     } else {
       // 针对Neo4j的CognitiveNode特殊处理
-      if (selectedTable.value === 'CognitiveNode') {
-        await deleteCognitiveNode(pkInfo.value)
+      if (selectedTable.value === "CognitiveNode") {
+        await deleteCognitiveNode(pkInfo.value);
       } else {
         // 通用Neo4j删除 - 构建Cypher查询
-        const query = `MATCH (n:${selectedTable.value}) WHERE n.uid = '${pkInfo.value}' DELETE n`
-        await executeCypherQuery(query)
+        const query = `MATCH (n:${selectedTable.value}) WHERE n.uid = '${pkInfo.value}' DELETE n`;
+        await executeCypherQuery(query);
       }
     }
 
-    ElMessage.success('删除成功')
+    ElMessage.success("删除成功");
 
     // 刷新数据
-    buildAndExecuteQuery()
+    buildAndExecuteQuery();
   } catch (error) {
-    console.error('删除失败:', error)
-    ElMessage.error('删除失败: ' + (error.response?.data?.detail || error.message))
+    console.error("删除失败:", error);
+    ElMessage.error(
+      "删除失败: " + (error.response?.data?.detail || error.message),
+    );
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 </script>
 
 <style scoped>
@@ -806,4 +911,4 @@ const handleDelete = async (row) => {
   white-space: pre-wrap;
   word-break: break-all;
 }
-</style> 
+</style>

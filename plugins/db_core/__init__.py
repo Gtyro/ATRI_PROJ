@@ -7,7 +7,7 @@ from nonebot.plugin import PluginMetadata
 
 from .db_init import initialize_database, shutdown_database
 from .db_manager import db_manager
-from .model_registry import register_all_models
+from .model_registry import register_all_models, register_model_module
 
 __plugin_meta__ = PluginMetadata(
     name="数据库核心",
@@ -16,13 +16,24 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     config=None,
     homepage="https://github.com/yourusername/ATRI_PROJ",
-    supported_adapters={"~all"}
+    supported_adapters={"~all"},
+    extra={
+        "policy": {
+            "manageable": False,
+        }
+    }
 )
 
 driver = get_driver()
 
 # 导出函数和对象，供其他插件使用
-__all__ = ["db_manager", "initialize_database", "shutdown_database", "register_all_models"]
+__all__ = [
+    "db_manager",
+    "initialize_database",
+    "shutdown_database",
+    "register_all_models",
+    "register_model_module",
+]
 
 # 在Nonebot启动时注册所有模型并初始化数据库
 @driver.on_startup
@@ -35,4 +46,4 @@ async def init_db():
 # 在Nonebot关闭时关闭数据库连接
 @driver.on_shutdown
 async def close_db():
-    await shutdown_database() 
+    await shutdown_database()

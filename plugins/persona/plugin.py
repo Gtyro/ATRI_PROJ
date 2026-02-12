@@ -12,14 +12,20 @@ import asyncio
 import logging
 import random
 
-from nonebot import get_driver, on_command, on_message, require
+from nonebot import get_driver, on_message, require
 from nonebot_plugin_alconna.uniseg import Target, UniMessage
 from nonebot_plugin_apscheduler import scheduler
 
+from plugins.models import GroupPluginConfig
+from src.adapters.nonebot import assemble_persona_engine
+from src.adapters.nonebot.command_registry import register_auto_feature
+from src.core.domain import PersonaConfig
+from src.core.events import Event, MESSAGE_RECEIVED
+from src.core.facade.persona_facade import PersonaFacade
+
 from . import psstate
-from .core import PersonaSystem
 from .handlers import *
-from .psstate import is_enabled, persona_system
+from .psstate import is_enabled
 
 # 使用require机制加载数据库插件
 require("db_core")
@@ -28,15 +34,14 @@ require("db_core")
 driver = get_driver()
 
 
-# 初始化人格系统
-try:
-    psstate.persona_system = PersonaSystem(
-        db_path="data/persona.db",
-        config_path="data/persona.yaml"
-    )
-except Exception as e:
-    logging.error(f"人格系统初始化失败: {e}")
-    psstate.persona_system = None
+# 初始化人格系统占位（实际装配在启动时完成）
+psstate.persona_system = None
+
+register_auto_feature(
+    "人格定时维护",
+    role="superuser",
+    trigger_type="schedule",
+)
 
 
 async def persona_callback(conv_id: str, message_dict: dict) -> None:
@@ -54,27 +59,74 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
             # 处理回复内容（可能是字符串或列表）
             if isinstance(reply_content, list):
                 for reply in reply_content:
+                    reply = str(reply).strip()
+                    if not reply:
+                        continue
                     await UniMessage(reply).send(target)
                     # 多条消息之间添加随机间隔，模拟真人打字速度
                     sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
                     await asyncio.sleep(sleep_time)
             else:
+                reply_content = str(reply_content).strip()
+                if not reply_content:
+                    return
                 await UniMessage(reply_content).send(target)
     except Exception as e:
         logging.error(f"生成自动回复失败: {e}", exc_info=True)
 
+
+async def _handle_message_event(event: Event) -> None:
+    """处理消息事件并交给 Persona 引擎。"""
+    if not is_enabled() or not psstate.persona_system:
+        return
+    payload = event.payload
+    if not payload:
+        return
+    message_data = {
+        "conv_id": payload.conv_id,
+        "user_id": payload.user_id,
+        "user_name": payload.user_name,
+        "content": payload.content,
+        "is_direct": payload.is_direct,
+        "is_bot": payload.is_bot,
+        "is_processed": payload.is_processed,
+        "metadata": payload.metadata,
+    }
+    if payload.created_at:
+        message_data["created_at"] = payload.created_at
+    try:
+        await psstate.persona_system.process_message(message_data)
+    except Exception as e:
+        logging.error(f"消息事件处理异常: {e}", exc_info=True)
+
+
+def _register_message_subscriber() -> None:
+    if psstate.message_subscriber_registered:
+        return
+    psstate.event_bus.subscribe(MESSAGE_RECEIVED, _handle_message_event)
+    psstate.message_subscriber_registered = True
+
 @driver.on_startup
 async def init_persona_system():
-    if psstate.persona_system:
-        try:
-            # 模型已由db_core插件集中注册，这里不再单独注册
-
-            # 初始化数据库和组件
-            await psstate.persona_system.initialize(reply_callback=persona_callback)
-            psstate.PERSONA_SYSTEM_ENABLED = True
-            logging.debug("人格系统初始化成功")
-        except Exception as e:
-            logging.error(f"人格系统初始化失败，功能将被禁用: {e}", exc_info=True)
+    try:
+        # 模型已由db_core插件集中注册，这里不再单独注册
+        persona_config = PersonaConfig.load("data/persona/persona.yaml")
+        engine = await assemble_persona_engine(
+            config=persona_config,
+            group_config=GroupPluginConfig,
+            plugin_name="persona",
+            reply_callback=persona_callback,
+            plugin_policy_service=psstate.plugin_policy_service,
+        )
+        psstate.persona_system = PersonaFacade(engine)
+        await psstate.persona_system.initialize(reply_callback=persona_callback)
+        _register_message_subscriber()
+        psstate.PERSONA_SYSTEM_ENABLED = True
+        logging.debug("人格系统初始化成功")
+    except Exception as e:
+        logging.error(f"人格系统初始化失败，功能将被禁用: {e}", exc_info=True)
+        psstate.persona_system = None
+        psstate.PERSONA_SYSTEM_ENABLED = False
 
 @driver.on_shutdown
 async def shutdown_persona_system():

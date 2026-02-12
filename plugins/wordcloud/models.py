@@ -1,10 +1,8 @@
+import logging
 import uuid
-import json
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from tortoise import Model, fields
-from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.expressions import Q
 
 from plugins.message_basic.models import BasicMessage
@@ -20,37 +18,47 @@ class WordCloudData(Model):
 
     class Meta:
         table = "wordcloud_data"
+        unique_together = (("conv_id", "date", "hour"),)
 
 async def get_messages(conv_id, hours=24):
     """从数据库中获取指定会话和时间段内的消息"""
     time_limit = datetime.now() - timedelta(hours=hours)
-    
+
     # 获取过去指定小时内的特定会话的所有消息
     messages = await BasicMessage.filter(
-        Q(created_at__gte=time_limit) & 
+        Q(created_at__gte=time_limit) &
         Q(conv_id=conv_id) &
         ~Q(is_bot=True)  # 排除机器人消息
     ).all()
-    
+
     return messages
 
 async def save_word_cloud_data(word_data, conv_id, date, hour):
     """保存词云数据到数据库"""
-    # 检查是否已存在相同会话、日期和小时的数据
-    existing = await WordCloudData.filter(conv_id=conv_id, date=date, hour=hour).first()
-    
-    if existing:
-        # 更新现有数据
-        existing.word_data = word_data
-        await existing.save()
-        return existing
-    else:
-        # 创建新数据
+    try:
+        record, _ = await WordCloudData.update_or_create(
+            conv_id=conv_id,
+            date=date,
+            hour=hour,
+            defaults={"word_data": word_data},
+        )
+        return record
+    except Exception as e:
+        # 兼容历史重复数据与并发写入：退化为直接更新
+        logging.warning(f"词云数据 upsert 回退为 update: {e}")
+        await WordCloudData.filter(conv_id=conv_id, date=date, hour=hour).update(word_data=word_data)
+        fallback = await (
+            WordCloudData.filter(conv_id=conv_id, date=date, hour=hour)
+            .order_by("-created_at")
+            .first()
+        )
+        if fallback:
+            return fallback
         return await WordCloudData.create(
             conv_id=conv_id,
             date=date,
             hour=hour,
-            word_data=word_data
+            word_data=word_data,
         )
 
 async def get_latest_word_cloud_data(conv_id):
@@ -60,7 +68,7 @@ async def get_latest_word_cloud_data(conv_id):
 async def get_word_cloud_data(conv_id, date=None, hour=None):
     """获取指定会话、日期和小时的词云数据"""
     if date and hour is not None:
-        return await WordCloudData.filter(conv_id=conv_id, date=date, hour=hour).first()
+        return await WordCloudData.filter(conv_id=conv_id, date=date, hour=hour).order_by('-created_at').first()
     elif date:
         return await WordCloudData.filter(conv_id=conv_id, date=date).order_by('-hour').first()
     else:
@@ -70,9 +78,14 @@ async def get_all_conversations():
     """获取所有有词云数据的会话ID列表"""
     # 获取所有有词云数据的不同会话ID
     conversations = await WordCloudData.all().distinct().values_list('conv_id', flat=True)
-    
+
     # 如果没有词云数据，尝试从消息表获取所有会话ID
     if not conversations:
         conversations = await BasicMessage.all().distinct().values_list('conv_id', flat=True)
-        
+
     return conversations
+
+
+from plugins.db_core.model_registry import register_model_module
+
+register_model_module("models", "plugins.wordcloud.models")

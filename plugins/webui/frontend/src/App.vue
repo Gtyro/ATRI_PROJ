@@ -1,9 +1,9 @@
 <script setup>
-import { RouterView, useRoute } from 'vue-router'
-import { computed } from 'vue'
+import { RouterView, useRoute } from "vue-router";
+import { computed } from "vue";
 
-const route = useRoute()
-const isLoginPage = computed(() => route.name === 'login')
+const route = useRoute();
+const isLoginPage = computed(() => route.name === "login");
 </script>
 
 <template>

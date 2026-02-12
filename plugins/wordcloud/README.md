@@ -66,6 +66,7 @@ wordcloud_min_word_length: int = 2
 
 编辑文件：`data/wordcloud/stopwords.txt`
 每行一个词，例如：
+
 ```
 的
 了
@@ -85,6 +86,7 @@ wordcloud_min_word_length: int = 2
 
 编辑文件：`data/wordcloud/user_dict.txt`
 格式为：`词语 词频`，例如：
+
 ```
 人工智能 10
 机器学习 10
@@ -123,4 +125,4 @@ POST /api/wordcloud/generate?word_limit={word_limit}&hours={hours}
 - nonebot-plugin-apscheduler>=0.3.0
 - tortoise-orm>=0.19.0
 - echarts>=5.4.3
-- echarts-wordcloud>=2.1.0 
+- echarts-wordcloud>=2.1.0

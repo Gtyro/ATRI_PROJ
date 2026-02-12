@@ -1,7 +1,4 @@
-import BotInfoCard from './BotInfoCard.vue'
-import ConnectionLogs from './ConnectionLogs.vue'
+import BotInfoCard from "./BotInfoCard.vue";
+import ConnectionLogs from "./ConnectionLogs.vue";
 
-export {
-  BotInfoCard,
-  ConnectionLogs
-} 
+export { BotInfoCard, ConnectionLogs };

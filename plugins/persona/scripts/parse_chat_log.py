@@ -8,7 +8,7 @@ import yaml
 def read_bot_id():
     """从 persona.yaml 读取 bot_id"""
     try:
-        with open('data/persona.yaml', 'r', encoding='utf-8') as f:
+        with open('data/persona/persona.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             return config.get('bot_id', '')
     except Exception as e:

@@ -100,15 +100,19 @@ async def execute_update_query(table_name: str, id_value: any, data: dict):
         # 尝试根据主键类型转换id值
         id_value = convert_id_value(id_value, pk_field)
 
-        # 查找并更新记录
-        try:
-            instance = await model_class.get(**{pk_field: id_value})
-            for key, value in data.items():
-                setattr(instance, key, value)
-            await instance.save()
-            return {"success": True, "message": "数据更新成功"}
-        except Exception:
+        if not isinstance(data, dict) or not data:
+            raise HTTPException(status_code=400, detail="更新数据不能为空")
+
+        # 防止主键在更新中被覆盖
+        update_data = {k: v for k, v in data.items() if k != pk_field}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="更新数据无有效字段")
+
+        # 原子更新，避免 get/save 的读改写竞争
+        updated_count = await model_class.filter(**{pk_field: id_value}).update(**update_data)
+        if updated_count == 0:
             raise HTTPException(status_code=404, detail=f"未找到ID为 {id_value} 的记录")
+        return {"success": True, "message": "数据更新成功", "updated": updated_count}
     except HTTPException:
         raise
     except Exception as e:

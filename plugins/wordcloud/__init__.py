@@ -9,6 +9,7 @@ from .config import Config
 from .word_analyzer import generate_word_cloud_data
 from .command import wordcloud_cmd  # 导入命令
 from .backend import register_router  # 导入路由注册函数
+from src.adapters.nonebot.command_registry import register_auto_feature
 
 require("db_core") # ORM模型会由db_core插件初始化
 
@@ -17,9 +18,21 @@ __plugin_meta__ = PluginMetadata(
     description="生成聊天内容词云",
     usage="自动统计聊天内容生成词云",
     config=Config,
+    extra={
+        "policy": {
+            "manageable": True,
+            "default_enabled": False,
+        }
+    },
 )
 
 driver = get_driver()
+
+register_auto_feature(
+    "词云自动统计",
+    role="superuser",
+    trigger_type="schedule",
+)
 
 # 创建存储词云数据的目录
 DATA_DIR = Path("data/wordcloud")
@@ -39,10 +52,10 @@ from nonebot_plugin_apscheduler import scheduler
 async def gen_wordcloud_data():
     """每小时整点执行一次，生成词云数据"""
     from plugins.message_basic.models import BasicMessage
-    
+
     # 获取所有活跃的会话ID
     conv_ids = await BasicMessage.all().distinct().values_list('conv_id', flat=True)
-    
+
     # 为每个会话生成词云数据
     for conv_id in conv_ids:
         try:

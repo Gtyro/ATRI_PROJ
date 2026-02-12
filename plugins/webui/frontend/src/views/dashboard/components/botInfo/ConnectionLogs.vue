@@ -2,9 +2,21 @@
   <div class="connection-logs-container">
     <h4>连接日志</h4>
     <el-table :data="logs" style="width: 100%" stripe>
-      <el-table-column prop="date" label="日期" min-width="30%"></el-table-column>
-      <el-table-column prop="account" label="账号" min-width="30%"></el-table-column>
-      <el-table-column prop="duration" label="连接时长" min-width="40%"></el-table-column>
+      <el-table-column
+        prop="date"
+        label="日期"
+        min-width="30%"
+      ></el-table-column>
+      <el-table-column
+        prop="account"
+        label="账号"
+        min-width="30%"
+      ></el-table-column>
+      <el-table-column
+        prop="duration"
+        label="连接时长"
+        min-width="40%"
+      ></el-table-column>
     </el-table>
   </div>
 </template>
@@ -14,8 +26,8 @@ defineProps({
   logs: {
     type: Array,
     required: true,
-    default: () => []
-  }
+    default: () => [],
+  },
 });
 </script>
 
@@ -61,4 +73,4 @@ h4 {
 .connection-logs-container::-webkit-scrollbar-thumb:hover {
   background: #909399;
 }
-</style> 
+</style>

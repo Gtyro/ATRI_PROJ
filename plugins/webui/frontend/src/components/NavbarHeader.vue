@@ -17,16 +17,16 @@
 </template>
 
 <script setup>
-import { ArrowDown } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { ArrowDown } from "@element-plus/icons-vue";
+import { useAuthStore } from "@/stores/auth";
 
-const authStore = useAuthStore()
+const authStore = useAuthStore();
 
 const handleCommand = (command) => {
-  if (command === 'logout') {
-    authStore.logout()
+  if (command === "logout") {
+    authStore.logout();
   }
-}
+};
 </script>
 
 <style scoped>
@@ -34,4 +34,4 @@ const handleCommand = (command) => {
   display: flex;
   justify-content: flex-end; /* 使下拉菜单靠右显示 */
 }
-</style> 
+</style>

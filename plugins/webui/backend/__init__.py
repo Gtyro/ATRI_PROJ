@@ -28,7 +28,7 @@ async def start_webui():
 
         # 配置应用（使用统一配置函数）
         configure_app(nonebot_app, is_nonebot_app=True)
-        
+
         # 初始化数据库
         await initialize_database_system()
 

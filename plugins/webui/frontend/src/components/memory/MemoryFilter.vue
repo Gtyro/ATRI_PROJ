@@ -2,9 +2,9 @@
   <div class="memory-filter">
     <el-form label-width="80px" size="default">
       <el-form-item label="会话选择">
-        <el-select 
-          v-model="selectedConv" 
-          placeholder="请选择会话" 
+        <el-select
+          v-model="selectedConv"
+          placeholder="请选择会话"
           clearable
           @change="handleConvChange"
         >
@@ -16,7 +16,7 @@
           />
         </el-select>
       </el-form-item>
-      
+
       <el-form-item label="时间范围">
         <el-date-picker
           v-model="dateRange"
@@ -28,7 +28,7 @@
           @change="handleDateRangeChange"
         />
       </el-form-item>
-      
+
       <el-form-item>
         <el-button type="primary" @click="applyFilter">应用筛选</el-button>
         <el-button @click="resetFilter">重置</el-button>
@@ -38,24 +38,24 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch } from "vue";
 
 const props = defineProps({
   conversations: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   defaultConvId: {
     type: String,
-    default: ''
+    default: "",
   },
   timeRange: {
     type: Object,
-    default: () => ({ start: null, end: null })
-  }
+    default: () => ({ start: null, end: null }),
+  },
 });
 
-const emit = defineEmits(['update:conv-id', 'update:time-range', 'filter']);
+const emit = defineEmits(["update:conv-id", "update:time-range", "filter"]);
 
 // 本地状态
 const selectedConv = ref(props.defaultConvId);
@@ -64,7 +64,7 @@ const dateRange = ref(null);
 // 日期快捷选项
 const shortcuts = [
   {
-    text: '最近一天',
+    text: "最近一天",
     value: () => {
       const end = new Date();
       const start = new Date();
@@ -73,7 +73,7 @@ const shortcuts = [
     },
   },
   {
-    text: '最近一周',
+    text: "最近一周",
     value: () => {
       const end = new Date();
       const start = new Date();
@@ -82,7 +82,7 @@ const shortcuts = [
     },
   },
   {
-    text: '最近一个月',
+    text: "最近一个月",
     value: () => {
       const end = new Date();
       const start = new Date();
@@ -91,69 +91,76 @@ const shortcuts = [
     },
   },
   {
-    text: '最近三个月',
+    text: "最近三个月",
     value: () => {
       const end = new Date();
       const start = new Date();
       start.setMonth(start.getMonth() - 3);
       return [start, end];
     },
-  }
+  },
 ];
 
 // 处理会话变更
 const handleConvChange = (value) => {
-  emit('update:conv-id', value);
+  emit("update:conv-id", value);
 };
 
 // 处理日期范围变更
 const handleDateRangeChange = (value) => {
   if (!value) {
-    emit('update:time-range', { start: null, end: null });
+    emit("update:time-range", { start: null, end: null });
     return;
   }
-  
-  emit('update:time-range', {
+
+  emit("update:time-range", {
     start: value[0],
-    end: value[1]
+    end: value[1],
   });
 };
 
 // 应用筛选
 const applyFilter = () => {
-  emit('filter', {
+  emit("filter", {
     convId: selectedConv.value,
-    timeRange: dateRange.value 
-      ? { start: dateRange.value[0], end: dateRange.value[1] } 
-      : { start: null, end: null }
+    timeRange: dateRange.value
+      ? { start: dateRange.value[0], end: dateRange.value[1] }
+      : { start: null, end: null },
   });
 };
 
 // 重置筛选条件
 const resetFilter = () => {
-  selectedConv.value = '';
+  selectedConv.value = "";
   dateRange.value = null;
-  
-  emit('update:conv-id', '');
-  emit('update:time-range', { start: null, end: null });
-  emit('filter', {
-    convId: '',
-    timeRange: { start: null, end: null }
+
+  emit("update:conv-id", "");
+  emit("update:time-range", { start: null, end: null });
+  emit("filter", {
+    convId: "",
+    timeRange: { start: null, end: null },
   });
 };
 
 // 监听props变化
-watch(() => props.defaultConvId, (newVal) => {
-  selectedConv.value = newVal;
-});
+watch(
+  () => props.defaultConvId,
+  (newVal) => {
+    selectedConv.value = newVal;
+  },
+);
 
-watch(() => props.timeRange, (newVal) => {
-  if (newVal.start && newVal.end) {
-    dateRange.value = [newVal.start, newVal.end];
-  } else {
-    dateRange.value = null;
-  }
-}, { deep: true });
+watch(
+  () => props.timeRange,
+  (newVal) => {
+    if (newVal.start && newVal.end) {
+      dateRange.value = [newVal.start, newVal.end];
+    } else {
+      dateRange.value = null;
+    }
+  },
+  { deep: true },
+);
 </script>
 
 <style scoped>
@@ -168,4 +175,4 @@ watch(() => props.timeRange, (newVal) => {
 .el-date-picker {
   width: 100%;
 }
-</style> 
+</style>

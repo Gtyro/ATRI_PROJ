@@ -1,85 +1,97 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { createRouter, createWebHashHistory } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import { isTokenExpired } from "@/utils/jwt";
 
 // 懒加载路由组件
-const Login = () => import('@/views/LoginPage.vue')
-const AdminLayout = () => import('@/views/AdminLayout.vue')
-const DBAdmin = () => import('@/views/DBAdmin.vue')
-const MemoryAdmin = () => import('@/views/MemoryAdmin.vue')
-const DashboardOverview = () => import('@/views/dashboard/DashboardOverview.vue')
-const WordCloudPage = () => import('@/views/wordcloud/WordCloudPage.vue')
-const MemoryTimeline = () => import('@/views/MemoryTimeline.vue')
+const Login = () => import("@/views/LoginPage.vue");
+const AdminLayout = () => import("@/views/AdminLayout.vue");
+const DBAdmin = () => import("@/views/DBAdmin.vue");
+const MemoryAdmin = () => import("@/views/MemoryAdmin.vue");
+const DashboardOverview = () =>
+  import("@/views/dashboard/DashboardOverview.vue");
+const WordCloudPage = () => import("@/views/wordcloud/WordCloudPage.vue");
+const MemoryTimeline = () => import("@/views/MemoryTimeline.vue");
+const PluginPolicyPage = () => import("@/views/PluginPolicyPage.vue");
 
 // 路由配置
 const routes = [
   {
-    path: '/',
-    redirect: '/admin'
+    path: "/",
+    redirect: "/admin",
   },
   {
-    path: '/login',
+    path: "/login",
     component: Login,
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: false },
   },
   {
-    path: '/admin',
+    path: "/admin",
     component: AdminLayout,
     meta: { requiresAuth: true },
     children: [
       {
-        path: '',
-        redirect: '/admin/dashboard'
+        path: "",
+        redirect: "/admin/dashboard",
       },
       {
-        path: 'dashboard',
+        path: "dashboard",
         component: DashboardOverview,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true },
       },
       {
-        path: 'db-admin',
+        path: "db-admin",
         component: DBAdmin,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true },
       },
       {
-        path: 'memory-admin',
+        path: "memory-admin",
         component: MemoryAdmin,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true },
       },
       {
-        path: 'memory-timeline',
+        path: "memory-timeline",
         component: MemoryTimeline,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true },
       },
       {
-        path: 'wordcloud',
+        path: "wordcloud",
         component: WordCloudPage,
-        meta: { requiresAuth: true }
-      }
-    ]
-  }
+        meta: { requiresAuth: true },
+      },
+      {
+        path: "plugin-policy",
+        component: PluginPolicyPage,
+        meta: { requiresAuth: true },
+      },
+    ],
+  },
 ];
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes
+  routes,
 });
 
 // 全局前置守卫
 router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
-  const isAuthenticated = authStore.isAuthenticated
+  const authStore = useAuthStore();
+  const token = authStore.token;
+  if (token && isTokenExpired(token)) {
+    authStore.resetAuth();
+  }
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+  const isAuthenticated = authStore.isAuthenticated;
 
   if (requiresAuth && !isAuthenticated) {
     // 需要认证但未登录，重定向到登录页
-    next('/login')
-  } else if (to.path === '/login' && isAuthenticated) {
+    next("/login");
+  } else if (to.path === "/login" && isAuthenticated) {
     // 已登录但尝试访问登录页，重定向到首页
-    next('/admin')
+    next("/admin");
   } else {
     // 其他情况正常通过
-    next()
+    next();
   }
 });
 
-export default router 
+export default router;

@@ -5,10 +5,8 @@
 
 import logging
 
+from src.core.domain import PersonaConfig
 from .db_manager import db_manager
-
-# 标准的数据库URL，可以被外部配置覆盖
-DEFAULT_DB_URL = "sqlite://data/persona.db"
 
 async def initialize_database(db_url=None, force=False):
     """
@@ -26,8 +24,14 @@ async def initialize_database(db_url=None, force=False):
         logging.warning("数据库已初始化，跳过初始化过程")
         return True
 
-    # 使用提供的URL或默认URL
-    actual_db_url = db_url or DEFAULT_DB_URL
+    # 使用提供的URL或配置中的URL
+    if db_url:
+        actual_db_url = db_url
+    else:
+        config = PersonaConfig.load()
+        if not config.db_url:
+            raise ValueError("db_url 未配置，请在 data/persona/persona.yaml 中设置")
+        actual_db_url = config.db_url
     db_manager.set_db_url(actual_db_url)
 
     # 初始化数据库
@@ -60,4 +64,4 @@ def get_manager():
     Returns:
         DBManager: 数据库管理器实例
     """
-    return db_manager 
+    return db_manager

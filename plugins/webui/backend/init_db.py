@@ -17,7 +17,7 @@ async def initialize_database():
     db_url = f"sqlite://{db_path}"
     await Tortoise.init(
         db_url=db_url,
-        modules={'models': ['plugins.persona.storage.models', 'plugins.webui.api.db.models']}
+        modules={"models": ["plugins.webui.backend.api.db.models"]}
     )
 
     # 创建表结构

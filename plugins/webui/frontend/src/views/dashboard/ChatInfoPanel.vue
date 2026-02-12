@@ -4,14 +4,14 @@
     <div class="panel-content">
       <!-- 消息吞吐量组件 -->
       <message-throughput />
-      
+
       <!-- 未来可添加更多组件 -->
     </div>
   </div>
 </template>
 
 <script setup>
-import { MessageThroughput } from './components/chatInfo';
+import { MessageThroughput } from "./components/chatInfo";
 </script>
 
 <style scoped>
@@ -20,7 +20,7 @@ import { MessageThroughput } from './components/chatInfo';
   padding: 15px;
   background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
 .panel-container h3 {
@@ -34,4 +34,4 @@ import { MessageThroughput } from './components/chatInfo';
   margin-top: 15px;
   width: 100%;
 }
-</style> 
+</style>

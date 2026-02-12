@@ -1,9 +1,5 @@
-import MessageThroughput from './MessageThroughput.vue'
-import DayHeatmap from './DayHeatmap.vue'
-import HourChart from './HourChart.vue'
+import MessageThroughput from "./MessageThroughput.vue";
+import DayHeatmap from "./DayHeatmap.vue";
+import HourChart from "./HourChart.vue";
 
-export {
-  MessageThroughput,
-  DayHeatmap,
-  HourChart
-} 
+export { MessageThroughput, DayHeatmap, HourChart };

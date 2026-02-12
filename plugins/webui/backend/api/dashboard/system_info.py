@@ -20,26 +20,26 @@ async def get_system_info():
     try:
         # 获取CPU使用率
         cpu_percent = psutil.cpu_percent(interval=0.5)
-        
+
         # 获取内存信息
         memory = psutil.virtual_memory()
         memory_percent = memory.percent
         memory_used = memory.used
         memory_total = memory.total
-        
+
         # 获取磁盘信息
         disk = psutil.disk_usage('/')
         disk_percent = disk.percent
         disk_used = disk.used
         disk_total = disk.total
-        
+
         # 获取操作系统信息
         os_name = f"{platform.system()} {platform.release()}"
         python_version = sys.version.split()[0]
-        
+
         # 计算运行时间
         uptime = int(time.time() - start_time)
-        
+
         # 组合结果
         result = {
             "cpu": cpu_percent,
@@ -54,11 +54,11 @@ async def get_system_info():
             "uptime": uptime,
             "timestamp": int(time.time() * 1000)  # 毫秒级时间戳
         }
-        
+
         return JSONResponse(content=result)
-    
+
     except Exception as e:
         return JSONResponse(
             status_code=500,
             content={"error": str(e)}
-        ) 
+        )

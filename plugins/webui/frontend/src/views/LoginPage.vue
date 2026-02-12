@@ -28,7 +28,7 @@
       <el-form-item>
         <el-button
           type="primary"
-          style="width: 100%;"
+          style="width: 100%"
           @click="submitForm"
           :loading="loading"
         >
@@ -45,66 +45,65 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { ref, reactive } from "vue";
+import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import { User, Lock } from "@element-plus/icons-vue";
+import { useAuthStore } from "@/stores/auth";
 
-const router = useRouter()
-const authStore = useAuthStore()
-const loginFormRef = ref(null)
-const loading = ref(false)
+const router = useRouter();
+const authStore = useAuthStore();
+const loginFormRef = ref(null);
+const loading = ref(false);
 
 const loginForm = reactive({
-  username: '',
-  password: ''
-})
+  username: "",
+  password: "",
+});
 
 const loginRules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' }
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' }
-  ]
-}
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
+};
 
 const submitForm = () => {
-  if (!loginFormRef.value) return
+  if (!loginFormRef.value) return;
 
   loginFormRef.value.validate((valid) => {
     if (valid) {
-      loading.value = true
+      loading.value = true;
 
-      authStore.login(loginForm.username, loginForm.password)
+      authStore
+        .login(loginForm.username, loginForm.password)
         .then(() => {
-          ElMessage.success('登录成功')
-          router.push('/admin')
+          ElMessage.success("登录成功");
+          router.push("/admin");
         })
-        .catch(error => {
-          console.error('登录错误:', error)
+        .catch((error) => {
+          console.error("登录错误:", error);
           if (error.response) {
-            const status = error.response.status
+            const status = error.response.status;
             if (status === 401) {
-              ElMessage.error('用户名或密码错误')
+              ElMessage.error("用户名或密码错误");
             } else if (status === 429) {
-              ElMessage.error('尝试次数过多，请稍后再试')
+              ElMessage.error("尝试次数过多，请稍后再试");
             } else {
-              ElMessage.error(`登录失败: ${error.response.data?.detail || '服务器错误'}`)
+              ElMessage.error(
+                `登录失败: ${error.response.data?.detail || "服务器错误"}`,
+              );
             }
           } else if (error.request) {
-            ElMessage.error('无法连接到服务器，请检查网络连接')
+            ElMessage.error("无法连接到服务器，请检查网络连接");
           } else {
-            ElMessage.error(`登录失败: ${error.message}`)
+            ElMessage.error(`登录失败: ${error.message}`);
           }
         })
         .finally(() => {
-          loading.value = false
-        })
+          loading.value = false;
+        });
     }
-  })
-}
+  });
+};
 </script>
 
 <style scoped>

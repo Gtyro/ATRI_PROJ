@@ -1,6 +1,3 @@
-import uuid
-from datetime import datetime
-
 import pytz
 from tortoise import Model, fields
 from tzlocal import get_localzone
@@ -9,7 +6,7 @@ LOCAL_TZ = get_localzone()
 
 class BasicMessage(Model):
     """基础消息模型"""
-    id = fields.UUIDField(pk=True, default=uuid.uuid4)
+    id = fields.IntField(pk=True)
     conv_id = fields.CharField(max_length=50, index=True)
     user_id = fields.CharField(max_length=50, index=True)
     user_name = fields.CharField(max_length=50)
@@ -36,4 +33,9 @@ class BasicMessage(Model):
             "is_direct": self.is_direct,
             "is_bot": self.is_bot,
             "metadata": self.metadata
-        } 
+        }
+
+
+from plugins.db_core.model_registry import register_model_module
+
+register_model_module("models", "plugins.message_basic.models")

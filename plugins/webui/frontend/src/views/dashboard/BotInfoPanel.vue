@@ -5,7 +5,11 @@
     <!-- 机器人信息展示部分 -->
     <div class="bot-info-section">
       <div class="bot-cards-container">
-        <BotInfoCard v-for="(bot, index) in botsToDisplay" :key="index" :bot="bot" />
+        <BotInfoCard
+          v-for="(bot, index) in botsToDisplay"
+          :key="index"
+          :bot="bot"
+        />
       </div>
     </div>
 
@@ -17,10 +21,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { request } from '@/api';
-import BotInfoCard from './components/botInfo/BotInfoCard.vue';
-import ConnectionLogs from './components/botInfo/ConnectionLogs.vue';
+import { ref, computed, onMounted } from "vue";
+import { request } from "@/api";
+import BotInfoCard from "./components/botInfo/BotInfoCard.vue";
+import ConnectionLogs from "./components/botInfo/ConnectionLogs.vue";
 
 // 机器人数据
 const bots = ref([]);
@@ -32,16 +36,18 @@ const error = ref(null);
 const botsToDisplay = computed(() => {
   if (bots.value.length === 0) {
     // 无数据时显示占位
-    return [{
-      id: '加载中',
-      platform: '未知',
-      nickname: '未知',
-      group_count: 0,
-      friend_count: 0,
-      plugin_calls_today: 0,
-      messages_today: 0,
-      uptime: '0小时0分钟'
-    }];
+    return [
+      {
+        id: "加载中",
+        platform: "未知",
+        nickname: "未知",
+        group_count: 0,
+        friend_count: 0,
+        plugin_calls_today: 0,
+        messages_today: 0,
+        uptime: "0小时0分钟",
+      },
+    ];
   }
 
   if (bots.value.length === 1) {
@@ -56,12 +62,12 @@ const botsToDisplay = computed(() => {
 // 加载机器人信息
 const loadBotInfo = async () => {
   try {
-    const response = await request.get('/api/dashboard/bot-info');
+    const response = await request.get("/api/dashboard/bot-info");
     bots.value = response.data;
     loading.value = false;
   } catch (err) {
-    console.error('获取机器人信息失败:', err);
-    error.value = '获取机器人信息失败';
+    console.error("获取机器人信息失败:", err);
+    error.value = "获取机器人信息失败";
     loading.value = false;
   }
 };
@@ -69,10 +75,10 @@ const loadBotInfo = async () => {
 // 加载连接日志
 const loadConnectionLogs = async () => {
   try {
-    const response = await request.get('/api/dashboard/bot-connections');
+    const response = await request.get("/api/dashboard/bot-connections");
     connectionLogs.value = response.data;
   } catch (err) {
-    console.error('获取连接日志失败:', err);
+    console.error("获取连接日志失败:", err);
   }
 };
 
@@ -90,7 +96,7 @@ onMounted(() => {
   padding: 5px;
   background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -110,8 +116,8 @@ onMounted(() => {
   margin: 15px 0;
   overflow-y: auto;
   overflow-x: hidden;
-  height: calc(100% * 2/3);
-  max-height: calc(100% * 2/3);
+  height: calc(100% * 2 / 3);
+  max-height: calc(100% * 2 / 3);
   width: 100%;
   box-sizing: border-box;
 }
@@ -130,8 +136,8 @@ onMounted(() => {
   overflow-x: hidden;
   padding-top: 15px;
   border-top: 1px solid #eaeaea;
-  height: calc(100% * 1/3);
-  max-height: calc(100% * 1/3);
+  height: calc(100% * 1 / 3);
+  max-height: calc(100% * 1 / 3);
   width: 100%;
   box-sizing: border-box;
 }
@@ -175,4 +181,4 @@ onMounted(() => {
 .connection-logs-section::-webkit-scrollbar-thumb:hover {
   background: #909399;
 }
-</style> 
+</style>

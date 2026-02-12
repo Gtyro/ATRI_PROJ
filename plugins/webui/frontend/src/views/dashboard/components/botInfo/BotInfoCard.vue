@@ -27,7 +27,7 @@
           </div>
           <div class="info-content">
             <div class="info-label">昵称</div>
-            <div class="info-value">{{ bot.nickname || '未知' }}</div>
+            <div class="info-value">{{ bot.nickname || "未知" }}</div>
           </div>
         </div>
       </div>
@@ -100,13 +100,21 @@
 </template>
 
 <script setup>
-import { Monitor, User, Service, UserFilled, Tools, Message, Timer } from '@element-plus/icons-vue';
+import {
+  Monitor,
+  User,
+  Service,
+  UserFilled,
+  Tools,
+  Message,
+  Timer,
+} from "@element-plus/icons-vue";
 
 defineProps({
   bot: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
 });
 </script>
 
@@ -130,7 +138,7 @@ defineProps({
 
 .card-header i {
   font-size: 18px;
-  color: #409EFF;
+  color: #409eff;
   margin-right: 8px;
 }
 
@@ -212,28 +220,28 @@ defineProps({
   background-color: #ecf5ff;
 }
 .platform-icon i {
-  color: #409EFF;
+  color: #409eff;
 }
 
 .nickname-icon {
   background-color: #f0f9eb;
 }
 .nickname-icon i {
-  color: #67C23A;
+  color: #67c23a;
 }
 
 .group-icon {
   background-color: #fdf6ec;
 }
 .group-icon i {
-  color: #E6A23C;
+  color: #e6a23c;
 }
 
 .friend-icon {
   background-color: #fef0f0;
 }
 .friend-icon i {
-  color: #F56C6C;
+  color: #f56c6c;
 }
 
 .plugin-icon {
@@ -247,14 +255,14 @@ defineProps({
   background-color: #ecf5ff;
 }
 .message-icon i {
-  color: #409EFF;
+  color: #409eff;
 }
 
 .time-icon {
   background-color: #f0f9eb;
 }
 .time-icon i {
-  color: #67C23A;
+  color: #67c23a;
 }
 
 .info-icon i {
@@ -281,4 +289,4 @@ defineProps({
   overflow: hidden;
   text-overflow: ellipsis;
 }
-</style> 
+</style>

@@ -4,22 +4,24 @@
       <div class="memory-header">
         <h3 class="memory-title">{{ memory.title }}</h3>
         <div class="memory-meta">
-          <el-tag v-if="memory.is_permanent" type="danger" size="small">永久记忆</el-tag>
+          <el-tag v-if="memory.is_permanent" type="danger" size="small"
+            >永久记忆</el-tag
+          >
           <el-tag v-else type="info" size="small">临时记忆</el-tag>
           <span class="memory-date">{{ formatDate(memory.created_at) }}</span>
         </div>
       </div>
-      
+
       <div class="memory-content">
         <p>{{ memory.content }}</p>
       </div>
-      
+
       <div class="memory-footer">
         <div class="memory-stats">
           <div class="stat-item">
             <span class="stat-label">权重:</span>
-            <el-progress 
-              :percentage="memory.weight * 100" 
+            <el-progress
+              :percentage="memory.weight * 100"
               :color="getWeightColor(memory.weight)"
               :stroke-width="10"
               :format="weightFormat"
@@ -30,12 +32,19 @@
             <span>{{ formatDate(memory.last_accessed) }}</span>
           </div>
         </div>
-        
-        <div v-if="showAssociatedNodes && memory.associated_nodes && memory.associated_nodes.length > 0" class="associated-nodes">
+
+        <div
+          v-if="
+            showAssociatedNodes &&
+            memory.associated_nodes &&
+            memory.associated_nodes.length > 0
+          "
+          class="associated-nodes"
+        >
           <h4>关联认知节点</h4>
           <div class="node-tags">
-            <el-tag 
-              v-for="node in memory.associated_nodes" 
+            <el-tag
+              v-for="node in memory.associated_nodes"
               :key="node.id"
               :type="node.is_permanent ? 'success' : 'info'"
               class="node-tag"
@@ -46,7 +55,7 @@
         </div>
       </div>
     </div>
-    
+
     <div v-else class="no-memory-selected">
       <el-empty description="请选择一个记忆查看详情" />
     </div>
@@ -54,39 +63,39 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { ElTag, ElProgress, ElEmpty } from 'element-plus';
+import { computed } from "vue";
+import { ElTag, ElProgress, ElEmpty } from "element-plus";
 
 const props = defineProps({
   memory: {
     type: Object,
-    default: null
+    default: null,
   },
   showAssociatedNodes: {
     type: Boolean,
-    default: true
-  }
+    default: true,
+  },
 });
 
 // 格式化日期
 const formatDate = (timestamp) => {
-  if (!timestamp) return '';
-  
+  if (!timestamp) return "";
+
   const date = new Date(timestamp * 1000);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 
 // 根据权重计算颜色
 const getWeightColor = (weight) => {
-  if (weight >= 0.8) return '#67C23A';
-  if (weight >= 0.5) return '#E6A23C';
-  return '#F56C6C';
+  if (weight >= 0.8) return "#67C23A";
+  if (weight >= 0.5) return "#E6A23C";
+  return "#F56C6C";
 };
 
 // 权重格式化函数
@@ -185,4 +194,4 @@ const weightFormat = (percentage) => {
   justify-content: center;
   align-items: center;
 }
-</style> 
+</style>

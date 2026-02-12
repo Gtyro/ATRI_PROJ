@@ -9,10 +9,13 @@
       </template>
       <div class="metric-value">
         <span class="percentage">{{ currentData.cpu }}%</span>
-        <el-progress :percentage="currentData.cpu" :color="getProgressColor(currentData.cpu)" />
+        <el-progress
+          :percentage="currentData.cpu"
+          :color="getProgressColor(currentData.cpu)"
+        />
       </div>
     </el-card>
-    
+
     <el-card class="metric-card" shadow="hover">
       <template #header>
         <div class="metric-header">
@@ -22,13 +25,17 @@
       </template>
       <div class="metric-value">
         <span class="percentage">{{ currentData.memory }}%</span>
-        <el-progress :percentage="currentData.memory" :color="getProgressColor(currentData.memory)" />
+        <el-progress
+          :percentage="currentData.memory"
+          :color="getProgressColor(currentData.memory)"
+        />
         <div class="memory-details">
-          已用: {{ formatBytes(currentData.memory_used) }} / 总计: {{ formatBytes(currentData.memory_total) }}
+          已用: {{ formatBytes(currentData.memory_used) }} / 总计:
+          {{ formatBytes(currentData.memory_total) }}
         </div>
       </div>
     </el-card>
-    
+
     <el-card class="metric-card" shadow="hover">
       <template #header>
         <div class="metric-header">
@@ -38,9 +45,13 @@
       </template>
       <div class="metric-value">
         <span class="percentage">{{ currentData.disk }}%</span>
-        <el-progress :percentage="currentData.disk" :color="getProgressColor(currentData.disk)" />
+        <el-progress
+          :percentage="currentData.disk"
+          :color="getProgressColor(currentData.disk)"
+        />
         <div class="memory-details">
-          已用: {{ formatBytes(currentData.disk_used) }} / 总计: {{ formatBytes(currentData.disk_total) }}
+          已用: {{ formatBytes(currentData.disk_used) }} / 总计:
+          {{ formatBytes(currentData.disk_total) }}
         </div>
       </div>
     </el-card>
@@ -48,29 +59,29 @@
 </template>
 
 <script setup>
-import { Monitor, Cpu, FolderOpened } from '@element-plus/icons-vue'
+import { Monitor, Cpu, FolderOpened } from "@element-plus/icons-vue";
 
 // 定义属性
 const props = defineProps({
   currentData: {
     type: Object,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
 // 工具函数
 function getProgressColor(value) {
-  if (value < 50) return '#67C23A'
-  if (value < 80) return '#E6A23C'
-  return '#F56C6C'
+  if (value < 50) return "#67C23A";
+  if (value < 80) return "#E6A23C";
+  return "#F56C6C";
 }
 
 function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return '0 B'
-  
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i]
+  if (!bytes || bytes === 0) return "0 B";
+
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(2) + " " + sizes[i];
 }
 </script>
 
@@ -124,4 +135,4 @@ function formatBytes(bytes) {
     grid-template-columns: 1fr;
   }
 }
-</style> 
+</style>

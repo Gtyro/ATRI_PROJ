@@ -57,3 +57,32 @@ class GroupPluginConfig(Model):
     async def get_distinct_group_ids(cls, plugin_name: str) -> List[str]:
         '''获取所有不同的群组ID'''
         return await cls.filter(plugin_name=plugin_name).values_list('gid', flat=True)
+
+
+class GroupPluginPolicy(Model):
+    id = fields.IntField(pk=True)
+    gid = fields.CharField(max_length=20, index=True)
+    '''group id'''
+    name = fields.CharField(max_length=50)
+    '''group name'''
+    plugin_name = fields.CharField(max_length=50)
+    '''plugin name'''
+    enabled = fields.BooleanField(default=True)
+    '''whether plugin is enabled for the group'''
+    ingest_enabled = fields.BooleanField(default=True)
+    '''whether ingestion is enabled for the group'''
+    policy_config = fields.JSONField(default={})
+    '''extra policy config'''
+
+    class Meta:
+        table = "group_plugin_policies"
+        unique_together = (('gid', 'plugin_name'))
+        connection_name = "default"
+
+    def __str__(self):
+        return f"{self.name} - {self.plugin_name}"
+
+
+from plugins.db_core.model_registry import register_model_module
+
+register_model_module("models", "plugins.models")
