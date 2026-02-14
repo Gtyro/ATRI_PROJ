@@ -43,8 +43,10 @@ if not is_running_as_script():
     __all__ = []
 else:
     # 仅导出迁移脚本所需的最小模块和函数
-    from .storage import (CognitiveNode, Memory, MemoryRepository,
-                          MessageQueue, MessageRepository, NodeAssociation)
+    from src.infra.db.neo4j.memory_models import CognitiveNode, Memory, NodeAssociation
+    from src.infra.db.neo4j.memory_repository import MemoryRepository
+    from src.infra.db.tortoise.message_models import MessageQueue
+    from src.infra.db.tortoise.message_repository import MessageRepository
     from .utils.config import check_config, load_config, save_config
 
     __all__ = ["load_config", "check_config", "save_config", "MemoryRepository", "MessageRepository", "MessageQueue", "Memory", "CognitiveNode", "NodeAssociation"]

@@ -15,10 +15,9 @@ from typing import AsyncIterator, Deque, List, Optional, Union
 class LoggingConfig:
     log_dir: Union[str, Path] = "logs"
     log_level: int = logging.INFO
-    log_file_name: str = "%Y-%m-%d_%H:%M.log"
+    log_file_name: str = "%Y-%m-%d_%H-%M.log"
     file_format: str = (
-        "%(asctime)s | %(levelname)s | "
-        "%(name)s | %(filename)s:%(lineno)d | %(message)s"
+        "%(asctime)s | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s"
     )
     datefmt: str = "%Y-%m-%d %H:%M:%S"
     webui_enabled: bool = True
@@ -120,7 +119,9 @@ class LoguruConsoleHandler(logging.Handler):
                 continue
             break
 
-        self._logger.opt(depth=depth, exception=record.exc_info).log(level_name, record.getMessage())
+        self._logger.opt(depth=depth, exception=record.exc_info).log(
+            level_name, record.getMessage()
+        )
 
 
 def setup_logging(config: LoggingConfig) -> None:
@@ -314,7 +315,9 @@ def _loguru_record_to_event(record: dict, text: str) -> LogEvent:
     exc_text = None
     exc = record.get("exception")
     if exc:
-        exc_text = "".join(traceback.format_exception(exc.type, exc.value, exc.traceback))
+        exc_text = "".join(
+            traceback.format_exception(exc.type, exc.value, exc.traceback)
+        )
 
     time_value = record.get("time")
     timestamp = time_value.timestamp() if time_value else 0.0

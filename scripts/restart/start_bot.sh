@@ -42,10 +42,19 @@ fi
 
 # 检查Python依赖
 echo "检查Python依赖..."
-python -c "import nonebot" 2>/dev/null || {
-    echo -e "${RED}错误：nonebot未安装，请运行 pip install -r requirements.txt${NC}"
-    exit 1
-}
+USE_POETRY=0
+if command -v poetry >/dev/null 2>&1; then
+    if poetry run python -c "import nonebot" 2>/dev/null; then
+        USE_POETRY=1
+    fi
+fi
+
+if [ "$USE_POETRY" -eq 0 ]; then
+    python -c "import nonebot" 2>/dev/null || {
+        echo -e "${RED}错误：nonebot未安装，请先运行 poetry install${NC}"
+        exit 1
+    }
+fi
 
 # 检查现有的screen会话
 if screen -list 2>/dev/null | grep -q "$SCREEN_SESSION"; then
@@ -69,7 +78,9 @@ fi
 echo -e "${GREEN}启动新的 $SCREEN_SESSION 会话...${NC}"
 
 # 构建启动命令
-if [ -d "$VENV_PATH" ]; then
+if [ "$USE_POETRY" -eq 1 ]; then
+    START_CMD="cd '$PROJECT_DIR' && poetry run python $BOT_SCRIPT"
+elif [ -d "$VENV_PATH" ]; then
     # 使用虚拟环境
     START_CMD="cd '$PROJECT_DIR' && source '$VENV_PATH/bin/activate' && python $BOT_SCRIPT"
 else

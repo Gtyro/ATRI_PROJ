@@ -41,6 +41,13 @@ class PersonaFacade:
     ) -> List[Dict[str, Any]]:
         return await self._engine.extract_topics_from_messages(conv_id, messages)
 
+    async def extract_reply_keywords_from_history(
+        self,
+        conv_id: str,
+        messages: List[Dict[str, Any]],
+    ) -> List[str]:
+        return await self._engine.extract_reply_keywords_from_history(conv_id, messages)
+
     async def retrieve_related_memories(
         self,
         query: str,

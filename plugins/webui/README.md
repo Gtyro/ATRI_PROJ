@@ -22,7 +22,7 @@
 2. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+poetry install
 ```
 
 ### 启动
@@ -74,7 +74,7 @@ python run.py
 │   │   ├── core/         # Core modules (e.g., config, database)
 │   │   └── db/           # Database operations modules
 │   ├── init_db.py        # Database initialization script
-│   ├── requirements.txt  # Python dependencies for backend
+│   ├── pyproject.toml    # Python dependencies (Poetry)
 │   └── test_api.py       # API tests
 ├── frontend/             # 前端代码 (Vue 3 + Element Plus)
 │   ├── public/           # Static assets for frontend

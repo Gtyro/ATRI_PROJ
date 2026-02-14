@@ -17,10 +17,8 @@
 ### 环境准备
 
 ```bash
-# 推荐使用 poetry 管理依赖
+# 使用 Poetry 管理依赖（唯一入口）
 poetry install
-# 或使用传统方式
-pip install -r requirements.txt
 ```
 
 ### 三步极速启动
@@ -41,7 +39,7 @@ pip install -r requirements.txt
 
 3. **启动！**
    ```bash
-   python bot.py
+   poetry run python bot.py
    ```
 
 ### 🔥 首次启动必看

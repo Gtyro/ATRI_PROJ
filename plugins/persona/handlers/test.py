@@ -256,7 +256,7 @@ async def handle_keyword_extract_test(bot: Bot, event: Event, arp: Arparma):
         await keyword_extract_test.finish("没有匹配到消息")
 
     topics = await psstate.persona_system.extract_topics_from_messages(conv_id, messages)
-    keywords = await psstate.persona_system.extract_reply_keywords(conv_id, topics)
+    keywords = await psstate.persona_system.extract_reply_keywords_from_history(conv_id, messages)
     payload = {
         "conv_id": conv_id,
         "start_time": start_time.isoformat(sep=" ", timespec="seconds"),

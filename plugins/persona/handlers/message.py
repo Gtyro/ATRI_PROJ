@@ -174,5 +174,10 @@ async def handle_parse_history(bot: Bot, event: Event, arp: Arparma):
     if not messages:
         await parse_history.finish("解析消息记录失败或记录为空")
 
-    # 目前只解析到这一步，后续功能待实现
-    await parse_history.finish(f"成功解析消息记录，共 {len(messages)} 条消息\n群名称: {group_name}\n群号: {group_id}")
+    # 历史导入终态：仅导入短期记忆，不自动触发记忆构建和自动回复
+    await parse_history.finish(
+        f"成功解析消息记录，共 {len(messages)} 条消息\n"
+        f"群名称: {group_name}\n"
+        f"群号: {group_id}\n"
+        "说明：本命令仅导入短期记忆（消息队列），不会自动触发记忆构建，也不会立即自动回复。"
+    )

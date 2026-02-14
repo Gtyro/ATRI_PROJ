@@ -36,6 +36,13 @@ class PersonaEngine(Protocol):
     ) -> List[Dict[str, Any]]:
         ...
 
+    async def extract_reply_keywords_from_history(
+        self,
+        conv_id: str,
+        messages: List[Dict[str, Any]],
+    ) -> List[str]:
+        ...
+
     async def retrieve_related_memories(
         self,
         query: str,

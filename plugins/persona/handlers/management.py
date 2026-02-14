@@ -207,8 +207,8 @@ llm_switch = register_alconna(
     use_cmd_sep=True,
     alconna_args=[Args["group_id?", str]["feature?", str]["action?", str]["extra", MultiVar(str, "*")]],
     description="查看或设置 Persona 的 LLM 功能开关",
-    usage="LLM开关 [群号] [记忆/关键词/被动/主动/回复] [开/关] 或 LLM开关 [群号] 查看",
-    examples=["LLM开关 123456 查看", "LLM开关 123456 关键词 开", "LLM开关 123456 回复 关"],
+    usage="LLM开关 [群号] [记忆/被动/主动/回复] [开/关] 或 LLM开关 [群号] 查看",
+    examples=["LLM开关 123456 查看", "LLM开关 123456 回复 关"],
 )
 
 
@@ -231,7 +231,7 @@ async def handle_llm_switch(bot: Bot, event: Event, state: T_State, arp: Arparma
     action = arp.all_matched_args.get("action")
 
     if not group_id or not feature:
-        await llm_switch.finish("格式错误：LLM开关 [群号] [记忆/关键词/被动/主动/回复] [开/关] 或 LLM开关 [群号] 查看")
+        await llm_switch.finish("格式错误：LLM开关 [群号] [记忆/被动/主动/回复] [开/关] 或 LLM开关 [群号] 查看")
 
     group_id = str(group_id)
     feature = str(feature)
@@ -247,24 +247,25 @@ async def handle_llm_switch(bot: Bot, event: Event, state: T_State, arp: Arparma
         await llm_switch.finish(
             f"群 {group_id} LLM开关状态:\n"
             f"- 记忆提取: {flags.get(LLM_TOPIC_EXTRACT_ENABLED_KEY)}\n"
-            f"- 关键词提取: {flags.get(LLM_KEYWORD_EXTRACT_ENABLED_KEY)}\n"
+            f"- 关键词提取(联动): {flags.get(LLM_KEYWORD_EXTRACT_ENABLED_KEY)}\n"
             f"- 被动回复: {flags.get(LLM_PASSIVE_REPLY_ENABLED_KEY)}\n"
             f"- 主动回复: {flags.get(LLM_ACTIVE_REPLY_ENABLED_KEY)}"
         )
 
     if not action:
-        await llm_switch.finish("格式错误：LLM开关 [群号] [记忆/关键词/被动/主动/回复] [开/关]")
+        await llm_switch.finish("格式错误：LLM开关 [群号] [记忆/被动/主动/回复] [开/关]")
 
     action = _parse_switch_action(action)
     if action is None:
         await llm_switch.finish("开关参数错误：请使用 开/关")
 
+    if feature in {"关键词", "关键字"}:
+        await llm_switch.finish("关键词提取为联动项，不能单独设置；请改用 被动/主动/回复 开关")
+
     feature_map = {
         "记忆": [LLM_TOPIC_EXTRACT_ENABLED_KEY],
         "话题": [LLM_TOPIC_EXTRACT_ENABLED_KEY],
         "提取": [LLM_TOPIC_EXTRACT_ENABLED_KEY],
-        "关键词": [LLM_KEYWORD_EXTRACT_ENABLED_KEY],
-        "关键字": [LLM_KEYWORD_EXTRACT_ENABLED_KEY],
         "被动": [LLM_PASSIVE_REPLY_ENABLED_KEY],
         "被动回复": [LLM_PASSIVE_REPLY_ENABLED_KEY],
         "主动": [LLM_ACTIVE_REPLY_ENABLED_KEY],
@@ -275,7 +276,7 @@ async def handle_llm_switch(bot: Bot, event: Event, state: T_State, arp: Arparma
     }
     keys = feature_map.get(feature)
     if not keys:
-        await llm_switch.finish("功能参数错误：仅支持 记忆/关键词/被动/主动/回复")
+        await llm_switch.finish("功能参数错误：仅支持 记忆/被动/主动/回复")
 
     group_name = None
     try:
@@ -304,7 +305,7 @@ async def handle_llm_switch(bot: Bot, event: Event, state: T_State, arp: Arparma
     await llm_switch.finish(
         f"已更新群 {group_id} LLM开关:\n"
         f"- 记忆提取: {flags.get(LLM_TOPIC_EXTRACT_ENABLED_KEY)}\n"
-        f"- 关键词提取: {flags.get(LLM_KEYWORD_EXTRACT_ENABLED_KEY)}\n"
+        f"- 关键词提取(联动): {flags.get(LLM_KEYWORD_EXTRACT_ENABLED_KEY)}\n"
         f"- 被动回复: {flags.get(LLM_PASSIVE_REPLY_ENABLED_KEY)}\n"
         f"- 主动回复: {flags.get(LLM_ACTIVE_REPLY_ENABLED_KEY)}"
     )

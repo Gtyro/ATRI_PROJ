@@ -136,7 +136,7 @@ def _build_service(*, retrieval_ab_mode: str, msgprocessor: _MessageProcessorStu
         group_config=_GroupConfigStub(),
         plugin_name="persona",
         config={
-            "queue_history_size": 20,
+            "queue_history_size": 1,
             "batch_interval": 1800,
             "image_understanding": {
                 "enabled": True,
