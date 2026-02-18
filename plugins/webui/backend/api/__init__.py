@@ -14,6 +14,7 @@ from .dashboard import dashboard_router
 from .db.router import router as db_router
 from .memory import router as memory_router
 from .logs import router as logs_router
+from .module_metrics import router as module_metrics_router
 from .plugin_policy import router as plugin_policy_router
 from .core.config import settings
 from .core.database import close_database, initialize_database_system
@@ -49,6 +50,7 @@ def configure_app(app: FastAPI, is_nonebot_app: bool = False):
     app.include_router(memory_router)
     app.include_router(plugin_policy_router)
     app.include_router(logs_router)
+    app.include_router(module_metrics_router)
 
     # 注册主页重定向
     @app.get("/")

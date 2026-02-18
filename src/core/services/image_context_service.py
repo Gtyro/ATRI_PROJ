@@ -132,7 +132,20 @@ class ImageContextService:
         if pending_for_understanding:
             image_understanding_cost = len(pending_for_understanding)
             payloads = [item[2] for item in pending_for_understanding]
-            summaries = await self.image_understander.summarize_images(payloads)
+            usage_contexts = [
+                {
+                    "plugin_name": "persona",
+                    "module_name": "image_understanding",
+                    "operation": "image_understanding",
+                    "conv_id": conv_id,
+                    "message_id": item[1].get("message_id"),
+                }
+                for item in pending_for_understanding
+            ]
+            summaries = await self.image_understander.summarize_images(
+                payloads,
+                usage_contexts=usage_contexts,
+            )
             if len(summaries) < len(pending_for_understanding):
                 summaries.extend([""] * (len(pending_for_understanding) - len(summaries)))
 

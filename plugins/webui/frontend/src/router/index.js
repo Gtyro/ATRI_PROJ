@@ -12,6 +12,7 @@ const DashboardOverview = () =>
 const WordCloudPage = () => import("@/views/wordcloud/WordCloudPage.vue");
 const MemoryTimeline = () => import("@/views/MemoryTimeline.vue");
 const PluginPolicyPage = () => import("@/views/PluginPolicyPage.vue");
+const ModuleMetricsPage = () => import("@/views/ModuleMetricsPage.vue");
 
 // 路由配置
 const routes = [
@@ -61,6 +62,11 @@ const routes = [
       {
         path: "plugin-policy",
         component: PluginPolicyPage,
+        meta: { requiresAuth: true },
+      },
+      {
+        path: "module-metrics",
+        component: ModuleMetricsPage,
         meta: { requiresAuth: true },
       },
     ],

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from plugins.models import GroupPluginPolicy
+from src.infra.db.tortoise.plugin_models import GroupPluginPolicy
 from src.core.domain import PluginPolicy
 from src.core.ports import PluginPolicyStore
 from src.core.services.plugin_policy_defaults import PolicyDefaults, get_policy_defaults

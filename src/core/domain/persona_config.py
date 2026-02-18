@@ -81,7 +81,7 @@ class ImageUnderstandingConfig:
     model: str = "google/gemini-3-pro-preview"
     timeout_seconds: float = 60.0
     http_timeout_seconds: float = 30.0
-    max_tokens: int = 300
+    max_tokens: int = 2000
     max_images_per_round: int = 5
     analyze_window_size: int = 20
     cache_enabled: bool = True
@@ -116,7 +116,7 @@ class ImageUnderstandingConfig:
             model=str(data.get("model", "google/gemini-3-pro-preview")).strip(),
             timeout_seconds=float(data.get("timeout_seconds", 60.0)),
             http_timeout_seconds=float(data.get("http_timeout_seconds", 30.0)),
-            max_tokens=int(data.get("max_tokens", 300)),
+            max_tokens=int(data.get("max_tokens", 2000)),
             max_images_per_round=max_images_per_round,
             analyze_window_size=analyze_window_size,
             cache_enabled=_to_bool(data.get("cache_enabled"), default=True),

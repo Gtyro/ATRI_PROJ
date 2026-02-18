@@ -55,7 +55,7 @@ class DecayManager:
             self.next_decay_interval = self.config.next_decay_interval
 
         if plugin_config_model is None:
-            from plugins.models import PluginConfig as _PluginConfig
+            from src.infra.db.tortoise.plugin_models import PluginConfig as _PluginConfig
             plugin_config_model = _PluginConfig
         self.plugin_config_model = plugin_config_model
 

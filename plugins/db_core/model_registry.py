@@ -13,7 +13,7 @@ _registered_module_set = set()
 
 # 回退用的默认注册列表（兼容旧逻辑）
 _default_modules: List[Tuple[str, str]] = [
-    ("models", "plugins.models"),
+    ("models", "src.infra.db.tortoise.plugin_models"),
     ("models", "plugins.message_basic.models"),
     ("models", "src.infra.db.tortoise.message_models"),
     ("models", "plugins.webui.backend.api.db.models"),

@@ -26,6 +26,10 @@
           <el-icon><Setting /></el-icon>
           <span>插件管理</span>
         </el-menu-item>
+        <el-menu-item index="/admin/module-metrics">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>模块统计</span>
+        </el-menu-item>
       </el-menu>
     </div>
 
@@ -49,6 +53,7 @@ import {
   Connection,
   Clock,
   Setting,
+  DataAnalysis,
 } from "@element-plus/icons-vue";
 import Navbar from "@/components/NavbarHeader.vue";
 

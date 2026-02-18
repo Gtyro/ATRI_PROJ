@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .client import LLMClient
 from .errors import LLMProviderError
@@ -24,7 +24,7 @@ class ImageUnderstander:
         base_url: str,
         model: str,
         timeout_seconds: float = 60.0,
-        max_tokens: int = 300,
+        max_tokens: int = 2000,
         provider_name: str = "image_understander",
     ) -> None:
         self.api_key = str(api_key or "").strip()
@@ -50,7 +50,18 @@ class ImageUnderstander:
         else:
             logger.warning("图片理解 Provider 初始化跳过：缺少 api_key/base_url/model")
 
-    async def summarize_images(self, images: List[Dict[str, Any]]) -> List[str]:
+    def set_usage_event_callback(self, callback: Optional[Callable[[Dict[str, Any]], Any]]) -> None:
+        """设置图片理解 usage 事件回调。"""
+        if self._llm_client is None:
+            return
+        self._llm_client.set_usage_event_callback(callback)
+
+    async def summarize_images(
+        self,
+        images: List[Dict[str, Any]],
+        *,
+        usage_contexts: Optional[List[Optional[Dict[str, Any]]]] = None,
+    ) -> List[str]:
         """输入多图，输出等长短摘要列表。失败项返回空字符串。"""
         if not images:
             return []
@@ -58,12 +69,22 @@ class ImageUnderstander:
             return ["" for _ in images]
 
         summaries: List[str] = []
-        for image in images:
-            summary = await self._summarize_single_image(image)
+        for index, image in enumerate(images):
+            usage_context: Optional[Dict[str, Any]] = None
+            if usage_contexts and index < len(usage_contexts):
+                candidate = usage_contexts[index]
+                if isinstance(candidate, dict):
+                    usage_context = candidate
+            summary = await self._summarize_single_image(image, usage_context=usage_context)
             summaries.append(summary)
         return summaries
 
-    async def _summarize_single_image(self, image: Dict[str, Any]) -> str:
+    async def _summarize_single_image(
+        self,
+        image: Dict[str, Any],
+        *,
+        usage_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         if self._llm_client is None:
             return ""
         image_url = self._build_image_url(image)
@@ -90,6 +111,7 @@ class ImageUnderstander:
                     messages,
                     params=params,
                     operation="image_understanding",
+                    usage_context=usage_context,
                 )
                 text = (output or "").strip()
                 if text:

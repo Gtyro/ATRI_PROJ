@@ -21,8 +21,8 @@ class _FakeUnderstander:
         self.summaries = summaries
         self.calls = []
 
-    async def summarize_images(self, images):
-        self.calls.append(images)
+    async def summarize_images(self, images, *, usage_contexts=None):
+        self.calls.append({"images": images, "usage_contexts": usage_contexts})
         return list(self.summaries[: len(images)])
 
 
@@ -90,6 +90,12 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
     assert "- Alice 发图：新图片摘要" in context
     assert len(resolver.calls) == 1
     assert len(understander.calls) == 1
+    usage_context = understander.calls[0]["usage_contexts"][0]
+    assert usage_context["plugin_name"] == "persona"
+    assert usage_context["module_name"] == "image_understanding"
+    assert usage_context["operation"] == "image_understanding"
+    assert usage_context["conv_id"] == "group_1"
+    assert usage_context["message_id"] == 1
     assert repo.updated[0][0] == 1
     assert (
         repo.updated[0][1]["media"]["images"][0]["understanding"]["summary"]
@@ -151,6 +157,9 @@ def test_build_context_respects_max_images_budget(caplog):
     assert "- Bob 发图：摘要1" in context
     assert "Alice" not in context
     assert len(resolver.calls) == 1
+    usage_context = understander.calls[0]["usage_contexts"][0]
+    assert usage_context["conv_id"] == "group_1"
+    assert usage_context["message_id"] == 2
     assert len(repo.updated) == 1
     assert "image_understanding_cost=1" in caplog.text
     assert "image_fetch_source(url)=1" in caplog.text

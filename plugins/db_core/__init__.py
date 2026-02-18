@@ -9,6 +9,9 @@ from .db_init import initialize_database, shutdown_database
 from .db_manager import db_manager
 from .model_registry import register_all_models, register_model_module
 
+# 注册插件共享模型，确保在 fallback 未触发时也会纳入初始化。
+register_model_module("models", "src.infra.db.tortoise.plugin_models")
+
 __plugin_meta__ = PluginMetadata(
     name="数据库核心",
     description="提供ORM数据库功能，用于模型管理和数据存储",
@@ -24,8 +27,6 @@ __plugin_meta__ = PluginMetadata(
     }
 )
 
-driver = get_driver()
-
 # 导出函数和对象，供其他插件使用
 __all__ = [
     "db_manager",
@@ -35,15 +36,24 @@ __all__ = [
     "register_model_module",
 ]
 
-# 在Nonebot启动时注册所有模型并初始化数据库
-@driver.on_startup
+
 async def init_db():
-    # 注册所有模型
+    """在 NoneBot 启动时注册模型并初始化数据库。"""
     register_all_models()
-    # 初始化数据库
     await initialize_database()
 
-# 在Nonebot关闭时关闭数据库连接
-@driver.on_shutdown
+
 async def close_db():
+    """在 NoneBot 关闭时释放数据库连接。"""
     await shutdown_database()
+
+
+try:
+    driver = get_driver()
+except ValueError:
+    # 允许在未初始化 NoneBot 的环境中安全导入（例如单元测试）。
+    driver = None
+
+if driver is not None:
+    driver.on_startup(init_db)
+    driver.on_shutdown(close_db)

@@ -11,17 +11,19 @@
 import asyncio
 import logging
 import random
+from datetime import datetime, timedelta
 
 from nonebot import get_driver, on_message, require
 from nonebot_plugin_alconna.uniseg import Target, UniMessage
 from nonebot_plugin_apscheduler import scheduler
 
-from plugins.models import GroupPluginConfig
+from src.infra.db.tortoise.plugin_models import GroupPluginConfig, PluginModuleMetricEvent
 from src.adapters.nonebot import assemble_persona_engine
 from src.adapters.nonebot.command_registry import register_auto_feature
 from src.core.domain import PersonaConfig
 from src.core.events import Event, MESSAGE_RECEIVED
 from src.core.facade.persona_facade import PersonaFacade
+from src.infra.db.tortoise.module_metrics_cleanup import cleanup_expired_module_metric_events
 
 from . import psstate
 from .handlers import *
@@ -151,3 +153,24 @@ async def start_scheduler():
                 logging.info("定时维护任务完成")
             except Exception as e:
                 logging.error(f"定时维护任务异常: {e}")
+
+
+@scheduler.scheduled_job(
+    "cron",
+    hour=3,
+    minute=0,
+    id="persona_module_metrics_retention_cleanup",
+    replace_existing=True,
+)
+async def cleanup_module_metric_events() -> None:
+    try:
+        now = datetime.utcnow()
+        deleted_count = await cleanup_expired_module_metric_events(
+            PluginModuleMetricEvent,
+            retention_days=90,
+            now=now,
+        )
+        cutoff = now - timedelta(days=90)
+        logging.info("模块指标定时清理完成: deleted=%s cutoff=%s", deleted_count, cutoff.isoformat())
+    except Exception as exc:
+        logging.error("模块指标定时清理异常: %s", exc, exc_info=True)
