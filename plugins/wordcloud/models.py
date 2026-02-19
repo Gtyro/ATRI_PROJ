@@ -9,8 +9,8 @@ from plugins.message_basic.models import BasicMessage
 
 class WordCloudData(Model):
     """词云数据模型"""
-    id = fields.UUIDField(pk=True, default=uuid.uuid4)
-    conv_id = fields.CharField(max_length=50, index=True)  # 会话ID
+    id = fields.UUIDField(primary_key=True, default=uuid.uuid4)
+    conv_id = fields.CharField(max_length=50, db_index=True)  # 会话ID
     date = fields.DateField()  # 日期
     hour = fields.IntField()   # 小时
     word_data = fields.JSONField()  # 词频数据，格式为 [{word: "词", weight: 频率}, ...]

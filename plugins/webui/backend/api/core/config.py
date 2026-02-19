@@ -1,11 +1,13 @@
 from pathlib import Path
 from typing import Optional
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """应用配置设置"""
+    model_config = SettingsConfigDict(env_file=".env")
+
     # 应用设置
     API_V1_STR: str = ""
     SECRET_KEY: str = "your-secret-key"  # 在生产环境中请更改此密钥
@@ -22,9 +24,6 @@ class Settings(BaseSettings):
 
     # CORS设置
     CORS_ORIGINS: list = ["*"]  # 在生产环境中应该限制来源
-
-    class Config:
-        env_file = ".env"
 
 # 创建全局设置实例
 settings = Settings()

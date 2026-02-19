@@ -23,7 +23,7 @@ class Neo4jQuery(BaseModel):
 # Tortoise ORM模型用于数据库操作
 class User(Model):
     """用户模型"""
-    id = fields.IntField(pk=True)
+    id = fields.IntField(primary_key=True)
     username = fields.CharField(max_length=50, unique=True)
     email = fields.CharField(max_length=100, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
@@ -34,7 +34,7 @@ class User(Model):
 
 class Log(Model):
     """日志模型"""
-    id = fields.IntField(pk=True)
+    id = fields.IntField(primary_key=True)
     level = fields.CharField(max_length=20)
     message = fields.TextField()
     timestamp = fields.DatetimeField(auto_now_add=True)
@@ -45,7 +45,7 @@ class Log(Model):
 
 class Statistic(Model):
     """统计信息模型"""
-    id = fields.IntField(pk=True)
+    id = fields.IntField(primary_key=True)
     name = fields.CharField(max_length=50)
     value = fields.IntField()
     updated_at = fields.DatetimeField(auto_now=True)

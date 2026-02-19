@@ -4,7 +4,7 @@ from tortoise import Model, fields
 
 
 class PluginConfig(Model):
-    id = fields.IntField(pk=True)
+    id = fields.IntField(primary_key=True)
     plugin_name = fields.CharField(max_length=50)
     """plugin name"""
     plugin_config = fields.JSONField(default={})
@@ -17,15 +17,15 @@ class PluginConfig(Model):
 
 
 class GroupConfig(Model):
-    id = fields.IntField(pk=True)
+    id = fields.IntField(primary_key=True)
     """group id"""
     name = fields.CharField(max_length=50)
     """group name"""
 
 
 class GroupPluginConfig(Model):
-    id = fields.IntField(pk=True)
-    gid = fields.CharField(max_length=20, index=True)
+    id = fields.IntField(primary_key=True)
+    gid = fields.CharField(max_length=20, db_index=True)
     """group id"""
     name = fields.CharField(max_length=50)
     """group name"""
@@ -67,8 +67,8 @@ class GroupPluginConfig(Model):
 
 
 class GroupPluginPolicy(Model):
-    id = fields.IntField(pk=True)
-    gid = fields.CharField(max_length=20, index=True)
+    id = fields.IntField(primary_key=True)
+    gid = fields.CharField(max_length=20, db_index=True)
     """group id"""
     name = fields.CharField(max_length=50)
     """group name"""
@@ -91,7 +91,7 @@ class GroupPluginPolicy(Model):
 
 
 class PluginModuleMetricEvent(Model):
-    id = fields.IntField(pk=True)
+    id = fields.IntField(primary_key=True)
     plugin_name = fields.CharField(max_length=50)
     module_name = fields.CharField(max_length=100)
     operation = fields.CharField(max_length=100)

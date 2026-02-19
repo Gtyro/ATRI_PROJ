@@ -6,9 +6,9 @@ LOCAL_TZ = get_localzone()
 
 class BasicMessage(Model):
     """基础消息模型"""
-    id = fields.IntField(pk=True)
-    conv_id = fields.CharField(max_length=50, index=True)
-    user_id = fields.CharField(max_length=50, index=True)
+    id = fields.IntField(primary_key=True)
+    conv_id = fields.CharField(max_length=50, db_index=True)
+    user_id = fields.CharField(max_length=50, db_index=True)
     user_name = fields.CharField(max_length=50)
     content = fields.TextField()
     created_at = fields.DatetimeField(auto_now_add=True)

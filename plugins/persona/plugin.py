@@ -160,7 +160,6 @@ async def start_scheduler():
     hour=3,
     minute=0,
     id="persona_module_metrics_retention_cleanup",
-    replace_existing=True,
 )
 async def cleanup_module_metric_events() -> None:
     try:
