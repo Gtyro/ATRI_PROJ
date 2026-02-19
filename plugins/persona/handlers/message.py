@@ -54,8 +54,13 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
 
     user_id = event.get_user_id()
     plain_text = event.get_plaintext()
-    images = extract_onebot_image_metadata(event.get_message())
-    message = normalize_content_for_storage(plain_text, images)
+    message_segments = event.get_message()
+    images = extract_onebot_image_metadata(message_segments)
+    message = normalize_content_for_storage(
+        plain_text,
+        images,
+        message_segments=message_segments,
+    )
 
     # 忽略既无文本也无图片的消息
     if not message:

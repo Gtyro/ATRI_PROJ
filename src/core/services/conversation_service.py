@@ -102,63 +102,15 @@ class ConversationService:
         raise ValueError(f"未知 retrieval_ab_mode={mode}，无法决定 tool_choice")
 
     @staticmethod
-    def _inject_failed_image_placeholders(messages: List[Dict[str, Any]]) -> int:
-        """在图片识别失败时，为消息内容补充 [图片] 占位符。"""
-        fallback_count = 0
-        for message in messages:
-            if not isinstance(message, dict):
-                continue
-
-            metadata = message.get("metadata")
-            if not isinstance(metadata, dict):
-                continue
-            media = metadata.get("media")
-            if not isinstance(media, dict):
-                continue
-            images = media.get("images")
-            if not isinstance(images, list) or not images:
-                continue
-
-            has_understanding_payload = False
-            has_summary = False
-            has_failed_understanding = False
-            for image in images:
-                if not isinstance(image, dict):
-                    continue
-                understanding = image.get("understanding")
-                if not isinstance(understanding, dict):
-                    continue
-
-                has_understanding_payload = True
-                summary = str(understanding.get("summary") or "").strip()
-                if summary:
-                    has_summary = True
-                    break
-                if str(understanding.get("error") or "").strip():
-                    has_failed_understanding = True
-
-            # 未进入识图回写链路，或已有有效摘要时不追加占位符。
-            if not has_understanding_payload or has_summary or not has_failed_understanding:
-                continue
-
-            content = str(message.get("content") or "").strip()
-            if "[图片]" in content or "[图片消息]" in content:
-                continue
-            message["content"] = f"{content} [图片]" if content else "[图片]"
-            fallback_count += 1
-
-        return fallback_count
-
-    @staticmethod
     def _inject_image_summaries(messages: List[Dict[str, Any]]) -> int:
-        """将识图摘要注入消息 content，替换 [图片]/[图片消息] 占位符。"""
+        """将识图摘要注入消息 content，替换 [图片] 占位符。"""
         injected_count = 0
         for message in messages:
             if not isinstance(message, dict):
                 continue
 
             content = str(message.get("content") or "")
-            if "[图片]" not in content and "[图片消息]" not in content:
+            if "[图片]" not in content:
                 continue
             if "[图片内容:" in content:
                 continue
@@ -173,24 +125,57 @@ class ConversationService:
             if not isinstance(images, list) or not images:
                 continue
 
-            summaries: List[str] = []
-            for image in images:
+            ordered_summaries: List[tuple[int, int, str]] = []
+            for fallback_index, image in enumerate(images):
                 if not isinstance(image, dict):
                     continue
                 understanding = image.get("understanding")
                 if not isinstance(understanding, dict):
                     continue
                 summary = str(understanding.get("summary") or "").strip()
-                if not summary or summary in summaries:
+                if not summary:
                     continue
-                summaries.append(summary)
+                segment_index = image.get("segment_index")
+                try:
+                    order = int(segment_index)
+                except (TypeError, ValueError):
+                    order = 10**9 + fallback_index
+                ordered_summaries.append((order, fallback_index, summary))
 
-            if not summaries:
+            if not ordered_summaries:
                 continue
 
-            summary_text = "；".join(summaries[:3])
-            replacement = f"[图片内容: {summary_text}]"
-            new_content = content.replace("[图片消息]", replacement).replace("[图片]", replacement)
+            ordered_summaries.sort(key=lambda item: (item[0], item[1]))
+            summaries = [item[2] for item in ordered_summaries]
+            placeholder_count = content.count("[图片]")
+            if placeholder_count <= 0:
+                continue
+
+            if placeholder_count == 1:
+                merged_summaries: List[str] = []
+                seen = set()
+                for summary in summaries:
+                    if summary in seen:
+                        continue
+                    seen.add(summary)
+                    merged_summaries.append(summary)
+                summary_text = "；".join(merged_summaries[:3])
+                replacement = f"[图片内容: {summary_text}]"
+                new_content = content.replace("[图片]", replacement, 1)
+            else:
+                index = 0
+
+                def _replace_placeholder(_: re.Match) -> str:
+                    nonlocal index
+                    if index < len(summaries):
+                        summary = summaries[index]
+                        index += 1
+                        return f"[图片内容: {summary}]"
+                    index += 1
+                    return "[图片]"
+
+                new_content = re.sub(re.escape("[图片]"), _replace_placeholder, content)
+
             normalized = re.sub(r"\s{2,}", " ", new_content).strip()
             if normalized == content.strip():
                 continue
@@ -385,10 +370,15 @@ class ConversationService:
 
         if not should_reply:
             if conv_id.startswith("group_"):
-                logging.info(f"会话 {conv_id} 不需要回复，下次处理时间设置为30分钟")
+                cooldown_seconds = self._batch_interval()
+                logging.info(
+                    "会话 %s 不需要回复，下次处理时间设置为 %d 秒",
+                    conv_id,
+                    cooldown_seconds,
+                )
                 group_id = conv_id.split("_")[1]
                 gpconfig = await self.group_config.get_config(group_id, self.plugin_name)
-                gpconfig.plugin_config["next_process_time"] = time.time() + self._batch_interval()
+                gpconfig.plugin_config["next_process_time"] = time.time() + cooldown_seconds
                 await gpconfig.save()
             return None
 
@@ -423,14 +413,6 @@ class ConversationService:
                     "会话 %s 图片摘要已注入消息历史: image_summary_injected=%d",
                     conv_id,
                     summary_injected,
-                )
-
-            placeholder_injected = self._inject_failed_image_placeholders(recent_messages)
-            if placeholder_injected > 0:
-                logging.info(
-                    "会话 %s 图片解析失败，消息历史已追加占位符: image_placeholder_fallback=%d",
-                    conv_id,
-                    placeholder_injected,
                 )
 
         reply_keywords: List[str] = []

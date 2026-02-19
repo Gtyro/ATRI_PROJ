@@ -165,6 +165,60 @@ def test_build_context_respects_max_images_budget(caplog):
     assert "image_fetch_source(url)=1" in caplog.text
 
 
+def test_build_context_respects_segment_index_order_within_message(caplog):
+    resolver = _FakeResolver(
+        {
+            "https://example.com/1.jpg": ResolvedImage(
+                source="url",
+                mime="image/jpeg",
+                image_bytes=b"1",
+                original_url="https://example.com/1.jpg",
+            ),
+            "https://example.com/2.jpg": ResolvedImage(
+                source="url",
+                mime="image/jpeg",
+                image_bytes=b"2",
+                original_url="https://example.com/2.jpg",
+            ),
+        }
+    )
+    understander = _FakeUnderstander(["首图摘要"])
+    repo = _FakeRepo()
+    service = ImageContextService(
+        config={
+            "image_understanding": {
+                "max_images_per_round": 1,
+                "analyze_window_size": 20,
+                "cache_enabled": True,
+            }
+        },
+        image_resolver=resolver,
+        image_understander=understander,
+        message_repo=repo,
+    )
+
+    messages = [
+        {
+            "id": 1,
+            "user_name": "Alice",
+            "metadata": {
+                "media": {
+                    "images": [
+                        {"url": "https://example.com/2.jpg", "segment_index": 2},
+                        {"url": "https://example.com/1.jpg", "segment_index": 0},
+                    ]
+                }
+            },
+        }
+    ]
+
+    with caplog.at_level(logging.INFO):
+        context = asyncio.run(service.build_context("group_1", messages))
+
+    assert resolver.calls[0][2]["url"] == "https://example.com/1.jpg"
+    assert "- Alice 发图：首图摘要" in context
+
+
 def test_build_context_logs_zero_cost_when_no_recent_messages(caplog):
     service = ImageContextService(
         config={"image_understanding": {}},

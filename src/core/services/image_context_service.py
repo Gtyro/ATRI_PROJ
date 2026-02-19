@@ -248,9 +248,19 @@ class ImageContextService:
             if not isinstance(images, list):
                 continue
 
-            for image in reversed(images):
+            ordered_images: List[Tuple[int, int, Dict[str, Any]]] = []
+            for fallback_index, image in enumerate(images):
                 if not isinstance(image, dict):
                     continue
+                segment_index = image.get("segment_index")
+                try:
+                    order = int(segment_index)
+                except (TypeError, ValueError):
+                    order = 10**9 + fallback_index
+                ordered_images.append((order, fallback_index, image))
+            ordered_images.sort(key=lambda item: (item[0], item[1]))
+
+            for _, _, image in ordered_images:
                 candidates.append(
                     {
                         "message": message,
