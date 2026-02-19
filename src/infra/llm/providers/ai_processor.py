@@ -277,8 +277,19 @@ class AIProcessor:
         Returns:
             生成的回复
         """
+        normalized_tool_choice = str(tool_choice or "").strip().lower()
+        if normalized_tool_choice not in {"none", "auto", "required"}:
+            error = ValueError(
+                f"未知 tool_choice={tool_choice}，仅支持 none/auto/required"
+            )
+            logging.error(str(error))
+            if self.raise_on_error:
+                raise error
+            return ""
+
         # 构建系统提示词
         system_prompt = "你需要扮演一位指定角色，根据角色的信息，模仿ta的语气进行线上的日常对话，一次回复不要包含太多内容，直接说话，不要带上\"[角色]说\"。\n"
+        fallback_system_prompt = "你是一只群友"
         try:
             if conv_id.startswith("group_"):
                 group_id = conv_id.split("_")[1]
@@ -297,7 +308,8 @@ class AIProcessor:
         except Exception as e:
             logging.error(f"读取角色信息失败: {e}")
             logging.error(f"角色信息: {self.group_character}")
-            return ""
+            logging.warning("使用基础人格提示词回退: 你是一只群友")
+            system_prompt = fallback_system_prompt
         if long_memory_prompt:
             system_prompt += f"\n{long_memory_prompt}"
 
@@ -333,12 +345,7 @@ class AIProcessor:
             api_messages.append({"role": role, "content": msg.get("content", "")})
 
         try:
-            normalized_tool_choice = str(tool_choice or "").strip().lower()
             final_params = LLMCallParams(temperature=temperature, max_tokens=1200)
-            if normalized_tool_choice not in {"none", "auto", "required"}:
-                raise ValueError(
-                    f"未知 tool_choice={tool_choice}，仅支持 none/auto/required"
-                )
 
             if normalized_tool_choice == "none":
                 content = await self._llm_client.chat(
