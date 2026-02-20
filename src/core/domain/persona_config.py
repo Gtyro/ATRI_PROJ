@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Optional
-import os
 
 import yaml
-
 
 DEFAULT_CONFIG_PATH = "data/persona/persona.yaml"
 
@@ -186,15 +185,20 @@ class Neo4jConfig:
     uri: str
     user: str
     password: str
+    liveness_check_timeout: Optional[float] = 30.0
 
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]] = None) -> "Neo4jConfig":
         if not isinstance(data, dict):
             raise ValueError("neo4j_config 必须是字典")
+
+        liveness_check_timeout = data.get("liveness_check_timeout", 30.0)
+
         return cls(
             uri=str(_require_key(data, "uri", "neo4j_config.uri")),
             user=str(_require_key(data, "user", "neo4j_config.user")),
             password=str(_require_key(data, "password", "neo4j_config.password")),
+            liveness_check_timeout=liveness_check_timeout,
         )
 
     def apply_env_overrides(self) -> "Neo4jConfig":
@@ -203,6 +207,10 @@ class Neo4jConfig:
             uri=os.environ.get("NEO4J_URI", self.uri),
             user=os.environ.get("NEO4J_USER", self.user),
             password=os.environ.get("NEO4J_PASSWORD", self.password),
+            liveness_check_timeout=os.environ.get(
+                "NEO4J_LIVENESS_CHECK_TIMEOUT",
+                self.liveness_check_timeout,
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -210,6 +218,7 @@ class Neo4jConfig:
             "uri": self.uri,
             "user": self.user,
             "password": self.password,
+            "liveness_check_timeout": self.liveness_check_timeout,
         }
 
 

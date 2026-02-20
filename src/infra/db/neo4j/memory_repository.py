@@ -13,6 +13,7 @@ from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from neomodel import config, db
+from neo4j import GraphDatabase
 
 from src.core.domain import PersonaConfig
 
@@ -25,6 +26,7 @@ class MemoryRepository:
     def __init__(self, config_dict: Union[Dict[str, Any], PersonaConfig]):
         """初始化记忆网络存储库"""
         self.config = config_dict
+        self._driver = None
 
     async def _run_sync(self, func, *args, **kwargs):
         """在事件循环中运行同步函数"""
@@ -50,11 +52,11 @@ class MemoryRepository:
     async def initialize(self) -> None:
         """初始化Neo4j连接"""
         try:
-            # 设置Neo4j连接
             if isinstance(self.config, PersonaConfig):
                 neo4j_uri = self.config.neo4j_config.uri
                 neo4j_user = self.config.neo4j_config.user
                 neo4j_password = self.config.neo4j_config.password
+                liveness_check_timeout = self.config.neo4j_config.liveness_check_timeout
             else:
                 neo4j_config = self.config.get("neo4j_config")
                 if not isinstance(neo4j_config, dict):
@@ -62,10 +64,18 @@ class MemoryRepository:
                 neo4j_uri = neo4j_config["uri"]
                 neo4j_user = neo4j_config["user"]
                 neo4j_password = neo4j_config["password"]
+                liveness_check_timeout = neo4j_config.get("liveness_check_timeout", 30.0)
 
-            # 配置neomodel - 修正URL格式
-            host_port = neo4j_uri.replace("bolt://", "")
-            config.DATABASE_URL = f"bolt://{neo4j_user}:{neo4j_password}@{host_port}"
+            driver_kwargs: Dict[str, Any] = {
+                "auth": (neo4j_user, neo4j_password),
+                "liveness_check_timeout": liveness_check_timeout,
+            }
+
+            # 配置 neomodel 连接，交由 driver 层处理连接保活检查。
+            self._driver = GraphDatabase.driver(neo4j_uri, **driver_kwargs)
+            config.DATABASE_URL = ""
+            config.DRIVER = self._driver
+            db.set_connection(driver=self._driver)
 
             # 测试连接
             results, meta = await self.run_cypher("MATCH (n) RETURN count(n) as count", {})
