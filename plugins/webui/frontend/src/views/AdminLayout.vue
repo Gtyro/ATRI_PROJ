@@ -80,6 +80,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .sidebar {
@@ -94,8 +95,10 @@ onMounted(() => {
   padding: 20px;
   overflow: auto;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  scrollbar-gutter: stable;
 }
 
 /* 可以添加其他特定于AdminLayout组件的样式 */

@@ -35,9 +35,57 @@ get_current_active_user = importlib.import_module("plugins.webui.backend.api.aut
 
 class _FakeModuleMetricsService:
     def __init__(self) -> None:
+        self.modules_calls = []
+        self.overview_calls = []
+        self.detail_calls = []
+        self.detail_filter_calls = []
         self.options_calls = []
         self.summary_calls = []
         self.events_calls = []
+
+    def list_provider_modules(self):
+        self.modules_calls.append({})
+        return [
+            {
+                "module_id": "persona.image_understanding",
+                "title": "图片理解",
+            },
+            {
+                "module_id": "persona.image_url_fallback",
+                "title": "图片 URL 回退",
+            },
+        ]
+
+    async def get_provider_overview(self, **kwargs):
+        self.overview_calls.append(kwargs)
+        module_ids = kwargs.get("module_ids")
+        if module_ids and "missing.module" in module_ids:
+            raise KeyError("missing.module")
+        return {
+            "items": [
+                {
+                    "module_id": "persona.image_understanding",
+                    "title": "图片理解",
+                    "main_chart": {"type": "line", "dataset": []},
+                }
+            ]
+        }
+
+    async def get_provider_detail(self, module_id: str, **kwargs):
+        self.detail_calls.append({"module_id": module_id, **kwargs})
+        if module_id == "missing.module":
+            raise KeyError("missing.module")
+        return {
+            "module_id": module_id,
+            "title": module_id,
+            "charts": [],
+        }
+
+    async def get_provider_filter_options(self, module_id: str, **kwargs):
+        self.detail_filter_calls.append({"module_id": module_id, **kwargs})
+        if module_id == "missing.module":
+            raise KeyError("missing.module")
+        return {"fetch_sources": ["url", "file_id"]}
 
     async def get_options(self, **kwargs):
         self.options_calls.append(kwargs)
@@ -97,6 +145,102 @@ def _fake_user():
 
 def test_module_metrics_router_declares_auth_dependency():
     assert any(dep.dependency is get_current_active_user for dep in module_metrics_router_module.router.dependencies)
+
+
+def test_module_metrics_modules_lists_registered_providers(monkeypatch: pytest.MonkeyPatch):
+    fake_service = _FakeModuleMetricsService()
+    monkeypatch.setattr(module_metrics_router_module, "module_metrics_service", fake_service)
+
+    payload = asyncio.run(
+        module_metrics_router_module.get_module_metric_modules(
+            current_user=_fake_user(),
+        )
+    )
+
+    assert [item["module_id"] for item in payload["items"]] == [
+        "persona.image_understanding",
+        "persona.image_url_fallback",
+    ]
+    assert len(fake_service.modules_calls) == 1
+
+
+def test_module_metrics_overview_supports_module_id_list(monkeypatch: pytest.MonkeyPatch):
+    fake_service = _FakeModuleMetricsService()
+    monkeypatch.setattr(module_metrics_router_module, "module_metrics_service", fake_service)
+
+    payload = asyncio.run(
+        module_metrics_router_module.get_module_metric_overview(
+            from_time=datetime(2026, 1, 1, 0, 0, 0),
+            to_time=datetime(2026, 1, 2, 0, 0, 0),
+            module_id=[" persona.image_understanding ", "persona.image_url_fallback, persona.image_understanding"],
+            conv_id="group_1",
+            current_user=_fake_user(),
+        )
+    )
+
+    assert payload["items"][0]["module_id"] == "persona.image_understanding"
+    assert len(fake_service.overview_calls) == 1
+    call = fake_service.overview_calls[0]
+    assert call["module_ids"] == ["persona.image_understanding", "persona.image_url_fallback"]
+    assert call["conv_id"] == "group_1"
+    assert call["from_time"] == datetime(2026, 1, 1, 0, 0, 0)
+    assert call["to_time"] == datetime(2026, 1, 2, 0, 0, 0)
+
+
+def test_module_metrics_overview_rejects_unknown_module(monkeypatch: pytest.MonkeyPatch):
+    fake_service = _FakeModuleMetricsService()
+    monkeypatch.setattr(module_metrics_router_module, "module_metrics_service", fake_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            module_metrics_router_module.get_module_metric_overview(
+                module_id=["missing.module"],
+                current_user=_fake_user(),
+            )
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "module provider 不存在: missing.module"
+
+
+def test_module_metrics_detail_returns_filter_options(monkeypatch: pytest.MonkeyPatch):
+    fake_service = _FakeModuleMetricsService()
+    monkeypatch.setattr(module_metrics_router_module, "module_metrics_service", fake_service)
+
+    payload = asyncio.run(
+        module_metrics_router_module.get_module_metric_module_detail(
+            module_id="persona.image_understanding",
+            from_time=datetime(2026, 1, 1, 0, 0, 0),
+            to_time=datetime(2026, 1, 2, 0, 0, 0),
+            conv_id="group_1",
+            current_user=_fake_user(),
+        )
+    )
+
+    assert payload["module_id"] == "persona.image_understanding"
+    assert payload["filter_options"]["fetch_sources"] == ["url", "file_id"]
+    assert len(fake_service.detail_calls) == 1
+    assert len(fake_service.detail_filter_calls) == 1
+    detail_call = fake_service.detail_calls[0]
+    assert detail_call["conv_id"] == "group_1"
+    assert detail_call["from_time"] == datetime(2026, 1, 1, 0, 0, 0)
+    assert detail_call["to_time"] == datetime(2026, 1, 2, 0, 0, 0)
+
+
+def test_module_metrics_detail_rejects_unknown_module(monkeypatch: pytest.MonkeyPatch):
+    fake_service = _FakeModuleMetricsService()
+    monkeypatch.setattr(module_metrics_router_module, "module_metrics_service", fake_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            module_metrics_router_module.get_module_metric_module_detail(
+                module_id="missing.module",
+                current_user=_fake_user(),
+            )
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "module provider 不存在: missing.module"
 
 
 def test_module_metrics_options_passes_conv_id_filters(monkeypatch: pytest.MonkeyPatch):

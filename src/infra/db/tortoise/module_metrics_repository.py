@@ -10,6 +10,7 @@ SUPPORTED_INTERVALS = {"day", "hour"}
 
 EVENT_FIELDS = (
     "id",
+    "module_id",
     "plugin_name",
     "module_name",
     "operation",
@@ -32,6 +33,7 @@ EVENT_FIELDS = (
 class ModuleMetricsFilter:
     from_time: Optional[datetime] = None
     to_time: Optional[datetime] = None
+    module_id: Optional[str] = None
     plugin_name: Optional[str] = None
     module_name: Optional[str] = None
     operation: Optional[str] = None
@@ -49,19 +51,20 @@ class TortoiseModuleMetricsRepository:
         try:
             from tortoise import Tortoise
 
-            model = Tortoise.apps.get("models", {}).get("PluginModuleMetricEvent")
+            models = Tortoise.apps.get("models", {})
+            model = models.get("ModuleMetricEvent") or models.get("PluginModuleMetricEvent")
             if model is not None:
                 return model
         except Exception:
             pass
 
         try:
-            from src.infra.db.tortoise.plugin_models import PluginModuleMetricEvent
+            from src.infra.db.tortoise.plugin_models import ModuleMetricEvent
 
-            return PluginModuleMetricEvent
+            return ModuleMetricEvent
         except Exception as exc:
             raise RuntimeError(
-                "无法加载 PluginModuleMetricEvent，请在初始化后显式传入 model 参数"
+                "无法加载 ModuleMetricEvent，请在初始化后显式传入 model 参数"
             ) from exc
 
     def _build_query(self, filters: Optional[ModuleMetricsFilter]):
@@ -72,6 +75,8 @@ class TortoiseModuleMetricsRepository:
             query = query.filter(created_at__gte=filters.from_time)
         if filters.to_time is not None:
             query = query.filter(created_at__lte=filters.to_time)
+        if filters.module_id:
+            query = query.filter(module_id=filters.module_id)
         if filters.plugin_name:
             query = query.filter(plugin_name=filters.plugin_name)
         if filters.module_name:
@@ -211,3 +216,15 @@ class TortoiseModuleMetricsRepository:
             "page": normalized_page,
             "size": normalized_size,
         }
+
+    async def list_rows(
+        self,
+        filters: Optional[ModuleMetricsFilter] = None,
+        *,
+        fields: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        query = self._build_query(filters).order_by("-created_at", "-id")
+        normalized_fields = [str(field).strip() for field in (fields or []) if str(field).strip()]
+        if normalized_fields:
+            return await query.values(*normalized_fields)
+        return await query.values()
