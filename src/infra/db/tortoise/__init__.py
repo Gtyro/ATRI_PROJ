@@ -1,6 +1,7 @@
 """Tortoise ORM 存储实现。"""
 
 from .message_models import MessageQueue
+from .module_metrics_event_writer import ModuleMetricEventWriter
 from .module_metrics_repository import ModuleMetricsFilter, TortoiseModuleMetricsRepository
 from .message_repository import MessageRepository
 
@@ -12,6 +13,7 @@ except Exception:  # pragma: no cover - 允许在未初始化 NoneBot 的上下�
 __all__ = [
     "MessageQueue",
     "MessageRepository",
+    "ModuleMetricEventWriter",
     "ModuleMetricsFilter",
     "TortoiseModuleMetricsRepository",
     "TortoisePluginPolicyStore",

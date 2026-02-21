@@ -13,92 +13,37 @@ from src.core.services.plugin_policy_service import PluginPolicyService
 from src.adapters.nonebot.image_resolver import NapcatImageResolver
 from src.infra.db.neo4j_gateway import initialize_neo4j
 from src.infra.db.tortoise.message_repository import MessageRepository
+from src.infra.db.tortoise.module_metrics_event_writer import ModuleMetricEventWriter
 from src.infra.llm.providers import get_llm_provider_registry
 from src.infra.llm.providers.image_understander import ImageUnderstander
 from src.infra.memory import DecayManager, LongTermMemory, LongTermRetriever, ShortTermMemory
 
 
 logger = logging.getLogger(__name__)
-_PLUGIN_MODULE_METRIC_EVENT_MODEL: Any = None
-_PLUGIN_MODULE_METRIC_EVENT_MODEL_READY = False
+_MODULE_METRIC_EVENT_WRITER: Optional[ModuleMetricEventWriter] = None
+_MODULE_METRIC_EVENT_WRITER_READY = False
 
 
-def _get_plugin_module_metric_event_model() -> Any:
-    global _PLUGIN_MODULE_METRIC_EVENT_MODEL, _PLUGIN_MODULE_METRIC_EVENT_MODEL_READY
-    if _PLUGIN_MODULE_METRIC_EVENT_MODEL_READY:
-        return _PLUGIN_MODULE_METRIC_EVENT_MODEL
+def _get_module_metric_event_writer() -> Optional[ModuleMetricEventWriter]:
+    global _MODULE_METRIC_EVENT_WRITER, _MODULE_METRIC_EVENT_WRITER_READY
+    if _MODULE_METRIC_EVENT_WRITER_READY:
+        return _MODULE_METRIC_EVENT_WRITER
 
-    _PLUGIN_MODULE_METRIC_EVENT_MODEL_READY = True
+    _MODULE_METRIC_EVENT_WRITER_READY = True
     try:
-        from src.infra.db.tortoise.plugin_models import PluginModuleMetricEvent
-
-        _PLUGIN_MODULE_METRIC_EVENT_MODEL = PluginModuleMetricEvent
+        _MODULE_METRIC_EVENT_WRITER = ModuleMetricEventWriter()
     except Exception as exc:
-        logger.warning("加载模块指标模型失败，已跳过图片理解指标落库: error=%s", exc)
-        _PLUGIN_MODULE_METRIC_EVENT_MODEL = None
-    return _PLUGIN_MODULE_METRIC_EVENT_MODEL
+        logger.warning("加载模块指标事件写入器失败，已跳过 usage 事件落库: error=%s", exc)
+        _MODULE_METRIC_EVENT_WRITER = None
+    return _MODULE_METRIC_EVENT_WRITER
 
 
-def _to_optional_str(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def _to_optional_int(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-async def _persist_image_metric_event(event: dict) -> None:
-    """将图片理解 usage 事件持久化到模块指标表。"""
-    if not isinstance(event, dict):
+async def _persist_module_metric_event(event: dict) -> None:
+    """将 usage 事件持久化到模块指标表。"""
+    writer = _get_module_metric_event_writer()
+    if writer is None:
         return
-    metric_model = _get_plugin_module_metric_event_model()
-    if metric_model is None:
-        return
-
-    known_fields = {
-        "plugin_name",
-        "module_name",
-        "operation",
-        "conv_id",
-        "message_id",
-        "provider_name",
-        "model",
-        "request_id",
-        "success",
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens",
-        "error_type",
-    }
-    extra = {key: value for key, value in event.items() if key not in known_fields}
-
-    try:
-        await metric_model.create(
-            plugin_name=_to_optional_str(event.get("plugin_name")) or "persona",
-            module_name=_to_optional_str(event.get("module_name")) or "image_understanding",
-            operation=_to_optional_str(event.get("operation")) or "image_understanding",
-            conv_id=_to_optional_str(event.get("conv_id")),
-            message_id=_to_optional_str(event.get("message_id")),
-            provider_name=_to_optional_str(event.get("provider_name")),
-            model=_to_optional_str(event.get("model")),
-            request_id=_to_optional_str(event.get("request_id")),
-            success=bool(event.get("success")),
-            prompt_tokens=_to_optional_int(event.get("prompt_tokens")),
-            completion_tokens=_to_optional_int(event.get("completion_tokens")),
-            total_tokens=_to_optional_int(event.get("total_tokens")),
-            error_type=_to_optional_str(event.get("error_type")),
-            extra=extra,
-        )
-    except Exception as exc:
-        logger.warning("图片理解指标写入失败: error=%s", exc)
+    await writer.write_event(event)
 
 
 async def assemble_persona_engine(
@@ -192,7 +137,7 @@ async def assemble_persona_engine(
         timeout_seconds=image_cfg.timeout_seconds,
         max_tokens=image_cfg.max_tokens,
     )
-    image_understander.set_usage_event_callback(_persist_image_metric_event)
+    image_understander.set_usage_event_callback(_persist_module_metric_event)
     image_context_service = ImageContextService(
         config=config,
         image_resolver=image_resolver,

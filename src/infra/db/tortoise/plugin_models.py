@@ -90,8 +90,29 @@ class GroupPluginPolicy(Model):
         return f"{self.name} - {self.plugin_name}"
 
 
-class PluginModuleMetricEvent(Model):
+class ModuleMetricModule(Model):
     id = fields.IntField(primary_key=True)
+    module_id = fields.CharField(max_length=160, unique=True)
+    plugin_name = fields.CharField(max_length=50)
+    module_name = fields.CharField(max_length=100)
+    display_name = fields.CharField(max_length=100)
+    is_active = fields.BooleanField(default=True)
+    extra = fields.JSONField(default=dict)
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "module_metric_modules"
+        indexes = (
+            ("plugin_name", "module_name"),
+            ("is_active",),
+        )
+        connection_name = "default"
+
+
+class ModuleMetricEvent(Model):
+    id = fields.IntField(primary_key=True)
+    module_id = fields.CharField(max_length=160)
     plugin_name = fields.CharField(max_length=50)
     module_name = fields.CharField(max_length=100)
     operation = fields.CharField(max_length=100)
@@ -109,10 +130,16 @@ class PluginModuleMetricEvent(Model):
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
-        table = "plugin_module_metric_events"
+        table = "module_metric_events"
         indexes = (
             ("created_at",),
+            ("module_id", "created_at"),
             ("plugin_name", "module_name", "created_at"),
             ("conv_id", "created_at"),
+            ("request_id",),
         )
         connection_name = "default"
+
+
+# 兼容旧引用路径，后续可移除。
+PluginModuleMetricEvent = ModuleMetricEvent

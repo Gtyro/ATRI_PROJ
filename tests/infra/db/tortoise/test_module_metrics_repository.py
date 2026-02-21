@@ -81,6 +81,7 @@ def test_list_events_supports_filter_and_pagination():
     rows = [
         {
             "id": 1,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -99,6 +100,7 @@ def test_list_events_supports_filter_and_pagination():
         },
         {
             "id": 2,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -117,6 +119,7 @@ def test_list_events_supports_filter_and_pagination():
         },
         {
             "id": 3,
+            "module_id": "other.x",
             "plugin_name": "other",
             "module_name": "x",
             "operation": "x",
@@ -154,6 +157,7 @@ def test_list_events_filters_by_conv_id():
     rows = [
         {
             "id": 1,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -172,6 +176,7 @@ def test_list_events_filters_by_conv_id():
         },
         {
             "id": 2,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -207,10 +212,67 @@ def test_list_events_filters_by_conv_id():
     assert result["items"][0]["error_type"] == "RuntimeError"
 
 
+def test_list_events_filters_by_module_id():
+    rows = [
+        {
+            "id": 1,
+            "module_id": "persona.image_understanding",
+            "plugin_name": "persona",
+            "module_name": "image_understanding",
+            "operation": "image_understanding",
+            "conv_id": "group_1",
+            "success": True,
+            "prompt_tokens": 3,
+            "completion_tokens": 7,
+            "total_tokens": 10,
+            "created_at": datetime(2026, 1, 1, 10, 0, 0),
+            "message_id": None,
+            "provider_name": None,
+            "model": None,
+            "request_id": None,
+            "error_type": None,
+            "extra": {},
+        },
+        {
+            "id": 2,
+            "module_id": "persona.image_url_fallback",
+            "plugin_name": "persona",
+            "module_name": "image_url_fallback",
+            "operation": "image_url_fetch",
+            "conv_id": "group_2",
+            "success": True,
+            "prompt_tokens": 2,
+            "completion_tokens": 3,
+            "total_tokens": 5,
+            "created_at": datetime(2026, 1, 1, 11, 0, 0),
+            "message_id": None,
+            "provider_name": None,
+            "model": None,
+            "request_id": None,
+            "error_type": None,
+            "extra": {},
+        },
+    ]
+    repository = TortoiseModuleMetricsRepository(model=_FakeModel(rows))
+
+    result = asyncio.run(
+        repository.list_events(
+            ModuleMetricsFilter(module_id="persona.image_url_fallback"),
+            page=1,
+            size=20,
+        )
+    )
+
+    assert result["total"] == 1
+    assert result["items"][0]["id"] == 2
+    assert result["items"][0]["module_id"] == "persona.image_url_fallback"
+
+
 def test_get_summary_builds_kpi_and_trends():
     rows = [
         {
             "id": 1,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -221,6 +283,7 @@ def test_get_summary_builds_kpi_and_trends():
         },
         {
             "id": 2,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -231,6 +294,7 @@ def test_get_summary_builds_kpi_and_trends():
         },
         {
             "id": 3,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -266,6 +330,7 @@ def test_list_options_excludes_empty_values():
     rows = [
         {
             "id": 1,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -276,6 +341,7 @@ def test_list_options_excludes_empty_values():
         },
         {
             "id": 2,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
@@ -286,6 +352,7 @@ def test_list_options_excludes_empty_values():
         },
         {
             "id": 3,
+            "module_id": "persona.image_understanding",
             "plugin_name": "persona",
             "module_name": "image_understanding",
             "operation": "image_understanding",
