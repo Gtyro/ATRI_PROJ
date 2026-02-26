@@ -10,8 +10,8 @@ class _FakeResolver:
         self.result_by_url = result_by_url
         self.calls = []
 
-    async def resolve(self, *, conv_id, message_id, image_meta):
-        self.calls.append((conv_id, message_id, image_meta))
+    async def resolve(self, *, conv_id, message_id, image_meta, onebot_self_id=""):
+        self.calls.append((conv_id, message_id, image_meta, onebot_self_id))
         url = image_meta.get("url")
         return self.result_by_url.get(url)
 
@@ -89,6 +89,7 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
     assert "- Bob 发图：缓存摘要" in context
     assert "- Alice 发图：新图片摘要" in context
     assert len(resolver.calls) == 1
+    assert resolver.calls[0][3] == ""
     assert len(understander.calls) == 1
     usage_context = understander.calls[0]["usage_contexts"][0]
     assert usage_context["plugin_name"] == "persona"
@@ -96,10 +97,15 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
     assert usage_context["operation"] == "image_understanding"
     assert usage_context["conv_id"] == "group_1"
     assert usage_context["message_id"] == 1
+    assert usage_context["fetch_source"] == "url"
     assert repo.updated[0][0] == 1
     assert (
         repo.updated[0][1]["media"]["images"][0]["understanding"]["summary"]
         == "新图片摘要"
+    )
+    assert (
+        repo.updated[0][1]["media"]["images"][0]["understanding"]["resolved_via"]
+        == "url"
     )
     assert "image_cache_hit=1" in caplog.text
     assert "image_understanding_cost=1" in caplog.text
@@ -157,9 +163,11 @@ def test_build_context_respects_max_images_budget(caplog):
     assert "- Bob 发图：摘要1" in context
     assert "Alice" not in context
     assert len(resolver.calls) == 1
+    assert resolver.calls[0][3] == ""
     usage_context = understander.calls[0]["usage_contexts"][0]
     assert usage_context["conv_id"] == "group_1"
     assert usage_context["message_id"] == 2
+    assert usage_context["fetch_source"] == "url"
     assert len(repo.updated) == 1
     assert "image_understanding_cost=1" in caplog.text
     assert "image_fetch_source(url)=1" in caplog.text
@@ -217,6 +225,89 @@ def test_build_context_respects_segment_index_order_within_message(caplog):
 
     assert resolver.calls[0][2]["url"] == "https://example.com/1.jpg"
     assert "- Alice 发图：首图摘要" in context
+
+
+def test_build_context_forwards_onebot_self_id_to_resolver():
+    resolver = _FakeResolver(
+        {
+            "https://example.com/1.jpg": ResolvedImage(
+                source="url",
+                mime="image/jpeg",
+                image_bytes=b"1",
+                original_url="https://example.com/1.jpg",
+            )
+        }
+    )
+    service = ImageContextService(
+        config={
+            "image_understanding": {
+                "max_images_per_round": 1,
+                "analyze_window_size": 20,
+                "cache_enabled": False,
+            }
+        },
+        image_resolver=resolver,
+        image_understander=_FakeUnderstander(["摘要"]),
+        message_repo=_FakeRepo(),
+    )
+    messages = [
+        {
+            "id": 1,
+            "user_name": "Alice",
+            "metadata": {
+                "onebot": {"self_id": "10086"},
+                "media": {"images": [{"url": "https://example.com/1.jpg"}]},
+            },
+        }
+    ]
+
+    asyncio.run(service.build_context("group_1", messages))
+
+    assert len(resolver.calls) == 1
+    assert resolver.calls[0][3] == "10086"
+
+
+def test_build_context_cache_hit_skips_re_resolve_and_re_understand():
+    resolver = _FakeResolver(
+        {
+            "https://example.com/1.jpg": ResolvedImage(
+                source="url",
+                mime="image/jpeg",
+                image_bytes=b"1",
+                original_url="https://example.com/1.jpg",
+            )
+        }
+    )
+    understander = _FakeUnderstander(["首次摘要"])
+    repo = _FakeRepo()
+    service = ImageContextService(
+        config={
+            "image_understanding": {
+                "max_images_per_round": 1,
+                "analyze_window_size": 20,
+                "cache_enabled": True,
+            }
+        },
+        image_resolver=resolver,
+        image_understander=understander,
+        message_repo=repo,
+    )
+    messages = [
+        {
+            "id": 1,
+            "user_name": "Alice",
+            "metadata": {"media": {"images": [{"url": "https://example.com/1.jpg"}]}},
+        }
+    ]
+
+    first = asyncio.run(service.build_context("group_1", messages))
+    second = asyncio.run(service.build_context("group_1", messages))
+
+    assert "- Alice 发图：首次摘要" in first
+    assert "- Alice 发图：首次摘要" in second
+    assert len(resolver.calls) == 1
+    assert len(understander.calls) == 1
+    assert len(repo.updated) == 1
 
 
 def test_build_context_logs_zero_cost_when_no_recent_messages(caplog):
