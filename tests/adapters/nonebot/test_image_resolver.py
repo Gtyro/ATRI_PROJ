@@ -124,7 +124,7 @@ def test_resolve_returns_url_directly_without_entering_fallback_branches():
 
     resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=_bot_getter)
 
-    async def _fake_resolve_by_url(url, *, image_meta, source="url"):
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
         return ResolvedImage(
             source=source,
             mime="image/png",
@@ -166,7 +166,7 @@ def test_resolve_falls_back_to_get_image_and_reuses_url_download():
     resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: bot)
     url_calls = []
 
-    async def _fake_resolve_by_url(url, *, image_meta, source="url"):
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
         url_calls.append((url, source))
         if source == "url":
             return None
@@ -224,7 +224,7 @@ def test_resolve_falls_back_to_get_file_by_file_id_prefers_base64():
     resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: bot)
     url_calls = []
 
-    async def _fake_resolve_by_url(url, *, image_meta, source="url"):
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
         url_calls.append((url, source))
         return None
 
@@ -299,7 +299,7 @@ def test_resolve_returns_none_when_all_fetch_paths_failed():
     resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: bot)
     url_calls = []
 
-    async def _fake_resolve_by_url(url, *, image_meta, source="url"):
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
         url_calls.append((url, source))
         return None
 
@@ -393,7 +393,7 @@ def test_resolve_skips_bot_getter_when_no_fallback_fields(caplog):
 
     resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=_bot_getter)
 
-    async def _fake_resolve_by_url(url, *, image_meta, source="url"):
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
         return None
 
     resolver._resolve_by_url = _fake_resolve_by_url  # type: ignore[method-assign]
@@ -485,3 +485,238 @@ def test_decode_base64_failure_logs_only_length_and_digest(caplog):
     assert "base64_length=" in caplog.text
     assert "base64_sha256_prefix=" in caplog.text
     assert "secret_token_12345" not in caplog.text
+
+
+def test_resolve_refreshes_expired_url_via_nc_get_rkey():
+    class _FakeBot:
+        def __init__(self):
+            self.calls = []
+
+        async def call_api(self, action, **params):
+            self.calls.append((action, params))
+            if action == "nc_get_rkey":
+                return {"rkey": "fresh-rkey-token"}
+            return {}
+
+    bot = _FakeBot()
+    resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: bot)
+    url_calls = []
+
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
+        url_calls.append((url, source))
+        if "expired-rkey" in url:
+            return None
+        return ResolvedImage(
+            source=source,
+            mime="image/jpeg",
+            image_bytes=b"fresh",
+            original_url=url,
+        )
+
+    resolver._resolve_by_url = _fake_resolve_by_url  # type: ignore[method-assign]
+
+    result = asyncio.run(
+        resolver.resolve(
+            conv_id="group_1",
+            message_id=301,
+            image_meta={
+                "url": "https://example.com/image.jpg?rkey=expired-rkey",
+                "file": "A2609E26DDFD23A4EEDF7485BCA99730.jpg",
+            },
+            onebot_self_id="10086",
+            onebot_message_id="7788",
+        )
+    )
+
+    assert result is not None
+    assert result.source == "url"
+    assert result.image_bytes == b"fresh"
+    assert url_calls[0] == ("https://example.com/image.jpg?rkey=expired-rkey", "url")
+    assert "fresh-rkey-token" in url_calls[1][0]
+    assert bot.calls == [
+        ("nc_get_rkey", {"url": "https://example.com/image.jpg?rkey=expired-rkey"})
+    ]
+
+
+def test_resolve_refreshes_expired_url_via_get_msg_when_nc_get_rkey_unsupported():
+    class _UnsupportedActionError(RuntimeError):
+        def __init__(self):
+            super().__init__("unsupported action")
+            self.info = {"retcode": 1404, "msg": "api not found"}
+
+    class _FakeBot:
+        def __init__(self):
+            self.calls = []
+
+        async def call_api(self, action, **params):
+            self.calls.append((action, params))
+            if action == "nc_get_rkey":
+                raise _UnsupportedActionError()
+            if action == "get_msg":
+                return {
+                    "message": [
+                        {
+                            "type": "image",
+                            "data": {
+                                "file": "A2609E26DDFD23A4EEDF7485BCA99730.jpg",
+                                "url": "https://example.com/fresh.jpg",
+                            },
+                        }
+                    ]
+                }
+            return {}
+
+    bot = _FakeBot()
+    resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: bot)
+    url_calls = []
+
+    async def _fake_resolve_by_url(url, *, image_meta, source="url", state=None):
+        url_calls.append((url, source))
+        if url.endswith("expired.jpg"):
+            return None
+        return ResolvedImage(
+            source=source,
+            mime="image/jpeg",
+            image_bytes=b"from-get-msg",
+            original_url=url,
+        )
+
+    resolver._resolve_by_url = _fake_resolve_by_url  # type: ignore[method-assign]
+
+    result = asyncio.run(
+        resolver.resolve(
+            conv_id="group_1",
+            message_id=302,
+            image_meta={
+                "url": "https://example.com/expired.jpg",
+                "file": "A2609E26DDFD23A4EEDF7485BCA99730.jpg",
+            },
+            onebot_self_id="10086",
+            onebot_message_id="7788",
+        )
+    )
+
+    assert result is not None
+    assert result.source == "url"
+    assert result.image_bytes == b"from-get-msg"
+    assert url_calls == [
+        ("https://example.com/expired.jpg", "url"),
+        ("https://example.com/fresh.jpg", "url"),
+    ]
+    assert bot.calls == [
+        ("nc_get_rkey", {"url": "https://example.com/expired.jpg"}),
+        ("get_msg", {"message_id": 7788}),
+    ]
+
+
+def test_resolve_telemetry_records_url_timeout_and_retry(monkeypatch):
+    class _OkResponse:
+        status_code = 200
+        headers = {"content-type": "image/jpeg"}
+        content = b"ok"
+
+        def raise_for_status(self):
+            return None
+
+    class _RetryAsyncClient:
+        attempts = 0
+
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url):
+            _RetryAsyncClient.attempts += 1
+            if _RetryAsyncClient.attempts == 1:
+                raise TimeoutError("request timeout")
+            return _OkResponse()
+
+    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_RetryAsyncClient))
+    resolver = NapcatImageResolver(timeout_seconds=0.1)
+    telemetry = {}
+
+    result = asyncio.run(
+        resolver.resolve(
+            conv_id="group_1",
+            message_id=303,
+            image_meta={"url": "https://example.com/retry.jpg"},
+            telemetry=telemetry,
+        )
+    )
+
+    assert result is not None
+    assert result.source == "url"
+    assert telemetry["error_category_count"]["timeout"] == 1
+    assert telemetry["retry_count_by_branch"]["url_fetch"] == 1
+
+
+def test_resolve_telemetry_records_unsupported_action_category():
+    class _UnsupportedActionError(RuntimeError):
+        def __init__(self):
+            super().__init__("unsupported action")
+            self.info = {"retcode": 1404, "msg": "api not found"}
+
+    class _FakeBot:
+        async def call_api(self, action, **params):
+            if action == "get_image":
+                raise _UnsupportedActionError()
+            return {}
+
+    resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: _FakeBot())
+    telemetry = {}
+
+    result = asyncio.run(
+        resolver.resolve(
+            conv_id="group_1",
+            message_id=304,
+            image_meta={"file": "A2609E26DDFD23A4EEDF7485BCA99730.jpg"},
+            onebot_self_id="10086",
+            telemetry=telemetry,
+        )
+    )
+
+    assert result is None
+    assert telemetry["error_category_count"]["unsupported_action"] == 1
+
+
+def test_resolve_telemetry_records_get_file_timeout_retry_and_success():
+    class _FakeBot:
+        def __init__(self):
+            self.calls = []
+
+        async def call_api(self, action, **params):
+            self.calls.append((action, params))
+            if action == "get_file" and len(self.calls) == 1:
+                raise TimeoutError("timeout")
+            if action == "get_file":
+                return {"base64": base64.b64encode(b"from-file-id").decode("ascii")}
+            return {}
+
+    bot = _FakeBot()
+    resolver = NapcatImageResolver(timeout_seconds=0.1, bot_getter=lambda _: bot)
+    telemetry = {}
+
+    result = asyncio.run(
+        resolver.resolve(
+            conv_id="group_1",
+            message_id=305,
+            image_meta={"file_id": "fid_1234"},
+            onebot_self_id="10086",
+            telemetry=telemetry,
+        )
+    )
+
+    assert result is not None
+    assert result.source == "get_file_by_file_id"
+    assert result.image_bytes == b"from-file-id"
+    assert telemetry["error_category_count"]["timeout"] == 1
+    assert telemetry["retry_count_by_branch"]["get_file_api"] == 1
+    assert bot.calls == [
+        ("get_file", {"file_id": "fid_1234"}),
+        ("get_file", {"file_id": "fid_1234"}),
+    ]
