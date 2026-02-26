@@ -16,9 +16,25 @@ KNOWN_FETCH_SOURCES = (
     "get_file_by_file_id",
     "get_file_by_file",
     "file_id_local_path",
+    "failed",
     "file_id",
     "file",
     "get_file",
+)
+KNOWN_ERROR_CATEGORIES = (
+    "4xx",
+    "5xx",
+    "timeout",
+    "network",
+    "dependency_missing",
+    "unsupported_action",
+)
+KNOWN_RETRY_BRANCHES = (
+    "url_fetch",
+    "get_image_api",
+    "get_file_api",
+    "refresh_nc_get_rkey",
+    "refresh_get_msg",
 )
 
 
@@ -70,6 +86,8 @@ class ImageContextService:
     async def build_context(self, conv_id: str, recent_messages: List[Dict[str, Any]]) -> str:
         """生成图片上下文摘要文本。"""
         zero_fetch_stats = {key: 0 for key in KNOWN_FETCH_SOURCES}
+        zero_error_stats = {key: 0 for key in KNOWN_ERROR_CATEGORIES}
+        zero_retry_stats = {key: 0 for key in KNOWN_RETRY_BRANCHES}
         if not recent_messages:
             self._log_build_metrics(
                 conv_id,
@@ -78,6 +96,8 @@ class ImageContextService:
                 analyzed=0,
                 image_understanding_cost=0,
                 fetch_source_count=zero_fetch_stats,
+                error_category_count=zero_error_stats,
+                retry_count_by_branch=zero_retry_stats,
             )
             return ""
 
@@ -90,6 +110,8 @@ class ImageContextService:
                 analyzed=0,
                 image_understanding_cost=0,
                 fetch_source_count=zero_fetch_stats,
+                error_category_count=zero_error_stats,
+                retry_count_by_branch=zero_retry_stats,
             )
             return ""
 
@@ -103,6 +125,8 @@ class ImageContextService:
         pending_for_understanding: List[Tuple[int, Dict[str, Any], Dict[str, Any], str]] = []
         pending_metadata_updates: Dict[int, Dict[str, Any]] = {}
         fetch_source_count = {key: 0 for key in KNOWN_FETCH_SOURCES}
+        error_category_count = {key: 0 for key in KNOWN_ERROR_CATEGORIES}
+        retry_count_by_branch = {key: 0 for key in KNOWN_RETRY_BRANCHES}
         image_understanding_cost = 0
 
         for index, entry in enumerate(candidates):
@@ -112,18 +136,30 @@ class ImageContextService:
                 cache_hit += 1
                 continue
 
+            resolve_telemetry: Dict[str, Any] = {}
             resolved = await self.image_resolver.resolve(
                 conv_id=conv_id,
                 message_id=entry["message_id"],
                 image_meta=entry["image"],
                 onebot_self_id=self._extract_onebot_self_id(entry["metadata"]),
+                onebot_message_id=self._extract_onebot_message_id(entry["metadata"]),
+                telemetry=resolve_telemetry,
+            )
+            self._merge_metric_count(
+                target=error_category_count,
+                source=resolve_telemetry.get("error_category_count"),
+            )
+            self._merge_metric_count(
+                target=retry_count_by_branch,
+                source=resolve_telemetry.get("retry_count_by_branch"),
             )
             if not resolved:
+                fetch_source_count["failed"] = fetch_source_count.get("failed", 0) + 1
                 if cache_enabled:
                     self._write_understanding(
                         entry["image"],
                         summary="",
-                        fetch_source="",
+                        fetch_source="failed",
                         error="resolve_failed",
                     )
                     self._mark_pending_metadata(entry, pending_metadata_updates)
@@ -218,6 +254,8 @@ class ImageContextService:
             analyzed=len(pending_for_understanding),
             image_understanding_cost=image_understanding_cost,
             fetch_source_count=fetch_source_count,
+            error_category_count=error_category_count,
+            retry_count_by_branch=retry_count_by_branch,
         )
 
         if not lines:
@@ -233,13 +271,20 @@ class ImageContextService:
         analyzed: int,
         image_understanding_cost: int,
         fetch_source_count: Dict[str, int],
+        error_category_count: Dict[str, int],
+        retry_count_by_branch: Dict[str, int],
     ) -> None:
         logger.info(
             "图片上下文构建完成: conv_id=%s images=%s image_cache_hit=%s analyzed=%s "
             "image_understanding_cost=%s image_fetch_source(url)=%s image_fetch_source(get_image)=%s "
             "image_fetch_source(get_file_by_file_id)=%s image_fetch_source(get_file_by_file)=%s "
-            "image_fetch_source(file_id_local_path)=%s image_fetch_source(file_id)=%s "
-            "image_fetch_source(file)=%s image_fetch_source(get_file)=%s",
+            "image_fetch_source(file_id_local_path)=%s image_fetch_source(failed)=%s "
+            "image_fetch_source(file_id)=%s image_fetch_source(file)=%s image_fetch_source(get_file)=%s "
+            "image_fetch_error(4xx)=%s image_fetch_error(5xx)=%s image_fetch_error(timeout)=%s "
+            "image_fetch_error(network)=%s image_fetch_error(dependency_missing)=%s "
+            "image_fetch_error(unsupported_action)=%s image_fetch_retry(url_fetch)=%s "
+            "image_fetch_retry(get_image_api)=%s image_fetch_retry(get_file_api)=%s "
+            "image_fetch_retry(refresh_nc_get_rkey)=%s image_fetch_retry(refresh_get_msg)=%s",
             conv_id,
             images,
             image_cache_hit,
@@ -250,9 +295,21 @@ class ImageContextService:
             fetch_source_count.get("get_file_by_file_id", 0),
             fetch_source_count.get("get_file_by_file", 0),
             fetch_source_count.get("file_id_local_path", 0),
+            fetch_source_count.get("failed", 0),
             fetch_source_count.get("file_id", 0),
             fetch_source_count.get("file", 0),
             fetch_source_count.get("get_file", 0),
+            error_category_count.get("4xx", 0),
+            error_category_count.get("5xx", 0),
+            error_category_count.get("timeout", 0),
+            error_category_count.get("network", 0),
+            error_category_count.get("dependency_missing", 0),
+            error_category_count.get("unsupported_action", 0),
+            retry_count_by_branch.get("url_fetch", 0),
+            retry_count_by_branch.get("get_image_api", 0),
+            retry_count_by_branch.get("get_file_api", 0),
+            retry_count_by_branch.get("refresh_nc_get_rkey", 0),
+            retry_count_by_branch.get("refresh_get_msg", 0),
         )
 
     def _collect_candidates(self, recent_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -302,6 +359,13 @@ class ImageContextService:
         return str(onebot.get("self_id") or "").strip()
 
     @staticmethod
+    def _extract_onebot_message_id(metadata: Dict[str, Any]) -> str:
+        onebot = metadata.get("onebot")
+        if not isinstance(onebot, dict):
+            return ""
+        return str(onebot.get("message_id") or "").strip()
+
+    @staticmethod
     def _read_cached_summary(image_meta: Dict[str, Any]) -> str:
         data = image_meta.get("understanding")
         if not isinstance(data, dict):
@@ -339,3 +403,16 @@ class ImageContextService:
         if not isinstance(metadata, dict):
             return
         pending_metadata_updates[message_id] = metadata
+
+    @staticmethod
+    def _merge_metric_count(*, target: Dict[str, int], source: Any) -> None:
+        if not isinstance(source, dict):
+            return
+        for key, value in source.items():
+            try:
+                count = int(value)
+            except (TypeError, ValueError):
+                continue
+            if count <= 0:
+                continue
+            target[key] = target.get(key, 0) + count

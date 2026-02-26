@@ -6,13 +6,26 @@ from src.core.services.image_context_service import ImageContextService
 
 
 class _FakeResolver:
-    def __init__(self, result_by_url):
+    def __init__(self, result_by_url, telemetry_by_url=None):
         self.result_by_url = result_by_url
+        self.telemetry_by_url = telemetry_by_url or {}
         self.calls = []
 
-    async def resolve(self, *, conv_id, message_id, image_meta, onebot_self_id=""):
-        self.calls.append((conv_id, message_id, image_meta, onebot_self_id))
+    async def resolve(
+        self,
+        *,
+        conv_id,
+        message_id,
+        image_meta,
+        onebot_self_id="",
+        onebot_message_id="",
+        telemetry=None,
+    ):
+        self.calls.append((conv_id, message_id, image_meta, onebot_self_id, onebot_message_id))
         url = image_meta.get("url")
+        payload = self.telemetry_by_url.get(url)
+        if isinstance(telemetry, dict) and isinstance(payload, dict):
+            telemetry.update(payload)
         return self.result_by_url.get(url)
 
 
@@ -324,3 +337,84 @@ def test_build_context_logs_zero_cost_when_no_recent_messages(caplog):
     assert context == ""
     assert "images=0" in caplog.text
     assert "image_understanding_cost=0" in caplog.text
+
+
+def test_build_context_resolve_failed_marks_resolved_via_failed():
+    resolver = _FakeResolver({})
+    understander = _FakeUnderstander([])
+    repo = _FakeRepo()
+    service = ImageContextService(
+        config={
+            "image_understanding": {
+                "max_images_per_round": 1,
+                "analyze_window_size": 20,
+                "cache_enabled": True,
+            }
+        },
+        image_resolver=resolver,
+        image_understander=understander,
+        message_repo=repo,
+    )
+    messages = [
+        {
+            "id": 1,
+            "user_name": "Alice",
+            "metadata": {"media": {"images": [{"url": "https://example.com/missing.jpg"}]}},
+        }
+    ]
+
+    context = asyncio.run(service.build_context("group_1", messages))
+
+    assert context == ""
+    assert len(repo.updated) == 1
+    understanding = repo.updated[0][1]["media"]["images"][0]["understanding"]
+    assert understanding["resolved_via"] == "failed"
+    assert understanding["error"] == "resolve_failed"
+
+
+def test_build_context_logs_resolver_error_category_and_retry_stats(caplog):
+    resolver = _FakeResolver(
+        {
+            "https://example.com/new.jpg": ResolvedImage(
+                source="url",
+                mime="image/jpeg",
+                image_bytes=b"img",
+                original_url="https://example.com/new.jpg",
+            )
+        },
+        telemetry_by_url={
+            "https://example.com/new.jpg": {
+                "error_category_count": {"timeout": 1, "network": 2},
+                "retry_count_by_branch": {"url_fetch": 1, "get_file_api": 2},
+            }
+        },
+    )
+    understander = _FakeUnderstander(["摘要"])
+    service = ImageContextService(
+        config={
+            "image_understanding": {
+                "max_images_per_round": 1,
+                "analyze_window_size": 20,
+                "cache_enabled": False,
+            }
+        },
+        image_resolver=resolver,
+        image_understander=understander,
+        message_repo=_FakeRepo(),
+    )
+    messages = [
+        {
+            "id": 1,
+            "user_name": "Alice",
+            "metadata": {"media": {"images": [{"url": "https://example.com/new.jpg"}]}},
+        }
+    ]
+
+    with caplog.at_level(logging.INFO):
+        context = asyncio.run(service.build_context("group_1", messages))
+
+    assert "- Alice 发图：摘要" in context
+    assert "image_fetch_error(timeout)=1" in caplog.text
+    assert "image_fetch_error(network)=2" in caplog.text
+    assert "image_fetch_retry(url_fetch)=1" in caplog.text
+    assert "image_fetch_retry(get_file_api)=2" in caplog.text
