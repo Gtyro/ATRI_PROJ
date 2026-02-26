@@ -10,6 +10,16 @@ from src.core.domain import PersonaConfig
 
 
 logger = logging.getLogger(__name__)
+KNOWN_FETCH_SOURCES = (
+    "url",
+    "get_image",
+    "get_file_by_file_id",
+    "get_file_by_file",
+    "file_id_local_path",
+    "file_id",
+    "file",
+    "get_file",
+)
 
 
 class ImageContextService:
@@ -59,7 +69,7 @@ class ImageContextService:
 
     async def build_context(self, conv_id: str, recent_messages: List[Dict[str, Any]]) -> str:
         """生成图片上下文摘要文本。"""
-        zero_fetch_stats = {"url": 0, "file_id": 0}
+        zero_fetch_stats = {key: 0 for key in KNOWN_FETCH_SOURCES}
         if not recent_messages:
             self._log_build_metrics(
                 conv_id,
@@ -92,7 +102,7 @@ class ImageContextService:
         cache_hit = 0
         pending_for_understanding: List[Tuple[int, Dict[str, Any], Dict[str, Any], str]] = []
         pending_metadata_updates: Dict[int, Dict[str, Any]] = {}
-        fetch_source_count = {"url": 0, "file_id": 0}
+        fetch_source_count = {key: 0 for key in KNOWN_FETCH_SOURCES}
         image_understanding_cost = 0
 
         for index, entry in enumerate(candidates):
@@ -106,6 +116,7 @@ class ImageContextService:
                 conv_id=conv_id,
                 message_id=entry["message_id"],
                 image_meta=entry["image"],
+                onebot_self_id=self._extract_onebot_self_id(entry["metadata"]),
             )
             if not resolved:
                 if cache_enabled:
@@ -121,6 +132,8 @@ class ImageContextService:
             source = str(getattr(resolved, "source", "") or "")
             if source in fetch_source_count:
                 fetch_source_count[source] += 1
+            elif source:
+                fetch_source_count[source] = fetch_source_count.get(source, 0) + 1
 
             payload = {
                 "image_bytes": getattr(resolved, "image_bytes", b""),
@@ -139,6 +152,7 @@ class ImageContextService:
                     "operation": "image_understanding",
                     "conv_id": conv_id,
                     "message_id": item[1].get("message_id"),
+                    "fetch_source": item[3],
                 }
                 for item in pending_for_understanding
             ]
@@ -222,14 +236,23 @@ class ImageContextService:
     ) -> None:
         logger.info(
             "图片上下文构建完成: conv_id=%s images=%s image_cache_hit=%s analyzed=%s "
-            "image_understanding_cost=%s image_fetch_source(url)=%s image_fetch_source(file_id)=%s",
+            "image_understanding_cost=%s image_fetch_source(url)=%s image_fetch_source(get_image)=%s "
+            "image_fetch_source(get_file_by_file_id)=%s image_fetch_source(get_file_by_file)=%s "
+            "image_fetch_source(file_id_local_path)=%s image_fetch_source(file_id)=%s "
+            "image_fetch_source(file)=%s image_fetch_source(get_file)=%s",
             conv_id,
             images,
             image_cache_hit,
             analyzed,
             image_understanding_cost,
             fetch_source_count.get("url", 0),
+            fetch_source_count.get("get_image", 0),
+            fetch_source_count.get("get_file_by_file_id", 0),
+            fetch_source_count.get("get_file_by_file", 0),
+            fetch_source_count.get("file_id_local_path", 0),
             fetch_source_count.get("file_id", 0),
+            fetch_source_count.get("file", 0),
+            fetch_source_count.get("get_file", 0),
         )
 
     def _collect_candidates(self, recent_messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -272,6 +295,13 @@ class ImageContextService:
         return candidates
 
     @staticmethod
+    def _extract_onebot_self_id(metadata: Dict[str, Any]) -> str:
+        onebot = metadata.get("onebot")
+        if not isinstance(onebot, dict):
+            return ""
+        return str(onebot.get("self_id") or "").strip()
+
+    @staticmethod
     def _read_cached_summary(image_meta: Dict[str, Any]) -> str:
         data = image_meta.get("understanding")
         if not isinstance(data, dict):
@@ -292,6 +322,7 @@ class ImageContextService:
         }
         if fetch_source:
             payload["fetch_source"] = fetch_source
+            payload["resolved_via"] = fetch_source
         if error:
             payload["error"] = error
         image_meta["understanding"] = payload
