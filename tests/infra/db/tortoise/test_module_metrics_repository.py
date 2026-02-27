@@ -235,10 +235,10 @@ def test_list_events_filters_by_module_id():
         },
         {
             "id": 2,
-            "module_id": "persona.image_url_fallback",
+            "module_id": "persona.image_fetch",
             "plugin_name": "persona",
-            "module_name": "image_url_fallback",
-            "operation": "image_url_fetch",
+            "module_name": "image_fetch",
+            "operation": "image_fetch",
             "conv_id": "group_2",
             "success": True,
             "prompt_tokens": 2,
@@ -257,7 +257,7 @@ def test_list_events_filters_by_module_id():
 
     result = asyncio.run(
         repository.list_events(
-            ModuleMetricsFilter(module_id="persona.image_url_fallback"),
+            ModuleMetricsFilter(module_id="persona.image_fetch"),
             page=1,
             size=20,
         )
@@ -265,7 +265,7 @@ def test_list_events_filters_by_module_id():
 
     assert result["total"] == 1
     assert result["items"][0]["id"] == 2
-    assert result["items"][0]["module_id"] == "persona.image_url_fallback"
+    assert result["items"][0]["module_id"] == "persona.image_fetch"
 
 
 def test_get_summary_builds_kpi_and_trends():

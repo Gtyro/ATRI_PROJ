@@ -82,6 +82,8 @@ const TABLE_COLUMN_LABELS = {
   plugin_name: "Plugin",
   module_name: "Module",
   operation: "Operation",
+  phase: "Phase",
+  resolved_via: "来源",
   conv_id: "Conv ID",
   request_id: "Request ID",
   provider_name: "Provider",
@@ -91,7 +93,6 @@ const TABLE_COLUMN_LABELS = {
   prompt_tokens: "Prompt",
   completion_tokens: "Completion",
   total_tokens: "Total",
-  fetch_source: "来源",
   total_calls: "调用次数",
   failed_calls: "失败次数",
 };
@@ -321,7 +322,13 @@ const getColumnMinWidth = (prop) => {
     return 180;
   }
   if (
-    ["operation", "module_name", "error_type", "fetch_source"].includes(key)
+    [
+      "operation",
+      "module_name",
+      "phase",
+      "resolved_via",
+      "error_type",
+    ].includes(key)
   ) {
     return 140;
   }

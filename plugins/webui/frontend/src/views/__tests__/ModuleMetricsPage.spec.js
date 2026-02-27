@@ -51,11 +51,11 @@ const MODULE_DEFINITIONS = [
     module_name: "image_understanding",
   },
   {
-    module_id: "persona.image_url_fallback",
-    title: "图片 URL 回退",
-    description: "统计回退来源分布",
+    module_id: "persona.image_fetch",
+    title: "图片拉取",
+    description: "统计拉取来源分布",
     plugin_name: "persona",
-    module_name: "image_url_fallback",
+    module_name: "image_fetch",
   },
 ];
 
@@ -74,13 +74,13 @@ const OVERVIEW_ITEMS = [
     },
   },
   {
-    module_id: "persona.image_url_fallback",
-    title: "图片 URL 回退",
+    module_id: "persona.image_fetch",
+    title: "图片拉取",
     kpis: [
       { key: "total_calls", label: "调用次数", value: 8, format: "integer" },
     ],
     main_chart: {
-      chart_id: "persona.image_url_fallback.overview.main",
+      chart_id: "persona.image_fetch.overview.main",
       type: "pie",
       dataset: [],
       series: [],
@@ -163,7 +163,7 @@ describe("ModuleMetricsPage", () => {
     fetchModuleMetricOptions.mockResolvedValue({
       data: {
         plugin_names: ["persona"],
-        module_names: ["image_understanding", "image_url_fallback"],
+        module_names: ["image_understanding", "image_fetch"],
         operations: ["image_understanding", "url", "file_id"],
         conv_ids: ["group_1"],
       },
@@ -185,7 +185,7 @@ describe("ModuleMetricsPage", () => {
     expect(fetchModuleMetricOverview).toHaveBeenCalledTimes(1);
     expect(wrapper.findAll(".module-card")).toHaveLength(2);
     expect(wrapper.text()).toContain("图片理解");
-    expect(wrapper.text()).toContain("图片 URL 回退");
+    expect(wrapper.text()).toContain("图片拉取");
     expect(wrapper.findAll(".chart-renderer-stub")).toHaveLength(2);
   });
 

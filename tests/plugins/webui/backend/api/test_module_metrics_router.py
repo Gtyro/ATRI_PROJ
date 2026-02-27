@@ -51,8 +51,8 @@ class _FakeModuleMetricsService:
                 "title": "图片理解",
             },
             {
-                "module_id": "persona.image_url_fallback",
-                "title": "图片 URL 回退",
+                "module_id": "persona.image_fetch",
+                "title": "图片拉取",
             },
         ]
 
@@ -85,7 +85,7 @@ class _FakeModuleMetricsService:
         self.detail_filter_calls.append({"module_id": module_id, **kwargs})
         if module_id == "missing.module":
             raise KeyError("missing.module")
-        return {"fetch_sources": ["url", "file_id"]}
+        return {"resolved_vias": ["url", "get_image"]}
 
     async def get_options(self, **kwargs):
         self.options_calls.append(kwargs)
@@ -159,7 +159,7 @@ def test_module_metrics_modules_lists_registered_providers(monkeypatch: pytest.M
 
     assert [item["module_id"] for item in payload["items"]] == [
         "persona.image_understanding",
-        "persona.image_url_fallback",
+        "persona.image_fetch",
     ]
     assert len(fake_service.modules_calls) == 1
 
@@ -172,7 +172,7 @@ def test_module_metrics_overview_supports_module_id_list(monkeypatch: pytest.Mon
         module_metrics_router_module.get_module_metric_overview(
             from_time=datetime(2026, 1, 1, 0, 0, 0),
             to_time=datetime(2026, 1, 2, 0, 0, 0),
-            module_id=[" persona.image_understanding ", "persona.image_url_fallback, persona.image_understanding"],
+            module_id=[" persona.image_understanding ", "persona.image_fetch, persona.image_understanding"],
             conv_id="group_1",
             current_user=_fake_user(),
         )
@@ -181,7 +181,7 @@ def test_module_metrics_overview_supports_module_id_list(monkeypatch: pytest.Mon
     assert payload["items"][0]["module_id"] == "persona.image_understanding"
     assert len(fake_service.overview_calls) == 1
     call = fake_service.overview_calls[0]
-    assert call["module_ids"] == ["persona.image_understanding", "persona.image_url_fallback"]
+    assert call["module_ids"] == ["persona.image_understanding", "persona.image_fetch"]
     assert call["conv_id"] == "group_1"
     assert call["from_time"] == datetime(2026, 1, 1, 0, 0, 0)
     assert call["to_time"] == datetime(2026, 1, 2, 0, 0, 0)
@@ -218,7 +218,7 @@ def test_module_metrics_detail_returns_filter_options(monkeypatch: pytest.Monkey
     )
 
     assert payload["module_id"] == "persona.image_understanding"
-    assert payload["filter_options"]["fetch_sources"] == ["url", "file_id"]
+    assert payload["filter_options"]["resolved_vias"] == ["url", "get_image"]
     assert len(fake_service.detail_calls) == 1
     assert len(fake_service.detail_filter_calls) == 1
     detail_call = fake_service.detail_calls[0]

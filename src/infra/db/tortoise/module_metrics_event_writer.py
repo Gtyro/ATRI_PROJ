@@ -18,6 +18,8 @@ class ModuleMetricEventWriter:
         "plugin_name",
         "module_name",
         "operation",
+        "phase",
+        "resolved_via",
         "conv_id",
         "message_id",
         "provider_name",
@@ -29,10 +31,16 @@ class ModuleMetricEventWriter:
         "total_tokens",
         "error_type",
     }
+    _DUPLICATE_COLUMN_MARKERS = (
+        "duplicate column",
+        "already exists",
+        "duplicate key name",
+    )
 
     def __init__(self, *, event_model: Any = None, module_model: Any = None) -> None:
         self.event_model = event_model or self._load_default_event_model()
         self.module_model = module_model or self._load_default_module_model()
+        self._phase3_schema_checked = False
 
     @staticmethod
     def _load_default_event_model() -> Any:
@@ -160,6 +168,40 @@ class ModuleMetricEventWriter:
                 exc,
             )
 
+    @classmethod
+    def _is_duplicate_column_error(cls, exc: BaseException) -> bool:
+        text = str(exc).lower()
+        return any(marker in text for marker in cls._DUPLICATE_COLUMN_MARKERS)
+
+    async def _ensure_phase3_schema(self) -> None:
+        if self._phase3_schema_checked:
+            return
+        self._phase3_schema_checked = True
+
+        meta = getattr(self.event_model, "_meta", None)
+        db = getattr(meta, "db", None)
+        table_name = getattr(meta, "db_table", "module_metric_events")
+        if db is None or not hasattr(db, "execute_query"):
+            return
+
+        quoted_table = f'"{table_name}"'
+        migration_sql = (
+            f'ALTER TABLE {quoted_table} ADD COLUMN "phase" VARCHAR(100)',
+            f'ALTER TABLE {quoted_table} ADD COLUMN "resolved_via" VARCHAR(100)',
+        )
+        for sql in migration_sql:
+            try:
+                await db.execute_query(sql)
+            except Exception as exc:
+                if self._is_duplicate_column_error(exc):
+                    continue
+                logger.warning(
+                    "模块指标 phase3 列迁移失败，后续按现有表结构继续: table=%s error=%s",
+                    table_name,
+                    exc,
+                )
+                return
+
     async def write_event(self, event: Any) -> bool:
         if not isinstance(event, Mapping):
             logger.warning("模块指标事件格式错误，已拒绝写入: event_type=%s", type(event).__name__)
@@ -177,6 +219,7 @@ class ModuleMetricEventWriter:
             plugin_name=plugin_name,
             module_name=module_name,
         )
+        await self._ensure_phase3_schema()
         extra = self._build_extra_payload(event)
         try:
             await self.event_model.create(
@@ -184,6 +227,8 @@ class ModuleMetricEventWriter:
                 plugin_name=plugin_name,
                 module_name=module_name,
                 operation=operation,
+                phase=self._to_optional_str(event.get("phase")),
+                resolved_via=self._to_optional_str(event.get("resolved_via")),
                 conv_id=self._to_optional_str(event.get("conv_id")),
                 message_id=self._to_optional_str(event.get("message_id")),
                 provider_name=self._to_optional_str(event.get("provider_name")),

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple, Union
 
@@ -10,16 +12,13 @@ from src.core.domain import PersonaConfig
 
 
 logger = logging.getLogger(__name__)
-KNOWN_FETCH_SOURCES = (
+KNOWN_RESOLVED_VIAS = (
     "url",
     "get_image",
     "get_file_by_file_id",
     "get_file_by_file",
     "file_id_local_path",
     "failed",
-    "file_id",
-    "file",
-    "get_file",
 )
 KNOWN_ERROR_CATEGORIES = (
     "4xx",
@@ -48,11 +47,13 @@ class ImageContextService:
         image_resolver: Any,
         image_understander: Any,
         message_repo: Any,
+        module_metric_event_callback: Any = None,
     ) -> None:
         self.config = config
         self.image_resolver = image_resolver
         self.image_understander = image_understander
         self.message_repo = message_repo
+        self.module_metric_event_callback = module_metric_event_callback
 
     def _image_cfg_dict(self) -> Dict[str, Any]:
         if isinstance(self.config, PersonaConfig):
@@ -85,7 +86,7 @@ class ImageContextService:
 
     async def build_context(self, conv_id: str, recent_messages: List[Dict[str, Any]]) -> str:
         """生成图片上下文摘要文本。"""
-        zero_fetch_stats = {key: 0 for key in KNOWN_FETCH_SOURCES}
+        zero_resolved_via_stats = {key: 0 for key in KNOWN_RESOLVED_VIAS}
         zero_error_stats = {key: 0 for key in KNOWN_ERROR_CATEGORIES}
         zero_retry_stats = {key: 0 for key in KNOWN_RETRY_BRANCHES}
         if not recent_messages:
@@ -95,7 +96,7 @@ class ImageContextService:
                 image_cache_hit=0,
                 analyzed=0,
                 image_understanding_cost=0,
-                fetch_source_count=zero_fetch_stats,
+                resolved_via_count=zero_resolved_via_stats,
                 error_category_count=zero_error_stats,
                 retry_count_by_branch=zero_retry_stats,
             )
@@ -109,7 +110,7 @@ class ImageContextService:
                 image_cache_hit=0,
                 analyzed=0,
                 image_understanding_cost=0,
-                fetch_source_count=zero_fetch_stats,
+                resolved_via_count=zero_resolved_via_stats,
                 error_category_count=zero_error_stats,
                 retry_count_by_branch=zero_retry_stats,
             )
@@ -124,7 +125,7 @@ class ImageContextService:
         cache_hit = 0
         pending_for_understanding: List[Tuple[int, Dict[str, Any], Dict[str, Any], str]] = []
         pending_metadata_updates: Dict[int, Dict[str, Any]] = {}
-        fetch_source_count = {key: 0 for key in KNOWN_FETCH_SOURCES}
+        resolved_via_count = {key: 0 for key in KNOWN_RESOLVED_VIAS}
         error_category_count = {key: 0 for key in KNOWN_ERROR_CATEGORIES}
         retry_count_by_branch = {key: 0 for key in KNOWN_RETRY_BRANCHES}
         image_understanding_cost = 0
@@ -153,23 +154,31 @@ class ImageContextService:
                 target=retry_count_by_branch,
                 source=resolve_telemetry.get("retry_count_by_branch"),
             )
+            request_id = uuid.uuid4().hex
             if not resolved:
-                fetch_source_count["failed"] = fetch_source_count.get("failed", 0) + 1
+                resolved_via_count["failed"] = resolved_via_count.get("failed", 0) + 1
                 if cache_enabled:
                     self._write_understanding(
                         entry["image"],
                         summary="",
-                        fetch_source="failed",
+                        resolved_via="failed",
                         error="resolve_failed",
                     )
                     self._mark_pending_metadata(entry, pending_metadata_updates)
+                await self._emit_image_fetch_summary_event(
+                    conv_id=conv_id,
+                    message_id=entry.get("message_id"),
+                    request_id=request_id,
+                    resolved_via="failed",
+                    success=False,
+                )
                 continue
 
             source = str(getattr(resolved, "source", "") or "")
-            if source in fetch_source_count:
-                fetch_source_count[source] += 1
+            if source in resolved_via_count:
+                resolved_via_count[source] += 1
             elif source:
-                fetch_source_count[source] = fetch_source_count.get(source, 0) + 1
+                resolved_via_count[source] = resolved_via_count.get(source, 0) + 1
 
             payload = {
                 "image_bytes": getattr(resolved, "image_bytes", b""),
@@ -177,6 +186,13 @@ class ImageContextService:
                 "url": getattr(resolved, "original_url", ""),
             }
             pending_for_understanding.append((index, entry, payload, source))
+            await self._emit_image_fetch_summary_event(
+                conv_id=conv_id,
+                message_id=entry.get("message_id"),
+                request_id=request_id,
+                resolved_via=source or "failed",
+                success=bool(source),
+            )
 
         if pending_for_understanding:
             image_understanding_cost = len(pending_for_understanding)
@@ -188,7 +204,7 @@ class ImageContextService:
                     "operation": "image_understanding",
                     "conv_id": conv_id,
                     "message_id": item[1].get("message_id"),
-                    "fetch_source": item[3],
+                    "resolved_via": item[3],
                 }
                 for item in pending_for_understanding
             ]
@@ -207,13 +223,13 @@ class ImageContextService:
                         self._write_understanding(
                             entry["image"],
                             summary=text,
-                            fetch_source=source,
+                            resolved_via=source,
                             error="",
                         )
                         self._mark_pending_metadata(entry, pending_metadata_updates)
                 elif cache_enabled:
                     logger.warning(
-                        "图片理解返回空摘要: conv_id=%s message_id=%s fetch_source=%s",
+                        "图片理解返回空摘要: conv_id=%s message_id=%s resolved_via=%s",
                         conv_id,
                         entry.get("message_id"),
                         source or "unknown",
@@ -221,7 +237,7 @@ class ImageContextService:
                     self._write_understanding(
                         entry["image"],
                         summary="",
-                        fetch_source=source,
+                        resolved_via=source,
                         error="understand_failed",
                     )
                     self._mark_pending_metadata(entry, pending_metadata_updates)
@@ -253,7 +269,7 @@ class ImageContextService:
             image_cache_hit=cache_hit,
             analyzed=len(pending_for_understanding),
             image_understanding_cost=image_understanding_cost,
-            fetch_source_count=fetch_source_count,
+            resolved_via_count=resolved_via_count,
             error_category_count=error_category_count,
             retry_count_by_branch=retry_count_by_branch,
         )
@@ -270,16 +286,15 @@ class ImageContextService:
         image_cache_hit: int,
         analyzed: int,
         image_understanding_cost: int,
-        fetch_source_count: Dict[str, int],
+        resolved_via_count: Dict[str, int],
         error_category_count: Dict[str, int],
         retry_count_by_branch: Dict[str, int],
     ) -> None:
         logger.info(
-            "图片上下文构建完成: conv_id=%s images=%s image_cache_hit=%s analyzed=%s "
-            "image_understanding_cost=%s image_fetch_source(url)=%s image_fetch_source(get_image)=%s "
-            "image_fetch_source(get_file_by_file_id)=%s image_fetch_source(get_file_by_file)=%s "
-            "image_fetch_source(file_id_local_path)=%s image_fetch_source(failed)=%s "
-            "image_fetch_source(file_id)=%s image_fetch_source(file)=%s image_fetch_source(get_file)=%s "
+            "图片上下文构建完成: conv_id=%s images=%s image_cache_hit=%s analyzed=%s image_understanding_cost=%s "
+            "image_resolved_via(url)=%s image_resolved_via(get_image)=%s "
+            "image_resolved_via(get_file_by_file_id)=%s image_resolved_via(get_file_by_file)=%s "
+            "image_resolved_via(file_id_local_path)=%s image_resolved_via(failed)=%s "
             "image_fetch_error(4xx)=%s image_fetch_error(5xx)=%s image_fetch_error(timeout)=%s "
             "image_fetch_error(network)=%s image_fetch_error(dependency_missing)=%s "
             "image_fetch_error(unsupported_action)=%s image_fetch_retry(url_fetch)=%s "
@@ -290,15 +305,12 @@ class ImageContextService:
             image_cache_hit,
             analyzed,
             image_understanding_cost,
-            fetch_source_count.get("url", 0),
-            fetch_source_count.get("get_image", 0),
-            fetch_source_count.get("get_file_by_file_id", 0),
-            fetch_source_count.get("get_file_by_file", 0),
-            fetch_source_count.get("file_id_local_path", 0),
-            fetch_source_count.get("failed", 0),
-            fetch_source_count.get("file_id", 0),
-            fetch_source_count.get("file", 0),
-            fetch_source_count.get("get_file", 0),
+            resolved_via_count.get("url", 0),
+            resolved_via_count.get("get_image", 0),
+            resolved_via_count.get("get_file_by_file_id", 0),
+            resolved_via_count.get("get_file_by_file", 0),
+            resolved_via_count.get("file_id_local_path", 0),
+            resolved_via_count.get("failed", 0),
             error_category_count.get("4xx", 0),
             error_category_count.get("5xx", 0),
             error_category_count.get("timeout", 0),
@@ -377,16 +389,15 @@ class ImageContextService:
         image_meta: Dict[str, Any],
         *,
         summary: str,
-        fetch_source: str,
+        resolved_via: str,
         error: str,
     ) -> None:
         payload = {
             "summary": summary,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        if fetch_source:
-            payload["fetch_source"] = fetch_source
-            payload["resolved_via"] = fetch_source
+        if resolved_via:
+            payload["resolved_via"] = resolved_via
         if error:
             payload["error"] = error
         image_meta["understanding"] = payload
@@ -416,3 +427,40 @@ class ImageContextService:
             if count <= 0:
                 continue
             target[key] = target.get(key, 0) + count
+
+    async def _emit_image_fetch_summary_event(
+        self,
+        *,
+        conv_id: str,
+        message_id: Any,
+        request_id: str,
+        resolved_via: str,
+        success: bool,
+    ) -> None:
+        callback = self.module_metric_event_callback
+        if callback is None:
+            return
+        event = {
+            "module_id": "persona.image_fetch",
+            "plugin_name": "persona",
+            "module_name": "image_fetch",
+            "operation": "image_fetch",
+            "phase": "image_fetch",
+            "resolved_via": resolved_via,
+            "conv_id": conv_id,
+            "message_id": str(message_id) if message_id is not None else None,
+            "request_id": request_id,
+            "success": success,
+        }
+        try:
+            result = callback(event)
+            if inspect.isawaitable(result):
+                await result
+        except Exception as exc:
+            logger.warning(
+                "图片拉取 summary 事件写入失败: conv_id=%s message_id=%s request_id=%s error=%s",
+                conv_id,
+                message_id,
+                request_id,
+                exc,
+            )

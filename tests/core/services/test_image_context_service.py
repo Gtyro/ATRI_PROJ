@@ -110,7 +110,7 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
     assert usage_context["operation"] == "image_understanding"
     assert usage_context["conv_id"] == "group_1"
     assert usage_context["message_id"] == 1
-    assert usage_context["fetch_source"] == "url"
+    assert usage_context["resolved_via"] == "url"
     assert repo.updated[0][0] == 1
     assert (
         repo.updated[0][1]["media"]["images"][0]["understanding"]["summary"]
@@ -120,9 +120,10 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
         repo.updated[0][1]["media"]["images"][0]["understanding"]["resolved_via"]
         == "url"
     )
+    assert "fetch_source" not in repo.updated[0][1]["media"]["images"][0]["understanding"]
     assert "image_cache_hit=1" in caplog.text
     assert "image_understanding_cost=1" in caplog.text
-    assert "image_fetch_source(url)=1" in caplog.text
+    assert "image_resolved_via(url)=1" in caplog.text
 
 
 def test_build_context_respects_max_images_budget(caplog):
@@ -180,10 +181,10 @@ def test_build_context_respects_max_images_budget(caplog):
     usage_context = understander.calls[0]["usage_contexts"][0]
     assert usage_context["conv_id"] == "group_1"
     assert usage_context["message_id"] == 2
-    assert usage_context["fetch_source"] == "url"
+    assert usage_context["resolved_via"] == "url"
     assert len(repo.updated) == 1
     assert "image_understanding_cost=1" in caplog.text
-    assert "image_fetch_source(url)=1" in caplog.text
+    assert "image_resolved_via(url)=1" in caplog.text
 
 
 def test_build_context_respects_segment_index_order_within_message(caplog):
@@ -418,3 +419,60 @@ def test_build_context_logs_resolver_error_category_and_retry_stats(caplog):
     assert "image_fetch_error(network)=2" in caplog.text
     assert "image_fetch_retry(url_fetch)=1" in caplog.text
     assert "image_fetch_retry(get_file_api)=2" in caplog.text
+
+
+def test_build_context_emits_image_fetch_summary_events():
+    resolver = _FakeResolver(
+        {
+            "https://example.com/ok.jpg": ResolvedImage(
+                source="get_image",
+                mime="image/jpeg",
+                image_bytes=b"ok",
+                original_url="https://example.com/ok.jpg",
+            )
+        }
+    )
+    understander = _FakeUnderstander(["摘要"])
+    events = []
+
+    async def _event_callback(event):
+        events.append(event)
+
+    service = ImageContextService(
+        config={
+            "image_understanding": {
+                "max_images_per_round": 2,
+                "analyze_window_size": 20,
+                "cache_enabled": False,
+            }
+        },
+        image_resolver=resolver,
+        image_understander=understander,
+        message_repo=_FakeRepo(),
+        module_metric_event_callback=_event_callback,
+    )
+    messages = [
+        {
+            "id": 1,
+            "user_name": "Alice",
+            "metadata": {
+                "media": {
+                    "images": [
+                        {"url": "https://example.com/ok.jpg"},
+                        {"url": "https://example.com/missing.jpg"},
+                    ]
+                }
+            },
+        }
+    ]
+
+    context = asyncio.run(service.build_context("group_1", messages))
+
+    assert "- Alice 发图：摘要" in context
+    assert len(events) == 2
+    assert events[0]["module_id"] == "persona.image_fetch"
+    assert events[0]["phase"] == "image_fetch"
+    assert events[0]["resolved_via"] == "get_image"
+    assert events[0]["success"] is True
+    assert events[1]["resolved_via"] == "failed"
+    assert events[1]["success"] is False
