@@ -116,6 +116,8 @@ class ModuleMetricEvent(Model):
     plugin_name = fields.CharField(max_length=50)
     module_name = fields.CharField(max_length=100)
     operation = fields.CharField(max_length=100)
+    phase = fields.CharField(max_length=100, null=True)
+    resolved_via = fields.CharField(max_length=100, null=True)
     conv_id = fields.CharField(max_length=50, null=True)
     message_id = fields.CharField(max_length=100, null=True)
     provider_name = fields.CharField(max_length=100, null=True)
@@ -135,6 +137,7 @@ class ModuleMetricEvent(Model):
             ("created_at",),
             ("module_id", "created_at"),
             ("plugin_name", "module_name", "created_at"),
+            ("phase", "resolved_via", "created_at"),
             ("conv_id", "created_at"),
             ("request_id",),
         )

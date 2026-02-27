@@ -122,7 +122,7 @@ class LLMClient:
         if not isinstance(usage_context, dict):
             return {}
         normalized: Dict[str, str] = {}
-        for key in ("plugin_name", "module_name", "operation", "conv_id", "message_id"):
+        for key in ("plugin_name", "module_name", "operation", "phase", "resolved_via", "conv_id", "message_id"):
             value = usage_context.get(key)
             if value is None:
                 continue
@@ -155,6 +155,8 @@ class LLMClient:
             "plugin_name": context.get("plugin_name"),
             "module_name": context.get("module_name"),
             "operation": context.get("operation") or operation,
+            "phase": context.get("phase"),
+            "resolved_via": context.get("resolved_via"),
             "conv_id": context.get("conv_id"),
             "message_id": context.get("message_id"),
             "provider_name": self.provider_name,

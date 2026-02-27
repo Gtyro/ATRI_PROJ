@@ -261,29 +261,25 @@ class PersonaImageUnderstandingMetricsProvider(_BaseModuleMetricsProvider):
         }
 
 
-class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
-    module_id = "persona.image_url_fallback"
+class PersonaImageFetchMetricsProvider(_BaseModuleMetricsProvider):
+    module_id = "persona.image_fetch"
     plugin_name = "persona"
-    module_name = "image_url_fallback"
-    title = "图片 URL 回退"
-    description = "统计图片回退来源（fetch_source）分布。"
+    module_name = "image_fetch"
+    title = "图片拉取"
+    description = "统计图片拉取最终来源（resolved_via）分布。"
 
     @staticmethod
-    def _extract_fetch_source(row: Mapping[str, Any]) -> str:
-        extra = _parse_extra(row.get("extra"))
-        source = _normalize_text(extra.get("fetch_source"))
+    def _extract_resolved_via(row: Mapping[str, Any]) -> str:
+        source = _normalize_text(row.get("resolved_via"))
         if source:
             return source
-        operation = _normalize_text(row.get("operation"))
-        if operation:
-            return operation
         return "unknown"
 
     @classmethod
     def _build_source_distribution(cls, rows: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:
         counter: Dict[str, int] = {}
         for row in rows:
-            source = cls._extract_fetch_source(row)
+            source = cls._extract_resolved_via(row)
             counter[source] = counter.get(source, 0) + 1
         return [{"name": name, "value": counter[name]} for name in sorted(counter.keys())]
 
@@ -291,8 +287,8 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
     def _build_source_success_rows(cls, rows: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:
         matrix: Dict[str, Dict[str, int]] = {}
         for row in rows:
-            source = cls._extract_fetch_source(row)
-            item = matrix.setdefault(source, {"source": source, "total_calls": 0, "failed_calls": 0})
+            source = cls._extract_resolved_via(row)
+            item = matrix.setdefault(source, {"resolved_via": source, "total_calls": 0, "failed_calls": 0})
             item["total_calls"] += 1
             if not bool(row.get("success")):
                 item["failed_calls"] += 1
@@ -303,7 +299,7 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
         summary = await self.repository.get_summary(filters, interval="day")
         rows = await self.repository.list_rows(
             filters,
-            fields=("operation", "extra", "success", "created_at"),
+            fields=("resolved_via",),
         )
         source_distribution = self._build_source_distribution(rows)
         kpis = _build_common_kpis(summary)
@@ -313,11 +309,11 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
             "kpis": kpis,
             "main_chart": _build_chart(
                 chart_id=f"{self.module_id}.overview.main",
-                title="回退来源分布",
+                title="拉取来源分布",
                 chart_type="pie",
                 dataset=source_distribution,
                 series=[{"field": "value", "name": "调用次数", "type": "pie"}],
-                meta={"dimension": "fetch_source"},
+                meta={"dimension": "resolved_via"},
             ),
             "meta": {"module_id": self.module_id},
         }
@@ -327,7 +323,7 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
         day_summary = await self.repository.get_summary(filters, interval="day")
         rows = await self.repository.list_rows(
             filters,
-            fields=("operation", "extra", "success", "created_at", "total_tokens"),
+            fields=("resolved_via", "success", "created_at", "total_tokens"),
         )
         events = await self.repository.list_events(filters, page=1, size=20)
         source_distribution = self._build_source_distribution(rows)
@@ -338,7 +334,7 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
         for row in list(events.get("items") or []):
             normalized = dict(row)
             normalized["created_at"] = _normalize_datetime(normalized.get("created_at"))
-            normalized["fetch_source"] = self._extract_fetch_source(normalized)
+            normalized["resolved_via"] = self._extract_resolved_via(normalized)
             event_rows.append(normalized)
 
         charts = [
@@ -350,18 +346,18 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
             ),
             _build_chart(
                 chart_id=f"{self.module_id}.detail.source",
-                title="回退来源分布",
+                title="拉取来源分布",
                 chart_type="pie",
                 dataset=source_distribution,
                 series=[{"field": "value", "name": "调用次数", "type": "pie"}],
-                meta={"dimension": "fetch_source"},
+                meta={"dimension": "resolved_via"},
             ),
             _build_chart(
                 chart_id=f"{self.module_id}.detail.source.success",
                 title="来源成功率",
                 chart_type="bar",
                 dataset=source_success_rows,
-                x_axis={"field": "source", "type": "category"},
+                x_axis={"field": "resolved_via", "type": "category"},
                 series=[
                     {"field": "total_calls", "name": "调用次数", "type": "bar"},
                     {"field": "failed_calls", "name": "失败次数", "type": "bar"},
@@ -403,10 +399,10 @@ class PersonaImageUrlFallbackMetricsProvider(_BaseModuleMetricsProvider):
     async def get_filter_options(self, query: ModuleMetricsQuery) -> Dict[str, Any]:
         filters = self._build_filters(query)
         options = await self.repository.list_options(filters)
-        rows = await self.repository.list_rows(filters, fields=("operation", "extra"))
-        sources = sorted({self._extract_fetch_source(row) for row in rows})
+        rows = await self.repository.list_rows(filters, fields=("resolved_via",))
+        sources = sorted({self._extract_resolved_via(row) for row in rows})
         payload = dict(options)
-        payload["fetch_sources"] = sources
+        payload["resolved_vias"] = sources
         return payload
 
 
@@ -416,5 +412,5 @@ def build_builtin_module_metrics_providers(
     repo = repository or TortoiseModuleMetricsRepository()
     return [
         PersonaImageUnderstandingMetricsProvider(repository=repo),
-        PersonaImageUrlFallbackMetricsProvider(repository=repo),
+        PersonaImageFetchMetricsProvider(repository=repo),
     ]

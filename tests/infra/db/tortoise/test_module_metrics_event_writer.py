@@ -45,6 +45,8 @@ def test_module_metric_event_writer_persists_normalized_event():
                 "module_name": " image_understanding ",
                 "operation": " image_understanding ",
                 "conv_id": " group_1 ",
+                "phase": " image_fetch ",
+                "resolved_via": " get_image ",
                 "success": "true",
                 "prompt_tokens": "5",
                 "completion_tokens": 7,
@@ -62,6 +64,8 @@ def test_module_metric_event_writer_persists_normalized_event():
     assert payload["module_name"] == "image_understanding"
     assert payload["operation"] == "image_understanding"
     assert payload["conv_id"] == "group_1"
+    assert payload["phase"] == "image_fetch"
+    assert payload["resolved_via"] == "get_image"
     assert payload["success"] is True
     assert payload["prompt_tokens"] == 5
     assert payload["completion_tokens"] == 7

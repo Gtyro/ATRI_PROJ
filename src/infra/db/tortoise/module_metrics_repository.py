@@ -14,6 +14,8 @@ EVENT_FIELDS = (
     "plugin_name",
     "module_name",
     "operation",
+    "phase",
+    "resolved_via",
     "conv_id",
     "message_id",
     "provider_name",
@@ -37,6 +39,8 @@ class ModuleMetricsFilter:
     plugin_name: Optional[str] = None
     module_name: Optional[str] = None
     operation: Optional[str] = None
+    phase: Optional[str] = None
+    resolved_via: Optional[str] = None
     conv_id: Optional[str] = None
 
 
@@ -83,6 +87,10 @@ class TortoiseModuleMetricsRepository:
             query = query.filter(module_name=filters.module_name)
         if filters.operation:
             query = query.filter(operation=filters.operation)
+        if filters.phase:
+            query = query.filter(phase=filters.phase)
+        if filters.resolved_via:
+            query = query.filter(resolved_via=filters.resolved_via)
         if filters.conv_id:
             query = query.filter(conv_id=filters.conv_id)
         return query
@@ -117,11 +125,15 @@ class TortoiseModuleMetricsRepository:
         plugin_names_raw = await self._build_query(filters).values_list("plugin_name", flat=True)
         module_names_raw = await self._build_query(filters).values_list("module_name", flat=True)
         operations_raw = await self._build_query(filters).values_list("operation", flat=True)
+        phases_raw = await self._build_query(filters).values_list("phase", flat=True)
+        resolved_vias_raw = await self._build_query(filters).values_list("resolved_via", flat=True)
         conv_ids_raw = await self._build_query(filters).values_list("conv_id", flat=True)
         return {
             "plugin_names": self._normalize_options(plugin_names_raw),
             "module_names": self._normalize_options(module_names_raw),
             "operations": self._normalize_options(operations_raw),
+            "phases": self._normalize_options(phases_raw),
+            "resolved_vias": self._normalize_options(resolved_vias_raw),
             "conv_ids": self._normalize_options(conv_ids_raw),
         }
 

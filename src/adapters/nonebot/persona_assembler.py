@@ -143,6 +143,7 @@ async def assemble_persona_engine(
         image_resolver=image_resolver,
         image_understander=image_understander,
         message_repo=message_repo,
+        module_metric_event_callback=_persist_module_metric_event,
     )
 
     long_term_impl = LongTermMemory(memory_repo, config)
