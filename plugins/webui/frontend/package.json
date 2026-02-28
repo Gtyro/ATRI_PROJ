@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.0.6",
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@tweenjs/tween.js": "^23.1.1",
     "axios": "^0.27.2",
     "echarts": "^5.4.3",
