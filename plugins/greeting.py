@@ -27,6 +27,7 @@ __plugin_meta__ = PluginMetadata(
 greeting_cmd = register_command(
     "你好",
     aliases={"hello", "hi"},
+    rule=to_me(),
     role="normal",
     priority=5,
     block=True,

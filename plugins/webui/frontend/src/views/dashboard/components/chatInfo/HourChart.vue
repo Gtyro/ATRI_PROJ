@@ -5,49 +5,69 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
 
-// DOM引用
+const props = defineProps({
+  hours: {
+    type: Array,
+    default: () => [],
+  },
+  throughputData: {
+    type: Array,
+    default: () => [],
+  },
+});
+
 const hourChartRef = ref(null);
-// echarts实例
 let hourChart = null;
 
-// 生成过去24小时的模拟数据
-const generateHourlyData = () => {
-  const result = [];
-  const hours = [];
+const buildFallbackHours = () => {
   const now = new Date();
-
+  const labels = [];
   for (let i = 23; i >= 0; i--) {
-    const time = new Date(now);
-    time.setHours(now.getHours() - i);
-
-    // 格式化小时标签 "HH:00"
-    const hourStr = time.getHours().toString().padStart(2, "0") + ":00";
-    hours.push(hourStr);
-
-    // 生成随机消息数，工作时间段消息较多
-    const hour = time.getHours();
-    const isWorkHour = hour >= 9 && hour <= 18;
-    const value = Math.floor(Math.random() * (isWorkHour ? 25 : 10));
-
-    result.push(value);
+    const point = new Date(now);
+    point.setHours(now.getHours() - i);
+    labels.push(`${String(point.getHours()).padStart(2, "0")}:00`);
   }
-
-  return { hours, data: result };
+  return labels;
 };
 
-// 初始化小时统计图
+const normalizeData = () => {
+  const hours =
+    Array.isArray(props.hours) && props.hours.length > 0
+      ? [...props.hours]
+      : buildFallbackHours();
+  const rawData = Array.isArray(props.throughputData)
+    ? props.throughputData
+    : [];
+  const data = hours.map((_, index) => Number(rawData[index]) || 0);
+  return { hours, data };
+};
+
+const getHourColor = (label) => {
+  const hour = Number.parseInt(String(label).split(":")[0], 10);
+  if (hour >= 9 && hour <= 18) {
+    return "#7bc96f";
+  }
+  if (hour >= 6 && hour < 9) {
+    return "#c6e48b";
+  }
+  if (hour > 18 && hour <= 23) {
+    return "#239a3b";
+  }
+  return "#ebedf0";
+};
+
 const initHourChart = () => {
   if (!hourChartRef.value) return;
-
-  // 创建图表实例
   hourChart = echarts.init(hourChartRef.value);
+};
 
-  const { hours, data } = generateHourlyData();
+const renderHourChart = () => {
+  if (!hourChart) return;
 
-  // 图表配置
+  const { hours, data } = normalizeData();
   const option = {
     tooltip: {
       trigger: "axis",
@@ -67,7 +87,7 @@ const initHourChart = () => {
       type: "category",
       data: hours,
       axisLabel: {
-        interval: 3, // 每隔3个显示一个标签
+        interval: 3,
         rotate: 0,
       },
     },
@@ -81,23 +101,12 @@ const initHourChart = () => {
     },
     series: [
       {
-        data: data,
+        data,
         type: "bar",
         itemStyle: {
-          color: function (params) {
-            // 为不同时段设置不同颜色
-            const idx = params.dataIndex;
-            const hour = parseInt(hours[idx].split(":")[0]);
-
-            if (hour >= 9 && hour <= 18) {
-              return "#7bc96f"; // 工作时间为绿色
-            } else if (hour >= 6 && hour < 9) {
-              return "#c6e48b"; // 早晨为浅绿色
-            } else if (hour > 18 && hour <= 23) {
-              return "#239a3b"; // 晚上为深绿色
-            } else {
-              return "#ebedf0"; // 深夜为浅灰色
-            }
+          color(params) {
+            const label = hours[params.dataIndex] || "00:00";
+            return getHourColor(label);
           },
         },
         barWidth: "60%",
@@ -105,20 +114,28 @@ const initHourChart = () => {
     ],
   };
 
-  // 应用配置
-  hourChart.setOption(option);
+  hourChart.setOption(option, true);
 };
 
-// 处理窗口大小调整
 const handleResize = () => {
-  hourChart && hourChart.resize();
+  if (hourChart) {
+    hourChart.resize();
+  }
 };
 
-// 生命周期钩子
 onMounted(() => {
   initHourChart();
+  renderHourChart();
   window.addEventListener("resize", handleResize);
 });
+
+watch(
+  () => [props.hours, props.throughputData],
+  () => {
+    renderHourChart();
+  },
+  { deep: true },
+);
 
 onUnmounted(() => {
   if (hourChart) {

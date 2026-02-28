@@ -2,7 +2,6 @@
   <div class="panel-container">
     <h3>机器人信息</h3>
 
-    <!-- 机器人信息展示部分 -->
     <div class="bot-info-section">
       <div class="bot-cards-container">
         <BotInfoCard
@@ -13,7 +12,6 @@
       </div>
     </div>
 
-    <!-- 连接日志展示部分 -->
     <div class="connection-logs-section">
       <ConnectionLogs :logs="connectionLogs" />
     </div>
@@ -21,37 +19,40 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { request } from "@/api";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+
+import {
+  fetchDashboardBotInfo,
+  fetchDashboardConnectionLogs,
+  subscribeDashboardStream,
+} from "@/api/dashboard";
 import BotInfoCard from "./components/botInfo/BotInfoCard.vue";
 import ConnectionLogs from "./components/botInfo/ConnectionLogs.vue";
 
-// 机器人数据
 const bots = ref([]);
 const connectionLogs = ref([]);
 const loading = ref(true);
 const error = ref(null);
 
-// 用于显示的机器人列表
+let streamAbortController = null;
+
 const botsToDisplay = computed(() => {
   if (bots.value.length === 0) {
-    // 无数据时显示占位
     return [
       {
-        id: "加载中",
+        id: loading.value ? "加载中" : "暂无数据",
         platform: "未知",
         nickname: "未知",
         group_count: 0,
         friend_count: 0,
         plugin_calls_today: 0,
         messages_today: 0,
-        uptime: "0小时0分钟",
+        uptime: "0分钟",
       },
     ];
   }
 
   if (bots.value.length === 1) {
-    // 只有一个机器人时，重复三次展示
     const bot = bots.value[0];
     return [bot, bot, bot];
   }
@@ -59,12 +60,25 @@ const botsToDisplay = computed(() => {
   return bots.value;
 });
 
-// 加载机器人信息
+const applyBots = (payload) => {
+  if (!Array.isArray(payload)) {
+    return;
+  }
+  bots.value = payload;
+  loading.value = false;
+};
+
+const applyConnections = (payload) => {
+  if (!Array.isArray(payload)) {
+    return;
+  }
+  connectionLogs.value = payload;
+};
+
 const loadBotInfo = async () => {
   try {
-    const response = await request.get("/api/dashboard/bot-info");
-    bots.value = response.data;
-    loading.value = false;
+    const response = await fetchDashboardBotInfo();
+    applyBots(response?.data || []);
   } catch (err) {
     console.error("获取机器人信息失败:", err);
     error.value = "获取机器人信息失败";
@@ -72,20 +86,55 @@ const loadBotInfo = async () => {
   }
 };
 
-// 加载连接日志
 const loadConnectionLogs = async () => {
   try {
-    const response = await request.get("/api/dashboard/bot-connections");
-    connectionLogs.value = response.data;
+    const response = await fetchDashboardConnectionLogs(20);
+    applyConnections(response?.data || []);
   } catch (err) {
     console.error("获取连接日志失败:", err);
   }
 };
 
-// 生命周期钩子
+const loadInitialData = async () => {
+  await Promise.all([loadBotInfo(), loadConnectionLogs()]);
+};
+
+const startDashboardStream = () => {
+  if (streamAbortController) {
+    streamAbortController.abort();
+  }
+  streamAbortController = new AbortController();
+
+  void subscribeDashboardStream({
+    intervalSeconds: 5,
+    signal: streamAbortController.signal,
+    onUpdate(payload) {
+      if (Array.isArray(payload?.bots)) {
+        applyBots(payload.bots);
+      }
+      if (Array.isArray(payload?.connections)) {
+        applyConnections(payload.connections);
+      }
+    },
+    onError(err) {
+      if (streamAbortController?.signal?.aborted) {
+        return;
+      }
+      console.error("机器人信息 SSE 连接异常:", err);
+    },
+  });
+};
+
 onMounted(() => {
-  loadBotInfo();
-  loadConnectionLogs();
+  loadInitialData();
+  startDashboardStream();
+});
+
+onBeforeUnmount(() => {
+  if (streamAbortController) {
+    streamAbortController.abort();
+    streamAbortController = null;
+  }
 });
 </script>
 

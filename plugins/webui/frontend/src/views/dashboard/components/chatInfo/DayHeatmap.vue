@@ -5,64 +5,73 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import * as echarts from "echarts";
 
-// DOM引用
+const props = defineProps({
+  heatmapData: {
+    type: Array,
+    default: () => [],
+  },
+  startDate: {
+    type: String,
+    default: "",
+  },
+  endDate: {
+    type: String,
+    default: "",
+  },
+});
+
 const heatmapRef = ref(null);
-// echarts实例
 let heatmapChart = null;
 
-// 模拟的消息数据 - 实际应从API获取
-const generateMockData = () => {
-  const result = [];
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - 3);
-
-  for (let i = 0; i < 120; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
-
-    // 随机消息数量，周末稍多
-    const dayOfWeek = date.getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const value = Math.floor(Math.random() * (isWeekend ? 30 : 20));
-
-    result.push([echarts.format.formatTime("yyyy-MM-dd", date), value]);
-  }
-  return result;
-};
-
-// 获取当前日期和指定月数前的日期
-const getDateRange = () => {
-  const end = new Date(); // 当前日期
+const buildFallbackRange = () => {
+  const end = new Date();
   const start = new Date();
   start.setMonth(end.getMonth() - 3);
-
   return [
     echarts.format.formatTime("yyyy-MM-dd", start),
     echarts.format.formatTime("yyyy-MM-dd", end),
   ];
 };
 
-// 初始化热力图
+const normalizeHeatmapData = () => {
+  if (!Array.isArray(props.heatmapData)) {
+    return [];
+  }
+  return props.heatmapData
+    .map((item) => {
+      if (!Array.isArray(item) || item.length < 2) {
+        return null;
+      }
+      const date = String(item[0] || "").trim();
+      if (!date) {
+        return null;
+      }
+      return [date, Number(item[1]) || 0];
+    })
+    .filter(Boolean);
+};
+
 const initHeatmap = () => {
   if (!heatmapRef.value) return;
-
-  // 创建图表实例
   heatmapChart = echarts.init(heatmapRef.value);
+};
 
-  const data = generateMockData();
-  const maxValue = Math.max(...data.map((item) => item[1]));
-  const [startDate, endDate] = getDateRange();
+const renderHeatmap = () => {
+  if (!heatmapChart) return;
 
-  // 图表配置
+  const data = normalizeHeatmapData();
+  const [fallbackStart, fallbackEnd] = buildFallbackRange();
+  const startDate = props.startDate || fallbackStart;
+  const endDate = props.endDate || fallbackEnd;
+  const maxValue = Math.max(1, ...data.map((item) => Number(item[1]) || 0));
+
   const option = {
     tooltip: {
       position: "top",
-      formatter: (params) => {
-        return `${params.data[0]}: ${params.data[1]} 条消息`;
-      },
+      formatter: (params) => `${params.data[0]}: ${params.data[1]} 条消息`,
     },
     visualMap: {
       min: 0,
@@ -89,24 +98,32 @@ const initHeatmap = () => {
     series: {
       type: "heatmap",
       coordinateSystem: "calendar",
-      data: data,
+      data,
     },
   };
 
-  // 应用配置
-  heatmapChart.setOption(option);
+  heatmapChart.setOption(option, true);
 };
 
-// 处理窗口大小调整
 const handleResize = () => {
-  heatmapChart && heatmapChart.resize();
+  if (heatmapChart) {
+    heatmapChart.resize();
+  }
 };
 
-// 生命周期钩子
 onMounted(() => {
   initHeatmap();
+  renderHeatmap();
   window.addEventListener("resize", handleResize);
 });
+
+watch(
+  () => [props.heatmapData, props.startDate, props.endDate],
+  () => {
+    renderHeatmap();
+  },
+  { deep: true },
+);
 
 onUnmounted(() => {
   if (heatmapChart) {
