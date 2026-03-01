@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:contract": "vitest run src/api/__tests__/module_metrics.contract.spec.js",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.0.6",
@@ -24,6 +28,7 @@
     "vue-router": "^4.0.13"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.6",
     "jsdom": "^22.1.0",

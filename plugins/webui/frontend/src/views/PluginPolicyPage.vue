@@ -1,5 +1,5 @@
 <template>
-  <div class="plugin-policy-page">
+  <div class="plugin-policy-page" data-testid="plugin-policy-page">
     <el-card class="box-card" shadow="never">
       <template #header>
         <div class="card-header-row">
@@ -19,6 +19,7 @@
               size="small"
               :loading="loading"
               @click="loadMatrix"
+              data-testid="policy-refresh"
             >
               刷新
             </el-button>
@@ -92,6 +93,7 @@
                   v-model="scope.row.policies[plugin].enabled"
                   size="small"
                   @change="onTogglePlugin(scope.row, plugin)"
+                  :data-testid="`policy-enabled-${scope.row.group_id}-${plugin}`"
                 />
               </div>
               <div

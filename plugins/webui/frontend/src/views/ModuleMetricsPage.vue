@@ -1,5 +1,5 @@
 <template>
-  <div class="module-metrics-page">
+  <div class="module-metrics-page" data-testid="module-metrics-page">
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar-main">
         <div class="toolbar-title">
@@ -14,20 +14,27 @@
             clearable
             placeholder="搜索模块（module_id / 标题 / 描述）"
             @keyup.enter="handleSearch"
+            data-testid="module-search-input"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
-          <el-button @click="toggleAdvanced">
+          <el-button
+            @click="toggleAdvanced"
+            data-testid="module-toggle-advanced"
+          >
             <el-icon><Filter /></el-icon>
             {{ showAdvanced ? "收起筛选" : "高级筛选" }}
           </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button @click="handleReset" data-testid="module-reset"
+            >重置</el-button
+          >
           <el-button
             type="primary"
             :loading="isRefreshing"
             @click="handleSearch"
+            data-testid="module-refresh"
           >
             刷新
           </el-button>
@@ -35,7 +42,11 @@
       </div>
 
       <el-collapse-transition>
-        <div v-show="showAdvanced" class="advanced-filter-wrap">
+        <div
+          v-show="showAdvanced"
+          class="advanced-filter-wrap"
+          data-testid="module-advanced-filters"
+        >
           <el-form :inline="true" class="filter-form">
             <el-form-item label="时间范围">
               <el-date-picker
@@ -137,6 +148,7 @@
           :key="item.module_id"
           class="module-card"
           shadow="hover"
+          :data-testid="`module-card-${item.module_id}`"
         >
           <template #header>
             <div class="module-card-header">
@@ -151,6 +163,7 @@
                   type="primary"
                   plain
                   @click="handleFocus(item.module_id)"
+                  :data-testid="`module-focus-${item.module_id}`"
                 >
                   <el-icon><FullScreen /></el-icon>
                 </el-button>
@@ -188,7 +201,7 @@
       </div>
     </div>
 
-    <div v-else class="focus-panel">
+    <div v-else class="focus-panel" data-testid="module-focus-panel">
       <el-card class="focus-header-card" shadow="never">
         <div class="focus-header">
           <div class="focus-title">
@@ -196,7 +209,10 @@
             <p>{{ focusedModuleId }}</p>
           </div>
           <div class="focus-actions">
-            <el-button @click="backToOverview">
+            <el-button
+              @click="backToOverview"
+              data-testid="module-back-overview"
+            >
               <el-icon><ArrowLeft /></el-icon>
               返回 overview
             </el-button>
