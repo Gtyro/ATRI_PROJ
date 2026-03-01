@@ -1,5 +1,5 @@
 <template>
-  <div class="login-container">
+  <div class="login-container" data-testid="login-page">
     <h2 class="login-title">ATRI管理面板</h2>
     <el-form
       :model="loginForm"
@@ -12,6 +12,7 @@
           v-model="loginForm.username"
           placeholder="请输入用户名"
           :prefix-icon="User"
+          data-testid="login-username"
         ></el-input>
       </el-form-item>
 
@@ -22,6 +23,7 @@
           placeholder="请输入密码"
           :prefix-icon="Lock"
           @keyup.enter="submitForm"
+          data-testid="login-password"
         ></el-input>
       </el-form-item>
 
@@ -31,6 +33,7 @@
           style="width: 100%"
           @click="submitForm"
           :loading="loading"
+          data-testid="login-submit"
         >
           登录
         </el-button>
