@@ -278,7 +278,7 @@ const formatAxisTime = (value) => {
   const day = pad(date.getDate());
   const hour = pad(date.getHours());
   const minute = pad(date.getMinutes());
-  if (hour === 0 && minute === 0) {
+  if (hour === "00" && minute === "00") {
     return `${year}-${month}-${day}`;
   }
   return `${month}-${day} ${hour}:${minute}`;
