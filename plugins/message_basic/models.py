@@ -11,7 +11,7 @@ class BasicMessage(Model):
     user_id = fields.CharField(max_length=50, db_index=True)
     user_name = fields.CharField(max_length=50)
     content = fields.TextField()
-    created_at = fields.DatetimeField(auto_now_add=True)
+    created_at = fields.DatetimeField(auto_now_add=True, db_index=True)
     is_processed = fields.BooleanField(default=False)
     is_direct = fields.BooleanField(default=False)
     is_bot = fields.BooleanField(default=False)

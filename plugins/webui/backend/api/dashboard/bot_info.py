@@ -12,6 +12,7 @@ from nonebot import get_driver
 from nonebot_plugin_uninfo import SceneType, get_interface
 from nonebot_plugin_uninfo.model import BasicInfo
 from pydantic import BaseModel
+from tortoise import Tortoise
 
 try:
     from plugins.message_basic.models import BasicMessage
@@ -47,6 +48,14 @@ class _ConnectionEvent:
 _CONNECTION_STATES: Dict[str, _BotConnectionState] = {}
 _CONNECTION_LOGS: Deque[_ConnectionEvent] = deque(maxlen=200)
 _STATE_LOCK = asyncio.Lock()
+
+_THROUGHPUT_CACHE_LOCK = asyncio.Lock()
+_THROUGHPUT_INDEX_LOCK = asyncio.Lock()
+_HOURLY_CACHE_TTL_SECONDS = 5
+_DAILY_CACHE_TTL_SECONDS = 60
+_hourly_throughput_cache: Dict[int, Tuple[datetime, "HourlyThroughput"]] = {}
+_daily_throughput_cache: Dict[int, Tuple[datetime, "DailyThroughput"]] = {}
+_basic_message_index_checked = False
 
 
 class BotInfo(BaseModel):
@@ -252,59 +261,146 @@ async def _get_connection_snapshot(bot_id: str) -> Tuple[datetime, str]:
     return connected_at, _format_duration(uptime_seconds)
 
 
-async def _collect_message_timestamps(start: datetime) -> List[datetime]:
+def _get_db_dialect(connection: Any) -> str:
+    capability = getattr(connection, "capabilities", None)
+    dialect = str(getattr(capability, "dialect", "")).lower()
+    if dialect:
+        return dialect
+    module_name = connection.__class__.__module__.lower()
+    if "postgres" in module_name:
+        return "postgres"
+    if "mysql" in module_name:
+        return "mysql"
+    return "sqlite"
+
+
+def _bucket_sql_expr(bucket: str, dialect: str) -> str:
+    if bucket == "day":
+        if dialect == "postgres":
+            return "TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD')"
+        if dialect == "mysql":
+            return "DATE_FORMAT(created_at, '%Y-%m-%d')"
+        return "strftime('%Y-%m-%d', created_at)"
+    if bucket == "hour":
+        if dialect == "postgres":
+            return "TO_CHAR(DATE_TRUNC('hour', created_at), 'YYYY-MM-DD HH24:00:00')"
+        if dialect == "mysql":
+            return "DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00')"
+        return "strftime('%Y-%m-%d %H:00:00', created_at)"
+    raise ValueError(f"Unsupported bucket: {bucket}")
+
+
+async def _ensure_basic_message_created_at_index() -> None:
+    global _basic_message_index_checked
+    if _basic_message_index_checked:
+        return
+    async with _THROUGHPUT_INDEX_LOCK:
+        if _basic_message_index_checked:
+            return
+        try:
+            conn = Tortoise.get_connection("default")
+        except Exception:
+            return
+        try:
+            await conn.execute_query(
+                "CREATE INDEX IF NOT EXISTS idx_basic_message_created_at "
+                "ON basic_message (created_at)"
+            )
+        except Exception:
+            # 允许在不支持 IF NOT EXISTS 的方言上失败，继续使用现有查询逻辑
+            pass
+        _basic_message_index_checked = True
+
+
+async def _query_message_bucket_counts(start: datetime, bucket: str) -> Dict[str, int]:
     if BasicMessage is None:
-        return []
+        return {}
+    await _ensure_basic_message_created_at_index()
     try:
-        rows = await BasicMessage.filter(created_at__gte=start).values_list("created_at", flat=True)
+        conn = Tortoise.get_connection("default")
+        dialect = _get_db_dialect(conn)
+        bucket_expr = _bucket_sql_expr(bucket, dialect)
+        start_literal = start.strftime("%Y-%m-%d %H:%M:%S")
+        rows = await conn.execute_query_dict(
+            f"""
+            SELECT {bucket_expr} AS bucket, COUNT(*) AS total
+            FROM basic_message
+            WHERE created_at >= '{start_literal}'
+            GROUP BY bucket
+            ORDER BY bucket ASC
+            """
+        )
     except Exception:
-        return []
-    return [item for item in rows if isinstance(item, datetime)]
+        return {}
+    result: Dict[str, int] = {}
+    for row in rows:
+        key = str(row.get("bucket") or "")
+        if not key:
+            continue
+        result[key] = int(row.get("total") or 0)
+    return result
 
 
 async def _build_hourly_throughput(hours: int = 24) -> HourlyThroughput:
     total_hours = max(1, min(hours, 24))
+    now = _now()
+
+    async with _THROUGHPUT_CACHE_LOCK:
+        cached = _hourly_throughput_cache.get(total_hours)
+        if cached and cached[0] > now:
+            return cached[1]
+
     end = _now().replace(minute=0, second=0, microsecond=0)
     start = end - timedelta(hours=total_hours - 1)
 
-    buckets: Dict[datetime, int] = {}
+    bucket_keys: List[str] = []
     labels: List[str] = []
     for idx in range(total_hours):
         point = start + timedelta(hours=idx)
-        buckets[point] = 0
+        bucket_keys.append(point.strftime("%Y-%m-%d %H:00:00"))
         labels.append(point.strftime("%H:00"))
 
-    for created_at in await _collect_message_timestamps(start):
-        bucket_time = created_at.replace(minute=0, second=0, microsecond=0)
-        if bucket_time in buckets:
-            buckets[bucket_time] += 1
-
-    data = [buckets[start + timedelta(hours=idx)] for idx in range(total_hours)]
-    return HourlyThroughput(hours=labels, data=data)
+    counts = await _query_message_bucket_counts(start, bucket="hour")
+    data = [counts.get(key, 0) for key in bucket_keys]
+    result = HourlyThroughput(hours=labels, data=data)
+    async with _THROUGHPUT_CACHE_LOCK:
+        _hourly_throughput_cache[total_hours] = (
+            _now() + timedelta(seconds=_HOURLY_CACHE_TTL_SECONDS),
+            result,
+        )
+    return result
 
 
 async def _build_daily_throughput(days: int = 120) -> DailyThroughput:
     total_days = max(7, min(days, 365))
+    now = _now()
+    async with _THROUGHPUT_CACHE_LOCK:
+        cached = _daily_throughput_cache.get(total_days)
+        if cached and cached[0] > now:
+            return cached[1]
+
     end_date = _now().date()
     start_date = end_date - timedelta(days=total_days - 1)
     start_time = datetime.combine(start_date, time.min)
 
-    buckets: Dict[str, int] = {}
+    bucket_keys: List[str] = []
     for idx in range(total_days):
         value = start_date + timedelta(days=idx)
-        buckets[value.isoformat()] = 0
+        bucket_keys.append(value.isoformat())
 
-    for created_at in await _collect_message_timestamps(start_time):
-        day_key = created_at.date().isoformat()
-        if day_key in buckets:
-            buckets[day_key] += 1
-
-    series_data = [(key, buckets[key]) for key in sorted(buckets.keys())]
-    return DailyThroughput(
+    counts = await _query_message_bucket_counts(start_time, bucket="day")
+    series_data = [(key, counts.get(key, 0)) for key in bucket_keys]
+    result = DailyThroughput(
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
         data=series_data,
     )
+    async with _THROUGHPUT_CACHE_LOCK:
+        _daily_throughput_cache[total_days] = (
+            _now() + timedelta(seconds=_DAILY_CACHE_TTL_SECONDS),
+            result,
+        )
+    return result
 
 
 def _model_to_dict(model: BaseModel) -> Dict[str, Any]:
