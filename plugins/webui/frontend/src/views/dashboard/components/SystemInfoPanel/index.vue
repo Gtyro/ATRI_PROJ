@@ -1,6 +1,14 @@
 <template>
   <div class="panel-container">
     <h3>系统运行信息</h3>
+    <el-alert
+      v-if="errorMessage"
+      :title="errorMessage"
+      type="error"
+      :closable="false"
+      show-icon
+      class="panel-error"
+    />
     <div class="panel-content">
       <!-- 上半部分：图表区域 -->
       <resource-charts
@@ -20,12 +28,14 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
+import { request } from "@/api";
 import ResourceCharts from "./ResourceCharts.vue";
 import ResourceMetrics from "./ResourceMetrics.vue";
 import SystemDetails from "./SystemDetails.vue";
 
 // 响应式状态
 const loading = ref(true);
+const errorMessage = ref("");
 const currentData = ref({
   cpu: 0,
   memory: 0,
@@ -67,34 +77,16 @@ function updateChartData(newData) {
 // 从API获取系统信息
 async function fetchSystemInfo() {
   try {
-    // 修改API路径
-    const response = await fetch("/api/dashboard/system-info");
-    if (!response.ok) {
-      throw new Error(`API返回错误状态码: ${response.status}`);
-    }
-    const data = await response.json();
+    const response = await request.get("/api/dashboard/system-info");
+    const data = response?.data ?? {};
 
     currentData.value = data;
     updateChartData(data);
+    errorMessage.value = "";
     loading.value = false;
   } catch (error) {
     console.error("获取系统信息失败:", error);
-    // 测试数据，仅在API调用失败时使用
-    const mockData = {
-      cpu: Math.floor(Math.random() * 100),
-      memory: Math.floor(Math.random() * 100),
-      memory_used: Math.floor(Math.random() * 8 * 1024 * 1024 * 1024),
-      memory_total: 8 * 1024 * 1024 * 1024,
-      disk: Math.floor(Math.random() * 100),
-      disk_used: Math.floor(Math.random() * 500 * 1024 * 1024 * 1024),
-      disk_total: 500 * 1024 * 1024 * 1024,
-      os_name: "Linux",
-      python_version: "3.9.10",
-      uptime: 3600 * 24 * 2 + 3600 * 5,
-      timestamp: Date.now(),
-    };
-    currentData.value = mockData;
-    updateChartData(mockData);
+    errorMessage.value = "系统运行数据拉取失败，请检查登录状态或后端服务";
     loading.value = false;
   }
 }
@@ -134,5 +126,9 @@ onBeforeUnmount(() => {
 
 .panel-content {
   margin-top: 15px;
+}
+
+.panel-error {
+  margin-top: 12px;
 }
 </style>
