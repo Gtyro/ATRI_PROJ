@@ -17,7 +17,7 @@ from neo4j import GraphDatabase
 
 from src.core.domain import PersonaConfig
 
-from .memory_models import CognitiveNode, Memory, NodeAssociation
+from .memory_models import CognitiveNode, Memory
 
 
 class MemoryRepository:

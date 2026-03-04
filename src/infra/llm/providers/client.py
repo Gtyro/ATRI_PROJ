@@ -49,7 +49,7 @@ class LLMClient:
                 client_kwargs["timeout"] = self.timeout
             self._client = AsyncOpenAI(**client_kwargs)
             logging.debug("LLM客户端初始化成功")
-        except ImportError as exc:
+        except ImportError:
             logging.error("未安装openai库，请使用pip install openai安装")
             raise
         except Exception as exc:

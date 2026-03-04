@@ -14,8 +14,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.core.domain import PersonaConfig
-
 
 @dataclass
 class LegacyRunResult:
@@ -33,6 +31,8 @@ class OptimizedRunResult:
 
 def _resolve_db_path(db_url: Optional[str]) -> Path:
     if db_url is None:
+        from src.core.domain import PersonaConfig
+
         db_url = PersonaConfig.load().db_url
     if not db_url.startswith("sqlite://"):
         raise ValueError(f"Only sqlite db_url is supported by this benchmark: {db_url}")

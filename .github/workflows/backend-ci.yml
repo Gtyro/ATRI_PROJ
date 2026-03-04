@@ -1,0 +1,50 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: python -m pip install --upgrade pip ruff==0.15.0
+
+      - name: Lint backend Python scope
+        run: ruff check src tests scripts --select E4,E7,E9,F,W291,W293
+
+  backend-tests:
+    needs: python-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: python -m pip install --upgrade pip poetry==1.8.2
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi --with dev
+
+      - name: Run backend non-integration tests
+        run: poetry run pytest -q tests -m "not integration"
