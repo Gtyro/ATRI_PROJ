@@ -1,5 +1,5 @@
 <template>
-  <div class="db-admin">
+  <div class="db-admin" data-testid="db-admin-page">
     <el-card class="box-card">
       <template #header>
         <div class="card-header">
@@ -7,6 +7,7 @@
           <el-select
             v-model="dataSource"
             placeholder="选择数据源"
+            data-testid="db-data-source-select"
             style="width: 150px"
             @change="handleDataSourceChange"
           >
@@ -16,7 +17,7 @@
         </div>
       </template>
 
-      <el-tabs v-model="activeTab">
+      <el-tabs v-model="activeTab" data-testid="db-admin-tabs">
         <el-tab-pane label="数据管理" name="manager">
           <TableManager :tables="currentTables" :onResult="handleQueryResult" />
         </el-tab-pane>

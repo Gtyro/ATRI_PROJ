@@ -6,6 +6,14 @@ const jsonResponse = (route, body, status = 200) => {
   });
 };
 
+const readJsonBody = (route) => {
+  try {
+    return route.request().postDataJSON();
+  } catch {
+    return {};
+  }
+};
+
 export const mockAuthApis = async (page, token) => {
   await page.route("**/auth/**", async (route) => {
     const { pathname } = new URL(route.request().url());
@@ -241,6 +249,221 @@ export const mockPluginPolicyApis = async (page) => {
 
     if (pathname === "/api/plugin-policy/batch") {
       await jsonResponse(route, { success: true });
+      return;
+    }
+
+    await route.fulfill({ status: 404, body: "not mocked" });
+  });
+};
+
+export const mockMemoryAdminApis = async (page) => {
+  await page.route("**/db/memory/**", async (route) => {
+    const request = route.request();
+    const { pathname, searchParams } = new URL(request.url());
+
+    if (pathname === "/db/memory/conversations") {
+      await jsonResponse(route, {
+        columns: ["id", "name"],
+        rows: [
+          {
+            id: "group_1",
+            name: "测试会话",
+          },
+        ],
+      });
+      return;
+    }
+
+    if (pathname === "/db/memory/nodes") {
+      const convId = searchParams.get("conv_id") || "";
+      const limit = Number(searchParams.get("limit") || "50");
+      const allNodes = [
+        {
+          id: "n_public",
+          name: "公共记忆节点",
+          conv_id: "",
+          act_lv: 0.9,
+        },
+        {
+          id: "n_group_1",
+          name: "群聊记忆节点",
+          conv_id: "group_1",
+          act_lv: 0.8,
+        },
+      ];
+      const rows = allNodes
+        .filter((node) => (convId ? node.conv_id === convId : true))
+        .slice(0, limit);
+      await jsonResponse(route, {
+        columns: ["id", "name", "conv_id", "act_lv"],
+        rows,
+      });
+      return;
+    }
+
+    if (pathname === "/db/memory/associations" && request.method() === "POST") {
+      const payload = readJsonBody(route);
+      const convId = payload.conv_id || "";
+      const nodeIds = Array.isArray(payload.node_ids) ? payload.node_ids : [];
+      const allLinks = [
+        {
+          source_id: "n_public",
+          target_id: "n_group_1",
+          source_name: "公共记忆节点",
+          target_name: "群聊记忆节点",
+          strength: 0.7,
+          conv_id: "",
+        },
+        {
+          source_id: "n_group_1",
+          target_id: "n_group_1",
+          source_name: "群聊记忆节点",
+          target_name: "群聊记忆节点",
+          strength: 0.9,
+          conv_id: "group_1",
+        },
+      ];
+
+      let rows = allLinks.filter((link) =>
+        convId ? link.conv_id === convId : true,
+      );
+      if (nodeIds.length > 0) {
+        rows = rows.filter(
+          (link) =>
+            nodeIds.includes(link.source_id) &&
+            nodeIds.includes(link.target_id),
+        );
+      }
+
+      await jsonResponse(route, {
+        columns: [
+          "source_id",
+          "target_id",
+          "source_name",
+          "target_name",
+          "strength",
+        ],
+        rows,
+      });
+      return;
+    }
+
+    await route.fulfill({ status: 404, body: "not mocked" });
+  });
+};
+
+export const mockDbAdminApis = async (page) => {
+  await page.route("**/db/**", async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+
+    if (pathname === "/db/tables") {
+      await jsonResponse(route, {
+        tables: ["message_queue", "logs"],
+      });
+      return;
+    }
+
+    if (pathname.startsWith("/db/table/") && request.method() === "GET") {
+      const tableName = pathname.split("/").pop();
+      if (tableName === "message_queue") {
+        await jsonResponse(route, {
+          columns: [
+            { name: "id", type: "INTEGER", pk: 1 },
+            { name: "user_name", type: "TEXT", pk: 0 },
+            { name: "content", type: "TEXT", pk: 0 },
+            { name: "created_at", type: "TEXT", pk: 0 },
+          ],
+        });
+        return;
+      }
+      if (tableName === "logs") {
+        await jsonResponse(route, {
+          columns: [
+            { name: "id", type: "INTEGER", pk: 1 },
+            { name: "level", type: "TEXT", pk: 0 },
+            { name: "message", type: "TEXT", pk: 0 },
+            { name: "timestamp", type: "TEXT", pk: 0 },
+          ],
+        });
+        return;
+      }
+      await jsonResponse(route, { columns: [] });
+      return;
+    }
+
+    if (pathname === "/db/query" && request.method() === "POST") {
+      const payload = readJsonBody(route);
+      const query = String(payload.query || "");
+      if (query.includes("FROM message_queue")) {
+        await jsonResponse(route, {
+          columns: ["id", "user_name", "content"],
+          rows: [
+            { id: 1, user_name: "alice", content: "你好" },
+            { id: 2, user_name: "bob", content: "收到" },
+          ],
+        });
+        return;
+      }
+      if (query.includes("FROM logs")) {
+        await jsonResponse(route, {
+          columns: ["id", "level", "message"],
+          rows: [{ id: 1, level: "INFO", message: "ok" }],
+        });
+        return;
+      }
+      await jsonResponse(route, { columns: [], rows: [] });
+      return;
+    }
+
+    if (pathname === "/db/neo4j/query" && request.method() === "POST") {
+      const payload = readJsonBody(route);
+      const query = String(payload.query || "");
+
+      if (query.includes("RETURN DISTINCT labels(n) as labels")) {
+        await jsonResponse(route, {
+          metadata: [{ name: "labels", type: "LIST" }],
+          results: [[["CognitiveNode", "Memory"]]],
+        });
+        return;
+      }
+
+      if (query.includes("MATCH (n:CognitiveNode) RETURN n LIMIT 1")) {
+        await jsonResponse(route, {
+          metadata: [{ name: "n", type: "NODE" }],
+          results: [
+            [
+              {
+                identity: "1",
+                labels: ["CognitiveNode"],
+                properties: {
+                  uid: "node_1",
+                  name: "示例节点",
+                  conv_id: "group_1",
+                  act_lv: 0.95,
+                },
+              },
+            ],
+          ],
+        });
+        return;
+      }
+
+      if (query.includes("RETURN n.uid as id")) {
+        await jsonResponse(route, {
+          metadata: [
+            { name: "id", type: "STRING" },
+            { name: "name", type: "STRING" },
+          ],
+          results: [["node_1", "示例节点"]],
+        });
+        return;
+      }
+
+      await jsonResponse(route, {
+        metadata: [],
+        results: [],
+      });
       return;
     }
 

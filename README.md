@@ -76,6 +76,7 @@ poetry install
 - 🔍 记忆搜索引擎：按关键词/时间检索对话记录
 - 🛠️ 数据库工具箱：在线执行SQL+批量操作
 - 🔐 权限管理：多级用户权限控制
+- ✅ 前端质量回归：Playwright smoke 已覆盖登录、模块统计、插件策略、记忆管理、数据库管理；失败时保留 screenshot/trace/video 请求日志用于定位
 
 ## 🚨 常见问题
 
@@ -96,6 +97,7 @@ poetry install
 | ------------- | -------------------------------------------- |
 | 人格系统配置  | [persona模块文档](plugins/persona/README.md) |
 | WebUI使用指南 | [WebUI文档](plugins/webui/README.md)         |
+| 前端质量进展  | [前端简历亮点与扩展](docs/frontend_resume_highlights.md) |
 
 ## 后台管理
 

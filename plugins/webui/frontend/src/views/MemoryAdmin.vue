@@ -1,5 +1,5 @@
 <template>
-  <div class="memory-admin">
+  <div class="memory-admin" data-testid="memory-admin-page">
     <el-card class="box-card">
       <template #header>
         <div class="card-header">
@@ -8,6 +8,7 @@
             <el-select
               v-model="selectedConvId"
               placeholder="选择会话ID"
+              data-testid="memory-conv-select"
               clearable
               @change="loadGraphData"
             >
@@ -28,7 +29,12 @@
             >
               <template #prepend>节点数量限制:</template>
             </el-input-number>
-            <el-button type="primary" @click="loadGraphData">刷新</el-button>
+            <el-button
+              type="primary"
+              data-testid="memory-refresh"
+              @click="loadGraphData"
+              >刷新</el-button
+            >
           </div>
         </div>
       </template>
@@ -42,9 +48,15 @@
 
         <div class="graph-info-container">
           <div class="graph-info">
-            <p><strong>当前视图：</strong> {{ graphTitle }}</p>
-            <p><strong>节点数量：</strong> {{ nodeCount }}</p>
-            <p><strong>关联数量：</strong> {{ linkCount }}</p>
+            <p data-testid="memory-graph-title">
+              <strong>当前视图：</strong> {{ graphTitle }}
+            </p>
+            <p data-testid="memory-node-count">
+              <strong>节点数量：</strong> {{ nodeCount }}
+            </p>
+            <p data-testid="memory-link-count">
+              <strong>关联数量：</strong> {{ linkCount }}
+            </p>
           </div>
 
           <div class="graph-legend">
@@ -59,7 +71,11 @@
           </div>
         </div>
 
-        <div class="graph-container" ref="graphContainer"></div>
+        <div
+          class="graph-container"
+          ref="graphContainer"
+          data-testid="memory-graph-container"
+        ></div>
       </div>
     </el-card>
   </div>

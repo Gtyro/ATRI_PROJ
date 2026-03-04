@@ -1,0 +1,49 @@
+# Playwright 失败诊断模板（P0+）
+
+> 适用范围：`smoke` 与 `full E2E` 失败排查。  
+> 当前产物：失败截图、trace、video、`request-log.json`（测试失败时自动附加）。
+
+## 1. 基础信息
+
+- 失败用例：
+- 分支/提交：
+- CI 链接：
+- 重试次数：
+- 首次失败时间：
+
+## 2. 失败现象
+
+- 预期行为：
+- 实际行为：
+- 首个报错信息（原文）：
+
+## 3. 证据清单
+
+- 截图路径：`plugins/webui/frontend/test-results/**/test-failed-*.png`
+- Trace 路径：`plugins/webui/frontend/test-results/**/trace.zip`
+- 视频路径：`plugins/webui/frontend/test-results/**/*.webm`
+- 请求日志路径：`plugins/webui/frontend/test-results/**/request-log.json`
+
+## 4. 快速定位步骤
+
+1. 打开 screenshot，确认失败发生在哪一步。
+2. 使用 `npx playwright show-trace <trace.zip>` 对照 action 与 network 时间线。
+3. 检查 `request-log.json`：
+   - 是否有关键请求未发出。
+   - 是否命中错误 URL 或错误方法。
+   - 是否出现 4xx/5xx 或 `requestfailed`。
+4. 若是断言问题，核对页面文案/选择器是否发生变更。
+5. 若是接口问题，回放 mock 或后端返回并复现实例。
+
+## 5. 归因结论
+
+- 分类：`选择器变更 / 文案变更 / 接口契约变更 / 时序不稳定 / 环境问题 / 其他`
+- 根因：
+- 修复方式：
+- 是否需要补充回归用例：
+
+## 6. 修复后验证
+
+- 本地验证命令：`npm run test:e2e:smoke`
+- CI 验证结果：
+- 是否更新回归清单：`是/否`（若否，说明理由）

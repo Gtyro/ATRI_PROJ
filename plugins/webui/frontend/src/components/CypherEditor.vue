@@ -6,11 +6,17 @@
           v-model="query"
           :rows="6"
           type="textarea"
+          data-testid="db-cypher-input"
           placeholder="输入Cypher查询（例如：MATCH (n:CognitiveNode) RETURN n LIMIT 10）"
         ></el-input>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" :loading="loading" @click="executeQuery">
+        <el-button
+          type="primary"
+          data-testid="db-cypher-run-query"
+          :loading="loading"
+          @click="executeQuery"
+        >
           执行查询
         </el-button>
         <el-button @click="query = ''"> 清空 </el-button>

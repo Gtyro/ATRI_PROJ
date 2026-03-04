@@ -1,5 +1,5 @@
 <template>
-  <div class="table-manager">
+  <div class="table-manager" data-testid="table-manager">
     <el-form>
       <el-form-item label="数据源">
         <el-radio-group v-model="dataSource" @change="handleDataSourceChange">
@@ -12,6 +12,7 @@
         <el-select
           v-model="selectedTable"
           placeholder="请选择表"
+          data-testid="db-table-select"
           @change="handleTableChange"
         >
           <el-option
@@ -100,6 +101,7 @@
         <el-button
           type="primary"
           @click="buildAndExecuteQuery"
+          data-testid="table-manager-run-query"
           :loading="loading"
           >执行查询</el-button
         >
@@ -114,6 +116,7 @@
     <!-- 数据结果表格 -->
     <div
       class="result-table"
+      data-testid="table-manager-result"
       v-if="resultData.columns && resultData.columns.length"
     >
       <h3>查询结果 ({{ resultData.rows ? resultData.rows.length : 0 }} 行)</h3>
