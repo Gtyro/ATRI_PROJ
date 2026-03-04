@@ -11,7 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    setupFiles: ["./src/test/setup.js"],
+    setupFiles: ["./src/test/setup.ts"],
     globals: true,
     restoreMocks: true,
     exclude: [...configDefaults.exclude, "e2e/**"],

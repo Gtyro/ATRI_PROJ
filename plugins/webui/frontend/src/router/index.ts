@@ -1,21 +1,23 @@
-import { createRouter, createWebHashHistory } from "vue-router";
+import {
+  createRouter,
+  createWebHashHistory,
+  type RouteRecordRaw,
+} from "vue-router";
+
 import { useAuthStore } from "@/stores/auth";
 import { isTokenExpired } from "@/utils/jwt";
 
-// 懒加载路由组件
 const Login = () => import("@/views/LoginPage.vue");
 const AdminLayout = () => import("@/views/AdminLayout.vue");
 const DBAdmin = () => import("@/views/DBAdmin.vue");
 const MemoryAdmin = () => import("@/views/MemoryAdmin.vue");
-const DashboardOverview = () =>
-  import("@/views/dashboard/DashboardOverview.vue");
+const DashboardOverview = () => import("@/views/dashboard/DashboardOverview.vue");
 const WordCloudPage = () => import("@/views/wordcloud/WordCloudPage.vue");
 const MemoryTimeline = () => import("@/views/MemoryTimeline.vue");
 const PluginPolicyPage = () => import("@/views/PluginPolicyPage.vue");
 const ModuleMetricsPage = () => import("@/views/ModuleMetricsPage.vue");
 
-// 路由配置
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: "/",
     redirect: "/admin",
@@ -78,26 +80,30 @@ const router = createRouter({
   routes,
 });
 
-// 全局前置守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
   const token = authStore.token;
+
   if (token && isTokenExpired(token)) {
     authStore.resetAuth();
   }
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+
+  const requiresAuth = to.matched.some(
+    (record) => record.meta.requiresAuth === true,
+  );
   const isAuthenticated = authStore.isAuthenticated;
 
   if (requiresAuth && !isAuthenticated) {
-    // 需要认证但未登录，重定向到登录页
     next("/login");
-  } else if (to.path === "/login" && isAuthenticated) {
-    // 已登录但尝试访问登录页，重定向到首页
-    next("/admin");
-  } else {
-    // 其他情况正常通过
-    next();
+    return;
   }
+
+  if (to.path === "/login" && isAuthenticated) {
+    next("/admin");
+    return;
+  }
+
+  next();
 });
 
 export default router;

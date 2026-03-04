@@ -1,65 +1,90 @@
-// store/modules/auth.js
 import { defineStore } from "pinia";
-import { login, logout, getUserInfo, refreshToken } from "@/api/auth";
 import { ElMessage } from "element-plus";
+
+import { getUserInfo, login, logout, refreshToken, type AuthUser } from "@/api/auth";
 import router from "@/router";
 import { isTokenExpired } from "@/utils/jwt";
 
+interface AuthState {
+  token: string;
+  user: AuthUser | null;
+}
+
+const parseStoredUser = (): AuthUser | null => {
+  const rawUser = localStorage.getItem("user");
+  if (!rawUser) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawUser);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "未知错误";
+};
+
 export const useAuthStore = defineStore("auth", {
-  state: () => ({
+  state: (): AuthState => ({
     token: localStorage.getItem("token") || "",
-    user: JSON.parse(localStorage.getItem("user")) || null,
+    user: parseStoredUser(),
   }),
 
   getters: {
-    isAuthenticated: (state) => !!state.token && !isTokenExpired(state.token),
-    username: (state) => state.user?.username,
+    isAuthenticated: (state): boolean =>
+      Boolean(state.token) && !isTokenExpired(state.token),
+    username: (state): string | undefined => state.user?.username,
   },
 
   actions: {
-    async login(username, password) {
+    async login(username: string, password: string): Promise<boolean> {
       try {
-        console.log("尝试登录:", username);
         const response = await login(username, password);
-        console.log("登录响应:", response);
 
-        // 根据FastAPI OAuth2标准响应格式获取token
         const token = response.data.access_token;
-        const refreshToken = response.data.refresh_token;
+        const refreshTokenValue = response.data.refresh_token;
         if (!token) {
           throw new Error("响应中没有找到访问令牌");
         }
 
         this.token = token;
         localStorage.setItem("token", token);
-        if (refreshToken) {
-          localStorage.setItem("refresh_token", refreshToken);
+        if (refreshTokenValue) {
+          localStorage.setItem("refresh_token", refreshTokenValue);
         }
         await this.fetchUserInfo();
         return true;
-      } catch (error) {
-        console.error("登录错误:", error);
+      } catch (error: unknown) {
         this.resetAuth();
         throw error;
       }
     },
 
-    async fetchUserInfo() {
-      if (!this.token) return null;
+    async fetchUserInfo(): Promise<AuthUser | null> {
+      if (!this.token) {
+        return null;
+      }
 
       try {
         const response = await getUserInfo();
         this.user = response.data;
         localStorage.setItem("user", JSON.stringify(response.data));
         return this.user;
-      } catch (error) {
-        ElMessage.error("获取用户信息失败: " + error.message);
+      } catch (error: unknown) {
+        ElMessage.error(`获取用户信息失败: ${getErrorMessage(error)}`);
         this.resetAuth();
         throw error;
       }
     },
 
-    async logout() {
+    async logout(): Promise<void> {
       try {
         await logout();
       } finally {
@@ -68,7 +93,7 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
-    resetAuth() {
+    resetAuth(): void {
       this.token = "";
       this.user = null;
       localStorage.removeItem("token");
@@ -76,11 +101,12 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem("refresh_token");
     },
 
-    async refreshToken() {
+    async refreshToken(): Promise<boolean> {
       try {
-        // 使用现有的refresh_token刷新访问令牌
         const refreshTokenValue = localStorage.getItem("refresh_token");
-        if (!refreshTokenValue) throw new Error("没有刷新令牌");
+        if (!refreshTokenValue) {
+          throw new Error("没有刷新令牌");
+        }
 
         const response = await refreshToken(refreshTokenValue);
 
@@ -99,8 +125,7 @@ export const useAuthStore = defineStore("auth", {
         }
 
         return true;
-      } catch (error) {
-        console.error("刷新令牌失败:", error);
+      } catch (error: unknown) {
         this.resetAuth();
         throw error;
       }

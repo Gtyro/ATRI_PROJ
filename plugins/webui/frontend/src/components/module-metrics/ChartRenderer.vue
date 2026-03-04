@@ -66,7 +66,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
   computed,
   nextTick,
@@ -76,8 +76,18 @@ import {
   watch,
 } from "vue";
 import * as echarts from "echarts";
+import type { EChartsType } from "echarts";
 
-const TABLE_COLUMN_LABELS = {
+import type {
+  ModuleMetricChart,
+  ModuleMetricDataRow,
+  ModuleMetricKpi,
+  ModuleMetricMeta,
+  ModuleMetricSeries,
+  ModuleMetricXAxis,
+} from "@/types/module_metrics";
+
+const TABLE_COLUMN_LABELS: Record<string, string> = {
   created_at: "时间",
   plugin_name: "Plugin",
   module_name: "Module",
@@ -97,28 +107,30 @@ const TABLE_COLUMN_LABELS = {
   failed_calls: "失败次数",
 };
 
-const props = defineProps({
-  chart: {
-    type: Object,
-    default: () => ({}),
+const props = withDefaults(
+  defineProps<{
+    chart?: Partial<ModuleMetricChart> | null;
+    height?: number;
+    showTitle?: boolean;
+    compact?: boolean;
+  }>(),
+  {
+    chart: () => ({}),
+    height: 320,
+    showTitle: true,
+    compact: false,
   },
-  height: {
-    type: Number,
-    default: 320,
-  },
-  showTitle: {
-    type: Boolean,
-    default: true,
-  },
-  compact: {
-    type: Boolean,
-    default: false,
-  },
-});
+);
 
-const chartRef = ref(null);
-let chartInstance = null;
-let resizeObserver = null;
+const chartRef = ref<HTMLDivElement | null>(null);
+let chartInstance: EChartsType | null = null;
+let resizeObserver: ResizeObserver | null = null;
+
+interface TableColumnView {
+  prop: string;
+  label: string;
+  minWidth: number;
+}
 
 const chartTitle = computed(() => {
   const title = props.chart?.title;
@@ -131,26 +143,30 @@ const chartType = computed(() => {
     .toLowerCase();
 });
 
-const chartDataset = computed(() => {
-  return Array.isArray(props.chart?.dataset) ? props.chart.dataset : [];
+const chartDataset = computed<ModuleMetricDataRow[]>(() => {
+  return Array.isArray(props.chart?.dataset)
+    ? (props.chart.dataset as ModuleMetricDataRow[])
+    : [];
 });
 
-const chartSeries = computed(() => {
-  return Array.isArray(props.chart?.series) ? props.chart.series : [];
+const chartSeries = computed<ModuleMetricSeries[]>(() => {
+  return Array.isArray(props.chart?.series)
+    ? (props.chart.series as ModuleMetricSeries[])
+    : [];
 });
 
-const chartXAxis = computed(() => {
+const chartXAxis = computed<ModuleMetricXAxis>(() => {
   const value = props.chart?.x_axis;
   if (value && typeof value === "object") {
-    return value;
+    return value as ModuleMetricXAxis;
   }
   return {};
 });
 
-const chartMeta = computed(() => {
+const chartMeta = computed<ModuleMetricMeta>(() => {
   const value = props.chart?.meta;
   if (value && typeof value === "object") {
-    return value;
+    return value as ModuleMetricMeta;
   }
   return {};
 });
@@ -167,26 +183,28 @@ const chartHeightStyle = computed(() => {
   return { height: `${height}px` };
 });
 
-const kpiItems = computed(() => {
-  return chartDataset.value.filter((item) => item && typeof item === "object");
+const kpiItems = computed<ModuleMetricKpi[]>(() => {
+  return chartDataset.value.filter(
+    (item) => item && typeof item === "object",
+  ) as ModuleMetricKpi[];
 });
 
-const tableRows = computed(() => {
+const tableRows = computed<Record<string, unknown>[]>(() => {
   return chartDataset.value
     .filter((item) => item != null)
     .map((item) => {
       if (item && typeof item === "object" && !Array.isArray(item)) {
-        return item;
+        return item as Record<string, unknown>;
       }
       return { value: item };
     });
 });
 
-const tableColumns = computed(() => {
+const tableColumns = computed<TableColumnView[]>(() => {
   const rawColumns = chartMeta.value.columns;
   if (Array.isArray(rawColumns) && rawColumns.length > 0) {
     return rawColumns
-      .map((column) => {
+      .map((column): TableColumnView | null => {
         if (typeof column === "string") {
           const prop = column;
           return {
@@ -204,11 +222,11 @@ const tableColumns = computed(() => {
         }
         return {
           prop,
-          label: column.label || formatColumnLabel(prop),
+          label: String(column.label || formatColumnLabel(prop)),
           minWidth: Number(column.minWidth) || getColumnMinWidth(prop),
         };
       })
-      .filter(Boolean);
+      .filter((column): column is TableColumnView => column !== null);
   }
 
   const [firstRow] = tableRows.value;
@@ -246,13 +264,27 @@ const tableMetaText = computed(() => {
   return "";
 });
 
-const pad = (value) => String(value).padStart(2, "0");
+const pad = (value: number | string): string => String(value).padStart(2, "0");
 
-const formatDateTime = (value) => {
+const normalizeDateInput = (value: unknown): string | number | Date | null => {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    return value;
+  }
+  return null;
+};
+
+const formatDateTime = (value: unknown): string => {
   if (!value) {
     return "-";
   }
-  const date = new Date(value);
+  const normalized = normalizeDateInput(value);
+  if (normalized == null) {
+    return String(value);
+  }
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
     return String(value);
   }
@@ -265,11 +297,15 @@ const formatDateTime = (value) => {
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 };
 
-const formatAxisTime = (value) => {
+const formatAxisTime = (value: unknown): string => {
   if (!value) {
     return "-";
   }
-  const date = new Date(value);
+  const normalized = normalizeDateInput(value);
+  if (normalized == null) {
+    return String(value);
+  }
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
     return String(value);
   }
@@ -284,24 +320,24 @@ const formatAxisTime = (value) => {
   return `${month}-${day} ${hour}:${minute}`;
 };
 
-const toFiniteNumber = (value, fallback = 0) => {
+const toFiniteNumber = (value: unknown, fallback = 0): number => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 };
 
-const formatInteger = (value) => {
+const formatInteger = (value: unknown): string => {
   return Math.round(toFiniteNumber(value, 0)).toLocaleString();
 };
 
-const formatDecimal = (value) => {
+const formatDecimal = (value: unknown): string => {
   return toFiniteNumber(value, 0).toFixed(2);
 };
 
-const formatPercent = (value) => {
+const formatPercent = (value: unknown): string => {
   return `${(toFiniteNumber(value, 0) * 100).toFixed(2)}%`;
 };
 
-const formatColumnLabel = (key) => {
+const formatColumnLabel = (key: unknown): string => {
   const normalized = String(key || "").trim();
   if (!normalized) {
     return "字段";
@@ -316,7 +352,7 @@ const formatColumnLabel = (key) => {
     .join(" ");
 };
 
-const getColumnMinWidth = (prop) => {
+const getColumnMinWidth = (prop: unknown): number => {
   const key = String(prop || "").trim();
   if (["created_at", "request_id", "conv_id"].includes(key)) {
     return 180;
@@ -338,12 +374,12 @@ const getColumnMinWidth = (prop) => {
   return 120;
 };
 
-const isDangerKpi = (item) => {
+const isDangerKpi = (item: ModuleMetricKpi): boolean => {
   const key = String(item?.key || "").toLowerCase();
   return key.includes("failed") || key.includes("error");
 };
 
-const formatKpiValue = (item) => {
+const formatKpiValue = (item: ModuleMetricKpi): string => {
   const format = String(item?.format || "").toLowerCase();
   const raw = item?.value;
   if (format === "integer") {
@@ -365,7 +401,7 @@ const formatKpiValue = (item) => {
   return String(raw);
 };
 
-const formatTableCell = (value, key) => {
+const formatTableCell = (value: unknown, key: string): string => {
   if (key === "success") {
     return value ? "成功" : "失败";
   }
@@ -389,7 +425,7 @@ const formatTableCell = (value, key) => {
   return String(value);
 };
 
-const buildFallbackSeries = (xField) => {
+const buildFallbackSeries = (xField: string): ModuleMetricSeries[] => {
   const [sample] = chartDataset.value;
   if (!sample || typeof sample !== "object") {
     return [];
@@ -406,7 +442,7 @@ const buildFallbackSeries = (xField) => {
     }));
 };
 
-const buildLineOrBarOption = () => {
+const buildLineOrBarOption = (): Record<string, unknown> => {
   const xField = String(chartXAxis.value.field || "").trim();
   const axisType = String(chartXAxis.value.type || "category").toLowerCase();
   const seriesConfig =
@@ -485,7 +521,7 @@ const buildLineOrBarOption = () => {
   };
 };
 
-const buildPieOption = () => {
+const buildPieOption = (): Record<string, unknown> => {
   const [mainSeries] = chartSeries.value;
   const valueField = String(mainSeries?.field || "value").trim();
   const nameField = String(mainSeries?.name_field || "name").trim();
@@ -521,7 +557,7 @@ const buildPieOption = () => {
   };
 };
 
-const buildChartOption = () => {
+const buildChartOption = (): Record<string, unknown> => {
   if (chartType.value === "line" || chartType.value === "bar") {
     return buildLineOrBarOption();
   }
@@ -531,7 +567,7 @@ const buildChartOption = () => {
   return {};
 };
 
-const ensureChartInstance = () => {
+const ensureChartInstance = (): EChartsType | null => {
   if (!chartRef.value) {
     return null;
   }
@@ -541,20 +577,20 @@ const ensureChartInstance = () => {
   return chartInstance;
 };
 
-const disposeChart = () => {
+const disposeChart = (): void => {
   if (chartInstance) {
     chartInstance.dispose();
     chartInstance = null;
   }
 };
 
-const handleResize = () => {
+const handleResize = (): void => {
   if (chartInstance) {
     chartInstance.resize();
   }
 };
 
-const bindResizeObserver = () => {
+const bindResizeObserver = (): void => {
   if (typeof ResizeObserver === "undefined") {
     return;
   }
@@ -571,7 +607,7 @@ const bindResizeObserver = () => {
   resizeObserver.observe(chartRef.value);
 };
 
-const renderEchart = async () => {
+const renderEchart = async (): Promise<void> => {
   if (!isEChartType.value) {
     disposeChart();
     return;

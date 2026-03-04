@@ -249,7 +249,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { ArrowLeft, Filter, FullScreen, Search } from "@element-plus/icons-vue";
@@ -261,12 +261,37 @@ import {
   fetchModuleMetricOptions,
   fetchModuleMetricOverview,
 } from "@/api/module_metrics";
+import type {
+  ModuleMetricChart,
+  ModuleMetricDefinition,
+  ModuleMetricDetailPayload,
+  ModuleMetricKpi,
+  ModuleMetricOptionsPayload,
+  ModuleMetricOverviewItem,
+  ModuleMetricQueryParams,
+} from "@/types/module_metrics";
+
+type DateRange = [Date, Date];
+
+interface ModuleFilters {
+  plugin_name: string;
+  module_name: string;
+  operation: string;
+  conv_id: string;
+}
+
+interface LoadingState {
+  modules: boolean;
+  options: boolean;
+  overview: boolean;
+  detail: boolean;
+}
 
 const PAGE_MODE_OVERVIEW = "overview";
 const PAGE_MODE_FOCUS = "focus";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const buildDefaultDateRange = () => {
+const buildDefaultDateRange = (): DateRange => {
   const end = new Date();
   const start = new Date(end.getTime() - 7 * DAY_MS);
   return [start, end];
@@ -274,35 +299,35 @@ const buildDefaultDateRange = () => {
 
 const mode = ref(PAGE_MODE_OVERVIEW);
 const focusedModuleId = ref("");
-const focusedDetail = ref(null);
+const focusedDetail = ref<ModuleMetricDetailPayload | null>(null);
 
-const dateRange = ref(buildDefaultDateRange());
+const dateRange = ref<DateRange>(buildDefaultDateRange());
 const searchKeyword = ref("");
 const showAdvanced = ref(false);
 
-const filters = reactive({
+const filters = reactive<ModuleFilters>({
   plugin_name: "",
   module_name: "",
   operation: "",
   conv_id: "",
 });
 
-const options = reactive({
+const options = reactive<ModuleMetricOptionsPayload>({
   plugin_names: [],
   module_names: [],
   operations: [],
   conv_ids: [],
 });
 
-const loading = reactive({
+const loading = reactive<LoadingState>({
   modules: false,
   options: false,
   overview: false,
   detail: false,
 });
 
-const moduleDefinitions = ref([]);
-const overviewItems = ref([]);
+const moduleDefinitions = ref<ModuleMetricDefinition[]>([]);
+const overviewItems = ref<ModuleMetricOverviewItem[]>([]);
 
 const modeTagText = computed(() => {
   return mode.value === PAGE_MODE_OVERVIEW ? "Overview" : "Focus";
@@ -315,7 +340,7 @@ const isRefreshing = computed(() => {
 });
 
 const moduleDefinitionMap = computed(() => {
-  const mapping = {};
+  const mapping: Record<string, ModuleMetricDefinition> = {};
   for (const item of moduleDefinitions.value) {
     const moduleId = String(item?.module_id || "").trim();
     if (!moduleId) {
@@ -327,7 +352,7 @@ const moduleDefinitionMap = computed(() => {
 });
 
 const normalizedOverviewItems = computed(() => {
-  const items = [];
+  const items: ModuleMetricOverviewItem[] = [];
   for (const raw of overviewItems.value) {
     if (!raw || typeof raw !== "object") {
       continue;
@@ -336,12 +361,12 @@ const normalizedOverviewItems = computed(() => {
     if (!moduleId) {
       continue;
     }
-    const definition = moduleDefinitionMap.value[moduleId] || {};
+    const definition = moduleDefinitionMap.value[moduleId];
     items.push({
       ...definition,
       ...raw,
       module_id: moduleId,
-      title: raw.title || definition.title || moduleId,
+      title: raw.title || definition?.title || moduleId,
       kpis: Array.isArray(raw.kpis) ? raw.kpis : [],
       main_chart:
         raw.main_chart && typeof raw.main_chart === "object"
@@ -353,9 +378,9 @@ const normalizedOverviewItems = computed(() => {
 });
 
 const mergedOverviewItems = computed(() => {
-  const ordered = [];
+  const ordered: ModuleMetricOverviewItem[] = [];
   const seen = new Set();
-  const overviewById = {};
+  const overviewById: Record<string, ModuleMetricOverviewItem> = {};
 
   for (const item of normalizedOverviewItems.value) {
     overviewById[item.module_id] = item;
@@ -416,7 +441,7 @@ const filteredOverviewItems = computed(() => {
 
 const detailCharts = computed(() => {
   const charts = focusedDetail.value?.charts;
-  return Array.isArray(charts) ? charts : [];
+  return Array.isArray(charts) ? charts : ([] as ModuleMetricChart[]);
 });
 
 const focusedModuleTitle = computed(() => {
@@ -428,9 +453,9 @@ const focusedModuleTitle = computed(() => {
   return String(definition?.title || focusedModuleId.value || "模块详情");
 });
 
-const pad = (value) => String(value).padStart(2, "0");
+const pad = (value: number | string) => String(value).padStart(2, "0");
 
-const toApiDateTime = (date) => {
+const toApiDateTime = (date: Date | null | undefined): string | null => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return null;
   }
@@ -443,8 +468,8 @@ const toApiDateTime = (date) => {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
 };
 
-const buildBaseParams = () => {
-  const params = {};
+const buildBaseParams = (): ModuleMetricQueryParams => {
+  const params: ModuleMetricQueryParams = {};
 
   if (Array.isArray(dateRange.value) && dateRange.value.length === 2) {
     const [fromTime, toTime] = dateRange.value;
@@ -474,7 +499,7 @@ const buildBaseParams = () => {
   return params;
 };
 
-const formatKpiPreview = (kpi) => {
+const formatKpiPreview = (kpi: ModuleMetricKpi): string => {
   const format = String(kpi?.format || "").toLowerCase();
   const number = Number(kpi?.value);
   if (format === "percent") {
@@ -492,11 +517,11 @@ const formatKpiPreview = (kpi) => {
   return String(kpi.value);
 };
 
-const resolveModuleTitle = (item) => {
+const resolveModuleTitle = (item: ModuleMetricOverviewItem): string => {
   return String(item?.title || item?.module_id || "未命名模块");
 };
 
-const resolveModuleDescription = (item) => {
+const resolveModuleDescription = (item: ModuleMetricOverviewItem): string => {
   const description = String(item?.description || "").trim();
   if (description) {
     return description;
@@ -506,19 +531,19 @@ const resolveModuleDescription = (item) => {
   return `${pluginName} / ${moduleName}`;
 };
 
-const getCardKpis = (item) => {
+const getCardKpis = (item: ModuleMetricOverviewItem): ModuleMetricKpi[] => {
   if (!Array.isArray(item?.kpis)) {
     return [];
   }
   return item.kpis.slice(0, 3);
 };
 
-const resolveDetailCardClass = (chart) => {
+const resolveDetailCardClass = (chart: ModuleMetricChart): string => {
   const type = String(chart?.type || "").toLowerCase();
   return type ? `detail-card--${type}` : "detail-card--default";
 };
 
-const resolveDetailChartHeight = (chart) => {
+const resolveDetailChartHeight = (chart: ModuleMetricChart): number => {
   const type = String(chart?.type || "").toLowerCase();
   if (type === "table") {
     return 420;
@@ -590,7 +615,10 @@ const loadFocusDetail = async () => {
   loading.detail = true;
   try {
     const { data } = await fetchModuleMetricDetail(moduleId, buildBaseParams());
-    focusedDetail.value = data && typeof data === "object" ? data : {};
+    focusedDetail.value =
+      data && typeof data === "object"
+        ? data
+        : { module_id: moduleId, charts: [] };
   } catch (error) {
     focusedDetail.value = { module_id: moduleId, charts: [] };
     ElMessage.error("加载模块详情失败");
@@ -625,7 +653,7 @@ const toggleAdvanced = () => {
   showAdvanced.value = !showAdvanced.value;
 };
 
-const handleFocus = async (moduleId) => {
+const handleFocus = async (moduleId: string): Promise<void> => {
   focusedModuleId.value = String(moduleId || "").trim();
   mode.value = PAGE_MODE_FOCUS;
   await loadFocusDetail();

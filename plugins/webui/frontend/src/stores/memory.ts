@@ -1,43 +1,53 @@
-// store/modules/memory.js
 import { defineStore } from "pinia";
+
 import {
-  getMemoryTimeline,
+  getConversations,
   getMemoryDetail,
   getMemoryStats,
-  getConversations,
+  getMemoryTimeline,
+  type MemoryTimelineItem,
 } from "@/api/memory";
 
-export const useMemoryStore = defineStore("memory", {
-  state: () => ({
-    // 记忆时间线数据
-    timelineData: [],
+interface TimeRange {
+  start: Date | null;
+  end: Date | null;
+}
 
-    // 会话列表
+interface MemoryState {
+  timelineData: MemoryTimelineItem[];
+  conversations: string[];
+  currentConvId: string;
+  memoryStats: Record<string, unknown>;
+  selectedMemory: Record<string, unknown> | null;
+  timeRange: TimeRange;
+  isLoading: boolean;
+  error: string | null;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "未知错误";
+};
+
+export const useMemoryStore = defineStore("memory", {
+  state: (): MemoryState => ({
+    timelineData: [],
     conversations: [],
     currentConvId: "",
-
-    // 记忆统计
     memoryStats: {},
-
-    // 当前选中的记忆
     selectedMemory: null,
-
-    // 时间范围过滤
     timeRange: {
       start: null,
       end: null,
     },
-
-    // 加载状态
     isLoading: false,
-
-    // 错误信息
     error: null,
   }),
 
   getters: {
-    // 获取当前过滤后的记忆数据
-    filteredMemories: (state) => {
+    filteredMemories: (state): MemoryTimelineItem[] => {
       if (!state.timeRange.start && !state.timeRange.end) {
         return state.timelineData;
       }
@@ -50,9 +60,11 @@ export const useMemoryStore = defineStore("memory", {
             createdAt >= state.timeRange.start &&
             createdAt <= state.timeRange.end
           );
-        } else if (state.timeRange.start) {
+        }
+        if (state.timeRange.start) {
           return createdAt >= state.timeRange.start;
-        } else if (state.timeRange.end) {
+        }
+        if (state.timeRange.end) {
           return createdAt <= state.timeRange.end;
         }
 
@@ -60,11 +72,10 @@ export const useMemoryStore = defineStore("memory", {
       });
     },
 
-    // 按时间分组的记忆数据
-    memoriesByDay: (state) => {
-      const grouped = {};
+    memoriesByDay(): Record<string, MemoryTimelineItem[]> {
+      const grouped: Record<string, MemoryTimelineItem[]> = {};
 
-      state.filteredMemories.forEach((memory) => {
+      this.filteredMemories.forEach((memory) => {
         const date = new Date(memory.created_at * 1000).toLocaleDateString();
         if (!grouped[date]) {
           grouped[date] = [];
@@ -77,35 +88,33 @@ export const useMemoryStore = defineStore("memory", {
   },
 
   actions: {
-    // 设置时间范围
-    setTimeRange(start, end) {
+    setTimeRange(start: Date | null, end: Date | null): void {
       this.timeRange = { start, end };
     },
 
-    // 设置当前会话ID
-    setCurrentConvId(convId) {
+    setCurrentConvId(convId: string): void {
       this.currentConvId = convId;
     },
 
-    // 获取会话列表
-    async fetchConversations() {
+    async fetchConversations(): Promise<string[]> {
       this.isLoading = true;
       this.error = null;
 
       try {
         const response = await getConversations();
-        this.conversations = response.data.rows || [];
+        this.conversations = Array.isArray(response.data?.rows)
+          ? response.data.rows
+          : [];
         return this.conversations;
-      } catch (error) {
-        this.error = `获取会话列表失败: ${error.message}`;
+      } catch (error: unknown) {
+        this.error = `获取会话列表失败: ${getErrorMessage(error)}`;
         throw error;
       } finally {
         this.isLoading = false;
       }
     },
 
-    // 获取记忆时间线数据
-    async fetchMemoryTimeline() {
+    async fetchMemoryTimeline(): Promise<MemoryTimelineItem[]> {
       this.isLoading = true;
       this.error = null;
 
@@ -120,52 +129,59 @@ export const useMemoryStore = defineStore("memory", {
             : null,
         );
 
-        this.timelineData = response.data.memories || [];
+        this.timelineData = Array.isArray(response.data?.memories)
+          ? response.data.memories
+          : [];
         return this.timelineData;
-      } catch (error) {
-        this.error = `获取记忆时间线失败: ${error.message}`;
+      } catch (error: unknown) {
+        this.error = `获取记忆时间线失败: ${getErrorMessage(error)}`;
         throw error;
       } finally {
         this.isLoading = false;
       }
     },
 
-    // 获取记忆详情
-    async fetchMemoryDetail(memoryId) {
+    async fetchMemoryDetail(
+      memoryId: string,
+    ): Promise<Record<string, unknown> | null> {
       this.isLoading = true;
       this.error = null;
 
       try {
         const response = await getMemoryDetail(memoryId);
-        this.selectedMemory = response.data;
+        this.selectedMemory =
+          response.data && typeof response.data === "object"
+            ? response.data
+            : null;
         return this.selectedMemory;
-      } catch (error) {
-        this.error = `获取记忆详情失败: ${error.message}`;
+      } catch (error: unknown) {
+        this.error = `获取记忆详情失败: ${getErrorMessage(error)}`;
         throw error;
       } finally {
         this.isLoading = false;
       }
     },
 
-    // 获取记忆统计数据
-    async fetchMemoryStats() {
+    async fetchMemoryStats(): Promise<Record<string, unknown>> {
       this.isLoading = true;
       this.error = null;
 
       try {
         const response = await getMemoryStats(this.currentConvId);
-        this.memoryStats = response.data;
+        this.memoryStats =
+          response.data && typeof response.data === "object"
+            ? response.data
+            : {};
         return this.memoryStats;
-      } catch (error) {
-        this.error = `获取记忆统计失败: ${error.message}`;
+      } catch (error: unknown) {
+        this.error = `获取记忆统计失败: ${getErrorMessage(error)}`;
         throw error;
       } finally {
         this.isLoading = false;
       }
     },
 
-    // 重置状态
-    resetState() {
+    resetState(): void {
       this.timelineData = [];
       this.selectedMemory = null;
       this.error = null;

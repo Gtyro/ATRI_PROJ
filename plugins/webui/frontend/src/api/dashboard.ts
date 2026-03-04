@@ -1,15 +1,28 @@
+import type { AxiosResponse } from "axios";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 
 import { request } from "./index";
 
-const dashboardStreamState = {
+export type DashboardStreamPayload = Record<string, unknown>;
+
+type UpdateListener = (payload: DashboardStreamPayload) => void;
+type ErrorListener = (error: unknown) => void;
+
+interface DashboardStreamState {
+  controller: AbortController | null;
+  listeners: Set<UpdateListener>;
+  errorListeners: Set<ErrorListener>;
+  intervalSeconds: number;
+}
+
+const dashboardStreamState: DashboardStreamState = {
   controller: null,
-  listeners: new Set(),
-  errorListeners: new Set(),
+  listeners: new Set<UpdateListener>(),
+  errorListeners: new Set<ErrorListener>(),
   intervalSeconds: 5,
 };
 
-function stopSharedDashboardStreamIfIdle() {
+function stopSharedDashboardStreamIfIdle(): void {
   if (
     dashboardStreamState.listeners.size > 0 ||
     dashboardStreamState.errorListeners.size > 0
@@ -23,27 +36,27 @@ function stopSharedDashboardStreamIfIdle() {
   dashboardStreamState.controller = null;
 }
 
-function emitDashboardUpdate(payload) {
+function emitDashboardUpdate(payload: DashboardStreamPayload): void {
   dashboardStreamState.listeners.forEach((listener) => {
     try {
       listener(payload);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("dashboard SSE 回调执行失败:", err);
     }
   });
 }
 
-function emitDashboardError(err) {
+function emitDashboardError(err: unknown): void {
   dashboardStreamState.errorListeners.forEach((listener) => {
     try {
       listener(err);
-    } catch (callbackErr) {
+    } catch (callbackErr: unknown) {
       console.error("dashboard SSE 错误回调执行失败:", callbackErr);
     }
   });
 }
 
-function ensureSharedDashboardStream(intervalSeconds = 5) {
+function ensureSharedDashboardStream(intervalSeconds = 5): void {
   if (dashboardStreamState.controller) {
     return;
   }
@@ -64,7 +77,7 @@ function ensureSharedDashboardStream(intervalSeconds = 5) {
         }
         throw new Error(`dashboard SSE open failed: ${response.status}`);
       },
-      async fetch(input, init) {
+      async fetch(input: RequestInfo | URL, init?: RequestInit) {
         const token = localStorage.getItem("token");
         return fetch(input, {
           ...init,
@@ -82,8 +95,8 @@ function ensureSharedDashboardStream(intervalSeconds = 5) {
           return;
         }
         try {
-          emitDashboardUpdate(JSON.parse(event.data));
-        } catch (err) {
+          emitDashboardUpdate(JSON.parse(event.data) as DashboardStreamPayload);
+        } catch (err: unknown) {
           console.error("解析 dashboard SSE 消息失败:", err);
         }
       },
@@ -92,7 +105,7 @@ function ensureSharedDashboardStream(intervalSeconds = 5) {
       },
     },
   )
-    .catch((err) => {
+    .catch((err: unknown) => {
       if (controller.signal.aborted) {
         return;
       }
@@ -112,28 +125,50 @@ function ensureSharedDashboardStream(intervalSeconds = 5) {
     });
 }
 
-export function fetchDashboardBotInfo() {
-  return request.get("/api/dashboard/bot-info");
+export function fetchDashboardBotInfo(): Promise<AxiosResponse<Record<string, unknown>>> {
+  return request.get<Record<string, unknown>>("/api/dashboard/bot-info");
 }
 
-export function fetchDashboardConnectionLogs(limit = 20) {
-  return request.get("/api/dashboard/bot-connections", { limit });
+export function fetchDashboardConnectionLogs(
+  limit = 20,
+): Promise<AxiosResponse<Record<string, unknown>>> {
+  return request.get<Record<string, unknown>>("/api/dashboard/bot-connections", {
+    limit,
+  });
 }
 
-export function fetchChatThroughputHourly(hours = 24) {
-  return request.get("/api/dashboard/chat-throughput/hourly", { hours });
+export function fetchChatThroughputHourly(
+  hours = 24,
+): Promise<AxiosResponse<Record<string, unknown>>> {
+  return request.get<Record<string, unknown>>("/api/dashboard/chat-throughput/hourly", {
+    hours,
+  });
 }
 
-export function fetchChatThroughputDaily(days = 120) {
-  return request.get("/api/dashboard/chat-throughput/daily", { days });
+export function fetchChatThroughputDaily(
+  days = 120,
+): Promise<AxiosResponse<Record<string, unknown>>> {
+  return request.get<Record<string, unknown>>("/api/dashboard/chat-throughput/daily", {
+    days,
+  });
 }
 
-export function subscribeDashboardStream({
-  intervalSeconds = 5,
-  signal,
-  onUpdate,
-  onError,
-} = {}) {
+export interface DashboardStreamSubscriptionOptions {
+  intervalSeconds?: number;
+  signal?: AbortSignal;
+  onUpdate?: UpdateListener;
+  onError?: ErrorListener;
+}
+
+export function subscribeDashboardStream(
+  options: DashboardStreamSubscriptionOptions = {},
+): () => void {
+  const {
+    intervalSeconds = 5,
+    signal,
+    onUpdate,
+    onError,
+  } = options;
   const updateListener = typeof onUpdate === "function" ? onUpdate : null;
   const errorListener = typeof onError === "function" ? onError : null;
   let released = false;
@@ -147,7 +182,7 @@ export function subscribeDashboardStream({
 
   ensureSharedDashboardStream(intervalSeconds);
 
-  const release = () => {
+  const release = (): void => {
     if (released) {
       return;
     }
