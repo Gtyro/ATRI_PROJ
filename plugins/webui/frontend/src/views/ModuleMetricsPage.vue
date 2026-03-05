@@ -132,73 +132,75 @@
       </el-collapse-transition>
     </el-card>
 
-    <div
-      v-if="mode === PAGE_MODE_OVERVIEW"
-      class="overview-panel"
-      v-loading="loading.overview"
-    >
-      <el-empty
-        v-if="filteredOverviewItems.length === 0 && !loading.overview"
-        description="暂无匹配模块"
-      />
-
-      <div v-else class="module-grid">
-        <el-card
-          v-for="item in filteredOverviewItems"
-          :key="item.module_id"
-          class="module-card"
-          shadow="hover"
-          :data-testid="`module-card-${item.module_id}`"
-        >
-          <template #header>
-            <div class="module-card-header">
-              <div class="module-card-title">
-                <h4>{{ resolveModuleTitle(item) }}</h4>
-                <p>{{ item.module_id }}</p>
+    <div v-if="mode === PAGE_MODE_OVERVIEW" class="overview-panel">
+      <AsyncStateBlock
+        :loading="loading.overview"
+        :error-text="errors.overview"
+        :empty="filteredOverviewItems.length === 0"
+        empty-text="暂无匹配模块"
+        loading-text="正在加载模块总览..."
+        @retry="loadOverview"
+      >
+        <div class="module-grid">
+          <el-card
+            v-for="item in filteredOverviewItems"
+            :key="item.module_id"
+            class="module-card"
+            shadow="hover"
+            :data-testid="`module-card-${item.module_id}`"
+          >
+            <template #header>
+              <div class="module-card-header">
+                <div class="module-card-title">
+                  <h4>{{ resolveModuleTitle(item) }}</h4>
+                  <p>{{ item.module_id }}</p>
+                </div>
+                <el-tooltip content="放大查看详情" placement="top">
+                  <el-button
+                    circle
+                    size="small"
+                    type="primary"
+                    plain
+                    @click="handleFocus(item.module_id)"
+                    :data-testid="`module-focus-${item.module_id}`"
+                  >
+                    <el-icon><FullScreen /></el-icon>
+                  </el-button>
+                </el-tooltip>
               </div>
-              <el-tooltip content="放大查看详情" placement="top">
-                <el-button
-                  circle
-                  size="small"
-                  type="primary"
-                  plain
-                  @click="handleFocus(item.module_id)"
-                  :data-testid="`module-focus-${item.module_id}`"
-                >
-                  <el-icon><FullScreen /></el-icon>
-                </el-button>
-              </el-tooltip>
+            </template>
+
+            <p class="module-description">
+              {{ resolveModuleDescription(item) }}
+            </p>
+
+            <div v-if="getCardKpis(item).length > 0" class="module-kpi-strip">
+              <div
+                v-for="kpi in getCardKpis(item)"
+                :key="kpi.key || kpi.label"
+                class="module-kpi-item"
+              >
+                <span>{{ kpi.label || kpi.key }}</span>
+                <strong>{{ formatKpiPreview(kpi) }}</strong>
+              </div>
             </div>
-          </template>
 
-          <p class="module-description">{{ resolveModuleDescription(item) }}</p>
-
-          <div v-if="getCardKpis(item).length > 0" class="module-kpi-strip">
-            <div
-              v-for="kpi in getCardKpis(item)"
-              :key="kpi.key || kpi.label"
-              class="module-kpi-item"
-            >
-              <span>{{ kpi.label || kpi.key }}</span>
-              <strong>{{ formatKpiPreview(kpi) }}</strong>
-            </div>
-          </div>
-
-          <ChartRenderer
-            v-if="item.main_chart"
-            :chart="item.main_chart"
-            :height="260"
-            :show-title="false"
-            compact
-          />
-          <el-empty
-            v-else
-            class="module-chart-empty"
-            description="暂无主图数据"
-            :image-size="56"
-          />
-        </el-card>
-      </div>
+            <ChartRenderer
+              v-if="item.main_chart"
+              :chart="item.main_chart"
+              :height="260"
+              :show-title="false"
+              compact
+            />
+            <el-empty
+              v-else
+              class="module-chart-empty"
+              description="暂无主图数据"
+              :image-size="56"
+            />
+          </el-card>
+        </div>
+      </AsyncStateBlock>
     </div>
 
     <div v-else class="focus-panel" data-testid="module-focus-panel">
@@ -227,24 +229,29 @@
         </div>
       </el-card>
 
-      <div class="detail-grid" v-loading="loading.detail">
-        <el-empty
-          v-if="detailCharts.length === 0 && !loading.detail"
-          description="暂无详情图表"
-        />
-        <el-card
-          v-for="chart in detailCharts"
-          :key="chart.chart_id || chart.title"
-          class="detail-card"
-          :class="resolveDetailCardClass(chart)"
-          shadow="never"
-        >
-          <ChartRenderer
-            :chart="chart"
-            :height="resolveDetailChartHeight(chart)"
-          />
-        </el-card>
-      </div>
+      <AsyncStateBlock
+        :loading="loading.detail"
+        :error-text="errors.detail"
+        :empty="detailCharts.length === 0"
+        empty-text="暂无详情图表"
+        loading-text="正在加载模块详情..."
+        @retry="loadFocusDetail"
+      >
+        <div class="detail-grid">
+          <el-card
+            v-for="chart in detailCharts"
+            :key="chart.chart_id || chart.title"
+            class="detail-card"
+            :class="resolveDetailCardClass(chart)"
+            shadow="never"
+          >
+            <ChartRenderer
+              :chart="chart"
+              :height="resolveDetailChartHeight(chart)"
+            />
+          </el-card>
+        </div>
+      </AsyncStateBlock>
     </div>
   </div>
 </template>
@@ -254,6 +261,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { ArrowLeft, Filter, FullScreen, Search } from "@element-plus/icons-vue";
 
+import AsyncStateBlock from "@/components/AsyncStateBlock.vue";
 import ChartRenderer from "@/components/module-metrics/ChartRenderer.vue";
 import {
   fetchModuleMetricDetail,
@@ -324,6 +332,13 @@ const loading = reactive<LoadingState>({
   options: false,
   overview: false,
   detail: false,
+});
+
+const errors = reactive<Record<keyof LoadingState, string>>({
+  modules: "",
+  options: "",
+  overview: "",
+  detail: "",
 });
 
 const moduleDefinitions = ref<ModuleMetricDefinition[]>([]);
@@ -559,11 +574,13 @@ const resolveDetailChartHeight = (chart: ModuleMetricChart): number => {
 
 const loadModules = async () => {
   loading.modules = true;
+  errors.modules = "";
   try {
     const { data } = await fetchModuleMetricModules();
     moduleDefinitions.value = Array.isArray(data?.items) ? data.items : [];
   } catch (error) {
     moduleDefinitions.value = [];
+    errors.modules = "模块定义加载失败";
     ElMessage.error("加载模块定义失败");
   } finally {
     loading.modules = false;
@@ -572,6 +589,7 @@ const loadModules = async () => {
 
 const loadOptions = async () => {
   loading.options = true;
+  errors.options = "";
   try {
     const { data } = await fetchModuleMetricOptions(buildBaseParams());
     options.plugin_names = Array.isArray(data?.plugin_names)
@@ -587,6 +605,7 @@ const loadOptions = async () => {
     options.module_names = [];
     options.operations = [];
     options.conv_ids = [];
+    errors.options = "筛选项加载失败";
     ElMessage.error("加载筛选项失败");
   } finally {
     loading.options = false;
@@ -595,11 +614,13 @@ const loadOptions = async () => {
 
 const loadOverview = async () => {
   loading.overview = true;
+  errors.overview = "";
   try {
     const { data } = await fetchModuleMetricOverview(buildBaseParams());
     overviewItems.value = Array.isArray(data?.items) ? data.items : [];
   } catch (error) {
     overviewItems.value = [];
+    errors.overview = "模块总览加载失败";
     ElMessage.error("加载模块总览失败");
   } finally {
     loading.overview = false;
@@ -610,9 +631,11 @@ const loadFocusDetail = async () => {
   const moduleId = String(focusedModuleId.value || "").trim();
   if (!moduleId) {
     focusedDetail.value = null;
+    errors.detail = "";
     return;
   }
   loading.detail = true;
+  errors.detail = "";
   try {
     const { data } = await fetchModuleMetricDetail(moduleId, buildBaseParams());
     focusedDetail.value =
@@ -621,6 +644,7 @@ const loadFocusDetail = async () => {
         : { module_id: moduleId, charts: [] };
   } catch (error) {
     focusedDetail.value = { module_id: moduleId, charts: [] };
+    errors.detail = "模块详情加载失败";
     ElMessage.error("加载模块详情失败");
   } finally {
     loading.detail = false;
@@ -663,6 +687,7 @@ const backToOverview = () => {
   mode.value = PAGE_MODE_OVERVIEW;
   focusedModuleId.value = "";
   focusedDetail.value = null;
+  errors.detail = "";
 };
 
 onMounted(async () => {

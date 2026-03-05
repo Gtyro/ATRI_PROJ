@@ -26,7 +26,28 @@
     </div>
 
     <div v-else-if="isTableType" class="table-wrap">
+      <div
+        v-if="useVirtualTable"
+        class="table-v2-shell"
+        :style="chartHeightStyle"
+      >
+        <el-auto-resizer>
+          <template #default="{ width, height }">
+            <el-table-v2
+              :columns="virtualTableColumns"
+              :data="virtualTableRows"
+              :width="Math.max(Number(width), virtualTableMinWidth)"
+              :height="Math.max(Number(height), 220)"
+              :row-height="40"
+              row-key="__row_key"
+              fixed
+            />
+          </template>
+        </el-auto-resizer>
+      </div>
+
       <el-table
+        v-else
         :data="tableRows"
         border
         stripe
@@ -47,15 +68,29 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="tableMetaText" class="table-meta">{{ tableMetaText }}</div>
+
+      <div v-if="tableMetaText || useVirtualTable" class="table-meta">
+        <span v-if="useVirtualTable">已启用虚拟滚动</span>
+        <span v-if="tableMetaText">{{ tableMetaText }}</span>
+      </div>
     </div>
 
     <div
       v-else-if="isEChartType"
-      ref="chartRef"
-      class="echart-host"
+      ref="chartViewportRef"
+      class="echart-shell"
       :style="chartHeightStyle"
-    />
+    >
+      <div v-if="!isChartVisible" class="chart-skeleton">
+        <el-skeleton :rows="4" animated />
+      </div>
+      <div
+        v-else
+        ref="chartRef"
+        class="echart-host"
+        :style="chartHeightStyle"
+      />
+    </div>
 
     <el-empty
       v-else
@@ -75,8 +110,7 @@ import {
   ref,
   watch,
 } from "vue";
-import * as echarts from "echarts";
-import type { EChartsType } from "echarts";
+import type { EChartsType } from "echarts/core";
 
 import type {
   ModuleMetricChart,
@@ -86,6 +120,41 @@ import type {
   ModuleMetricSeries,
   ModuleMetricXAxis,
 } from "@/types/module_metrics";
+
+const OPTION_CACHE_LIMIT = 80;
+const VIRTUAL_TABLE_ROW_THRESHOLD = 120;
+const VIRTUAL_TABLE_COLUMN_THRESHOLD = 10;
+const optionCache = new Map<string, Record<string, unknown>>();
+let echartsRuntimePromise: Promise<typeof import("echarts/core")> | null = null;
+
+const loadEchartsRuntime = async (): Promise<typeof import("echarts/core")> => {
+  if (!echartsRuntimePromise) {
+    echartsRuntimePromise = Promise.all([
+      import("echarts/core"),
+      import("echarts/charts"),
+      import("echarts/components"),
+      import("echarts/renderers"),
+    ]).then(
+      ([echartsCore, echartsCharts, echartsComponents, echartsRenderers]) => {
+        echartsCore.use([
+          echartsCharts.LineChart,
+          echartsCharts.BarChart,
+          echartsCharts.PieChart,
+          echartsComponents.TooltipComponent,
+          echartsComponents.LegendComponent,
+          echartsComponents.GridComponent,
+          echartsComponents.DatasetComponent,
+          echartsComponents.TitleComponent,
+          echartsComponents.DataZoomComponent,
+          echartsRenderers.CanvasRenderer,
+        ]);
+        return echartsCore;
+      },
+    );
+  }
+
+  return echartsRuntimePromise;
+};
 
 const TABLE_COLUMN_LABELS: Record<string, string> = {
   created_at: "时间",
@@ -123,8 +192,14 @@ const props = withDefaults(
 );
 
 const chartRef = ref<HTMLDivElement | null>(null);
+const chartViewportRef = ref<HTMLDivElement | null>(null);
+const isChartVisible = ref(false);
 let chartInstance: EChartsType | null = null;
+let echartsRuntime: Awaited<ReturnType<typeof loadEchartsRuntime>> | null =
+  null;
 let resizeObserver: ResizeObserver | null = null;
+let visibilityObserver: IntersectionObserver | null = null;
+let renderToken = 0;
 
 interface TableColumnView {
   prop: string;
@@ -200,6 +275,20 @@ const tableRows = computed<Record<string, unknown>[]>(() => {
     });
 });
 
+const useVirtualTable = computed(() => {
+  return (
+    tableRows.value.length >= VIRTUAL_TABLE_ROW_THRESHOLD ||
+    tableColumns.value.length >= VIRTUAL_TABLE_COLUMN_THRESHOLD
+  );
+});
+
+const virtualTableRows = computed<Record<string, unknown>[]>(() => {
+  return tableRows.value.map((row, index) => ({
+    ...row,
+    __row_key: index,
+  }));
+});
+
 const tableColumns = computed<TableColumnView[]>(() => {
   const rawColumns = chartMeta.value.columns;
   if (Array.isArray(rawColumns) && rawColumns.length > 0) {
@@ -238,6 +327,25 @@ const tableColumns = computed<TableColumnView[]>(() => {
     label: formatColumnLabel(key),
     minWidth: getColumnMinWidth(key),
   }));
+});
+
+const virtualTableColumns = computed(() => {
+  return tableColumns.value.map((column) => ({
+    key: column.prop,
+    dataKey: column.prop,
+    title: column.label,
+    width: Math.max(column.minWidth, 120),
+    cellRenderer: ({ rowData }: { rowData: Record<string, unknown> }) =>
+      formatTableCell(rowData?.[column.prop], column.prop),
+  }));
+});
+
+const virtualTableMinWidth = computed(() => {
+  const width = tableColumns.value.reduce(
+    (sum, column) => sum + Math.max(column.minWidth, 120),
+    0,
+  );
+  return Math.max(width, 640);
 });
 
 const tableHeight = computed(() => {
@@ -567,13 +675,67 @@ const buildChartOption = (): Record<string, unknown> => {
   return {};
 };
 
-const ensureChartInstance = (): EChartsType | null => {
+const safeStringify = (value: unknown): string => {
+  try {
+    return JSON.stringify(value);
+  } catch (_error) {
+    return String(value);
+  }
+};
+
+const buildOptionCacheKey = (): string => {
+  const total = chartDataset.value.length;
+  const first = total > 0 ? chartDataset.value[0] : null;
+  const last = total > 1 ? chartDataset.value[total - 1] : first;
+  const chartId = String(
+    props.chart?.chart_id || chartTitle.value || chartType.value || "chart",
+  ).trim();
+
+  return [
+    chartId,
+    chartType.value,
+    chartSeries.value.length,
+    chartXAxis.value.field || "",
+    props.compact ? "1" : "0",
+    safeStringify(first),
+    safeStringify(last),
+    total,
+  ].join("::");
+};
+
+const getCachedChartOption = (): Record<string, unknown> => {
+  const key = buildOptionCacheKey();
+  const cached = optionCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const option = buildChartOption();
+  optionCache.set(key, option);
+
+  if (optionCache.size > OPTION_CACHE_LIMIT) {
+    const oldest = optionCache.keys().next().value;
+    if (typeof oldest === "string") {
+      optionCache.delete(oldest);
+    }
+  }
+
+  return option;
+};
+
+const ensureChartInstance = async (): Promise<EChartsType | null> => {
   if (!chartRef.value) {
     return null;
   }
-  if (!chartInstance) {
-    chartInstance = echarts.init(chartRef.value);
+
+  if (!echartsRuntime) {
+    echartsRuntime = await loadEchartsRuntime();
   }
+
+  if (!chartInstance) {
+    chartInstance = echartsRuntime.init(chartRef.value);
+  }
+
   return chartInstance;
 };
 
@@ -588,6 +750,44 @@ const handleResize = (): void => {
   if (chartInstance) {
     chartInstance.resize();
   }
+};
+
+const clearVisibilityObserver = (): void => {
+  if (visibilityObserver) {
+    visibilityObserver.disconnect();
+    visibilityObserver = null;
+  }
+};
+
+const bindVisibilityObserver = async (): Promise<void> => {
+  if (!isEChartType.value) {
+    clearVisibilityObserver();
+    isChartVisible.value = false;
+    return;
+  }
+
+  await nextTick();
+  if (!chartViewportRef.value || typeof IntersectionObserver === "undefined") {
+    isChartVisible.value = true;
+    return;
+  }
+
+  clearVisibilityObserver();
+  visibilityObserver = new IntersectionObserver(
+    (entries) => {
+      const [entry] = entries;
+      if (!entry) {
+        return;
+      }
+      if (entry.isIntersecting || entry.intersectionRatio > 0) {
+        isChartVisible.value = true;
+        clearVisibilityObserver();
+        renderEchart();
+      }
+    },
+    { rootMargin: "120px" },
+  );
+  visibilityObserver.observe(chartViewportRef.value);
 };
 
 const bindResizeObserver = (): void => {
@@ -608,22 +808,42 @@ const bindResizeObserver = (): void => {
 };
 
 const renderEchart = async (): Promise<void> => {
-  if (!isEChartType.value) {
+  if (!isEChartType.value || !isChartVisible.value) {
     disposeChart();
     return;
   }
+
+  const currentToken = ++renderToken;
   await nextTick();
-  const instance = ensureChartInstance();
-  if (!instance) {
+
+  const instance = await ensureChartInstance();
+  if (!instance || currentToken !== renderToken) {
     return;
   }
-  instance.setOption(buildChartOption(), true);
+
+  instance.setOption(getCachedChartOption(), true);
   bindResizeObserver();
   handleResize();
 };
 
 watch(
-  () => [props.chart, props.height, props.compact],
+  isEChartType,
+  (value) => {
+    if (!value) {
+      isChartVisible.value = false;
+      clearVisibilityObserver();
+      disposeChart();
+      return;
+    }
+
+    isChartVisible.value = false;
+    bindVisibilityObserver();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => [props.chart, props.height, props.compact, isChartVisible.value],
   () => {
     renderEchart();
   },
@@ -635,11 +855,13 @@ watch(
 
 onMounted(() => {
   window.addEventListener("resize", handleResize);
+  bindVisibilityObserver();
   renderEchart();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", handleResize);
+  clearVisibilityObserver();
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
@@ -667,8 +889,19 @@ onBeforeUnmount(() => {
   color: #303133;
 }
 
+.echart-shell {
+  width: 100%;
+}
+
 .echart-host {
   width: 100%;
+}
+
+.chart-skeleton {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
 }
 
 .kpi-grid {
@@ -710,8 +943,18 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.table-v2-shell {
+  width: 100%;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 .table-meta {
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
   font-size: 12px;
   color: #909399;
 }

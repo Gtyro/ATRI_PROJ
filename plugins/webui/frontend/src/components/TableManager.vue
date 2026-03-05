@@ -117,10 +117,38 @@
     <div
       class="result-table"
       data-testid="table-manager-result"
-      v-if="resultData.columns && resultData.columns.length"
+      v-if="resultColumns.length"
     >
-      <h3>查询结果 ({{ resultData.rows ? resultData.rows.length : 0 }} 行)</h3>
+      <div class="result-table-header">
+        <h3>查询结果 ({{ resultRows.length }} 行)</h3>
+        <el-tag v-if="useVirtualResultTable" type="info" effect="plain">
+          虚拟滚动
+        </el-tag>
+      </div>
+
+      <div
+        v-if="useVirtualResultTable"
+        class="virtual-result-shell"
+        v-loading="loading"
+        :style="{ height: `${virtualTableHeight}px` }"
+      >
+        <el-auto-resizer>
+          <template #default="{ width, height }">
+            <el-table-v2
+              :columns="virtualTableColumns"
+              :data="virtualRows"
+              :width="Math.max(Number(width), virtualTableMinWidth)"
+              :height="Math.max(Number(height), 220)"
+              :row-height="40"
+              row-key="__row_key"
+              fixed
+            />
+          </template>
+        </el-auto-resizer>
+      </div>
+
       <el-table
+        v-else
         :data="displayedRows"
         border
         style="width: 100%"
@@ -129,7 +157,7 @@
         @sort-change="handleSortChange"
       >
         <el-table-column
-          v-for="column in resultData.columns"
+          v-for="column in resultColumns"
           :key="column"
           :prop="column"
           :label="column"
@@ -154,11 +182,11 @@
 
       <div
         class="pagination"
-        v-if="resultData.rows && resultData.rows.length > 10"
+        v-if="!useVirtualResultTable && resultRows.length > 10"
       >
         <el-pagination
           layout="total, sizes, prev, pager, next"
-          :total="resultData.rows ? resultData.rows.length : 0"
+          :total="resultRows.length"
           :page-size="pageSize"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
@@ -230,8 +258,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
-import { ElMessage } from "element-plus";
+import { h, ref, computed, onMounted, watch } from "vue";
+import { ElButton, ElMessage, ElMessageBox } from "element-plus";
 import { request } from "@/api";
 import { Delete } from "@element-plus/icons-vue";
 import {
@@ -290,15 +318,147 @@ const queryDialogTitle = computed(() => {
 
 // 数据表格相关状态
 const resultData = ref({ columns: [], rows: [] });
+const VIRTUAL_TABLE_ROW_THRESHOLD = 200;
+const VIRTUAL_TABLE_COLUMN_THRESHOLD = 12;
+
+const resultColumns = computed(() => {
+  if (!Array.isArray(resultData.value.columns)) {
+    return [];
+  }
+  return resultData.value.columns.map((column) => String(column));
+});
+
+const normalizeResultRow = (row, rowIndex) => {
+  if (Array.isArray(row)) {
+    const mapped = {};
+    row.forEach((value, index) => {
+      const key = resultColumns.value[index] || `col_${index + 1}`;
+      mapped[key] = value;
+    });
+    return mapped;
+  }
+
+  if (row && typeof row === "object") {
+    return { ...row };
+  }
+
+  return {
+    value: row,
+    row_index: rowIndex,
+  };
+};
+
+const resultRows = computed(() => {
+  if (!Array.isArray(resultData.value.rows)) {
+    return [];
+  }
+  return resultData.value.rows.map((row, index) =>
+    normalizeResultRow(row, index),
+  );
+});
+
 const pageSize = ref(10);
 const currentPage = ref(1);
 const displayedRows = computed(() => {
-  if (!resultData.value.rows) return [];
+  if (!resultRows.value.length) return [];
   const start = (currentPage.value - 1) * pageSize.value;
   const end = start + pageSize.value;
-  return resultData.value.rows.slice(start, end);
+  return resultRows.value.slice(start, end);
 });
 const sortConfig = ref({ prop: "", order: "" });
+
+const useVirtualResultTable = computed(() => {
+  return (
+    resultRows.value.length >= VIRTUAL_TABLE_ROW_THRESHOLD ||
+    resultColumns.value.length >= VIRTUAL_TABLE_COLUMN_THRESHOLD
+  );
+});
+
+const virtualRows = computed(() => {
+  return resultRows.value.map((row, index) => ({
+    ...row,
+    __row_key: index,
+  }));
+});
+
+const formatCellValue = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+      return "[object]";
+    }
+  }
+  return String(value);
+};
+
+const getResultColumnWidth = (column) => {
+  const length = String(column).length;
+  if (length >= 20) {
+    return 240;
+  }
+  if (length >= 12) {
+    return 180;
+  }
+  return 140;
+};
+
+const virtualTableColumns = computed(() => {
+  const baseColumns = resultColumns.value.map((column) => ({
+    key: column,
+    dataKey: column,
+    title: column,
+    width: getResultColumnWidth(column),
+    cellRenderer: ({ rowData }) => formatCellValue(rowData?.[column]),
+  }));
+
+  return [
+    ...baseColumns,
+    {
+      key: "__ops__",
+      dataKey: "__ops__",
+      title: "操作",
+      width: 180,
+      fixed: "right",
+      cellRenderer: ({ rowData }) =>
+        h("div", { class: "virtual-action-cell" }, [
+          h(
+            ElButton,
+            {
+              size: "small",
+              onClick: () => handleEdit(rowData),
+            },
+            () => "编辑",
+          ),
+          h(
+            ElButton,
+            {
+              size: "small",
+              type: "danger",
+              onClick: () => confirmDeleteRow(rowData),
+            },
+            () => "删除",
+          ),
+        ]),
+    },
+  ];
+});
+
+const virtualTableMinWidth = computed(() => {
+  const width = virtualTableColumns.value.reduce(
+    (sum, column) => sum + Number(column.width || 140),
+    0,
+  );
+  return Math.max(width, 760);
+});
+
+const virtualTableHeight = computed(() => {
+  const visibleRows = Math.max(8, Math.min(14, resultRows.value.length));
+  return visibleRows * 42 + 56;
+});
 
 // 表单相关状态
 const showAddForm = ref(false);
@@ -710,6 +870,19 @@ const handleCurrentChange = (page) => {
   currentPage.value = page;
 };
 
+const confirmDeleteRow = async (row) => {
+  try {
+    await ElMessageBox.confirm("确定删除这条记录吗？", "删除确认", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+    await handleDelete(row);
+  } catch (_error) {
+    // 用户取消删除无需提示
+  }
+};
+
 // 判断是否为主键
 const isPrimaryKey = (columnName) => {
   const column = tableColumns.value.find((col) => col.name === columnName);
@@ -788,11 +961,16 @@ const handleAdd = async () => {
 
 // 处理编辑操作
 const handleEdit = (row) => {
+  if (!row || typeof row !== "object") {
+    return;
+  }
+  const { __row_key, ...editableRow } = row;
+  void __row_key;
   // 复制行数据到表单
-  formData.value = { ...row };
+  formData.value = { ...editableRow };
 
   // 获取主键信息
-  const pkInfo = getPrimaryKeyInfo(row);
+  const pkInfo = getPrimaryKeyInfo(editableRow);
   editingId.value = pkInfo.value;
 
   showEditForm.value = true;
@@ -899,6 +1077,32 @@ const handleDelete = async (row) => {
 
 .result-table {
   margin-top: 20px;
+}
+
+.result-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.result-table-header h3 {
+  margin: 0;
+}
+
+.virtual-result-shell {
+  width: 100%;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.virtual-action-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
 }
 
 .pagination {

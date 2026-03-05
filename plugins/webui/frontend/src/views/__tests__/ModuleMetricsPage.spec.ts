@@ -135,6 +135,8 @@ const mountPage = () =>
         "el-option": true,
         "el-date-picker": true,
         "el-empty": true,
+        "el-result": true,
+        "el-skeleton": true,
         "el-tooltip": true,
         "el-collapse-transition": true,
         "el-icon": true,

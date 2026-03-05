@@ -48,5 +48,29 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: "../static/webui", // 构建输出到static/webui目录
     emptyOutDir: true,
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/element-plus")) {
+            return "vendor-element-plus";
+          }
+          if (id.includes("node_modules/echarts")) {
+            return "vendor-echarts";
+          }
+          if (id.includes("node_modules/three")) {
+            return "vendor-three";
+          }
+          if (
+            id.includes("node_modules/vue") ||
+            id.includes("node_modules/pinia") ||
+            id.includes("node_modules/vue-router")
+          ) {
+            return "vendor-vue";
+          }
+          return undefined;
+        },
+      },
+    },
   },
 }));
