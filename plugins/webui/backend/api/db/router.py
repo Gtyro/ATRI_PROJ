@@ -1,7 +1,9 @@
 import re
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
+from ..audit.service import is_mutating_cypher, record_operation_audit
+from ..audit.types import AuditAction, AuditTargetType
 from ..auth.models import User
 from ..auth.utils import get_current_active_user
 from .models import Neo4jQuery, SQLQuery
@@ -58,39 +60,143 @@ async def get_table_info(table_name: str, current_user: User = Depends(get_curre
     return await get_table_structure(table_name)
 
 @router.post("/table/{table_name}")
-async def insert_data(table_name: str, data: dict = Body(...), current_user: User = Depends(get_current_active_user)):
+async def insert_data(
+    table_name: str,
+    request: Request,
+    data: dict = Body(...),
+    current_user: User = Depends(get_current_active_user),
+):
     """向表中插入数据"""
-    return await execute_insert_query(table_name, data)
+    try:
+        result = await execute_insert_query(table_name, data)
+        record_id = str(result.get("id", "")) or "unknown"
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.SQL_TABLE_INSERT.value,
+            target_type=AuditTargetType.SQL_TABLE.value,
+            target_id=f"{table_name}:{record_id}",
+            request=request,
+            success=True,
+            after={"data": data, "result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.SQL_TABLE_INSERT.value,
+            target_type=AuditTargetType.SQL_TABLE.value,
+            target_id=table_name,
+            request=request,
+            success=False,
+            after={"data": data},
+            error_message=str(exc),
+        )
+        raise
 
 @router.put("/table/{table_name}/update")
 async def update_data(
     table_name: str,
     id: str,
+    request: Request,
     data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
     """更新表中的数据"""
     # 验证ID
     validate_id(id)
-    return await execute_update_query(table_name, id, data)
+    try:
+        result = await execute_update_query(table_name, id, data)
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.SQL_TABLE_UPDATE.value,
+            target_type=AuditTargetType.SQL_TABLE.value,
+            target_id=f"{table_name}:{id}",
+            request=request,
+            success=True,
+            after={"data": data, "result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.SQL_TABLE_UPDATE.value,
+            target_type=AuditTargetType.SQL_TABLE.value,
+            target_id=f"{table_name}:{id}",
+            request=request,
+            success=False,
+            after={"data": data},
+            error_message=str(exc),
+        )
+        raise
 
 @router.delete("/table/{table_name}/delete")
 async def delete_data(
     table_name: str,
     id: str,
+    request: Request,
     current_user: User = Depends(get_current_active_user)
 ):
     """删除表中的数据"""
     # 验证ID
     validate_id(id)
-    return await execute_delete_query(table_name, id)
+    try:
+        result = await execute_delete_query(table_name, id)
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.SQL_TABLE_DELETE.value,
+            target_type=AuditTargetType.SQL_TABLE.value,
+            target_id=f"{table_name}:{id}",
+            request=request,
+            success=True,
+            after={"result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.SQL_TABLE_DELETE.value,
+            target_type=AuditTargetType.SQL_TABLE.value,
+            target_id=f"{table_name}:{id}",
+            request=request,
+            success=False,
+            error_message=str(exc),
+        )
+        raise
 
 # === Neo4j/记忆网络相关接口 ===
 
 @router.post("/neo4j/query")
-async def execute_neo4j_cypher(query: Neo4jQuery, current_user: User = Depends(get_current_active_user)):
+async def execute_neo4j_cypher(
+    query: Neo4jQuery,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+):
     """执行Neo4j Cypher查询"""
-    return await execute_neo4j_query(query.query)
+    mutating = is_mutating_cypher(query.query)
+    try:
+        result = await execute_neo4j_query(query.query)
+        if mutating:
+            await record_operation_audit(
+                username=current_user.username,
+                action=AuditAction.NEO4J_QUERY_MUTATE.value,
+                target_type=AuditTargetType.NEO4J.value,
+                request=request,
+                success=True,
+                after={"query": query.query, "result_meta": result.get("metadata")},
+            )
+        return result
+    except Exception as exc:
+        if mutating:
+            await record_operation_audit(
+                username=current_user.username,
+                action=AuditAction.NEO4J_QUERY_MUTATE.value,
+                target_type=AuditTargetType.NEO4J.value,
+                request=request,
+                success=False,
+                after={"query": query.query},
+                error_message=str(exc),
+            )
+        raise
 
 @router.get("/memory/nodes")
 async def get_memory_nodes(conv_id: str = '', limit: int = 50, current_user: User = Depends(get_current_active_user)):
@@ -114,26 +220,100 @@ async def get_memory_node(node_id: str, current_user: User = Depends(get_current
     return await get_node_by_id(node_id)
 
 @router.post("/memory/node")
-async def create_memory_node(data: dict = Body(...), current_user: User = Depends(get_current_active_user)):
+async def create_memory_node(
+    request: Request,
+    data: dict = Body(...),
+    current_user: User = Depends(get_current_active_user),
+):
     """创建新认知节点"""
-    return await create_cognitive_node(data)
+    try:
+        result = await create_cognitive_node(data)
+        node_id = result.get("uid") if isinstance(result, dict) else None
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_NODE_CREATE.value,
+            target_type=AuditTargetType.COGNITIVE_NODE.value,
+            target_id=str(node_id) if node_id else None,
+            request=request,
+            success=True,
+            after={"data": data, "result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_NODE_CREATE.value,
+            target_type=AuditTargetType.COGNITIVE_NODE.value,
+            request=request,
+            success=False,
+            after={"data": data},
+            error_message=str(exc),
+        )
+        raise
 
 @router.put("/memory/node/{node_id}")
 async def update_memory_node(
     node_id: str,
+    request: Request,
     data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
     """更新认知节点"""
-    return await update_cognitive_node(node_id, data)
+    try:
+        result = await update_cognitive_node(node_id, data)
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_NODE_UPDATE.value,
+            target_type=AuditTargetType.COGNITIVE_NODE.value,
+            target_id=node_id,
+            request=request,
+            success=True,
+            after={"data": data, "result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_NODE_UPDATE.value,
+            target_type=AuditTargetType.COGNITIVE_NODE.value,
+            target_id=node_id,
+            request=request,
+            success=False,
+            after={"data": data},
+            error_message=str(exc),
+        )
+        raise
 
 @router.delete("/memory/node/{node_id}")
 async def delete_memory_node(
     node_id: str,
+    request: Request,
     current_user: User = Depends(get_current_active_user)
 ):
     """删除认知节点"""
-    return await delete_cognitive_node(node_id)
+    try:
+        result = await delete_cognitive_node(node_id)
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_NODE_DELETE.value,
+            target_type=AuditTargetType.COGNITIVE_NODE.value,
+            target_id=node_id,
+            request=request,
+            success=True,
+            after={"result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_NODE_DELETE.value,
+            target_type=AuditTargetType.COGNITIVE_NODE.value,
+            target_id=node_id,
+            request=request,
+            success=False,
+            error_message=str(exc),
+        )
+        raise
 
 @router.post("/memory/associations")
 async def post_memory_associations(
@@ -157,6 +337,7 @@ async def post_memory_associations(
 
 @router.post("/memory/association")
 async def create_memory_association(
+    request: Request,
     data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -176,10 +357,35 @@ async def create_memory_association(
     if not source_id or not target_id:
         raise HTTPException(status_code=400, detail="必须提供source_id和target_id")
 
-    return await create_association(source_id, target_id, strength)
+    relation_id = f"{source_id}->{target_id}"
+    try:
+        result = await create_association(source_id, target_id, strength)
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_ASSOCIATION_CREATE.value,
+            target_type=AuditTargetType.MEMORY_ASSOCIATION.value,
+            target_id=relation_id,
+            request=request,
+            success=True,
+            after={"strength": strength, "result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_ASSOCIATION_CREATE.value,
+            target_type=AuditTargetType.MEMORY_ASSOCIATION.value,
+            target_id=relation_id,
+            request=request,
+            success=False,
+            after={"strength": strength},
+            error_message=str(exc),
+        )
+        raise
 
 @router.put("/memory/association")
 async def update_memory_association(
+    request: Request,
     data: dict = Body(...),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -199,19 +405,67 @@ async def update_memory_association(
     if not source_id or not target_id or strength is None:
         raise HTTPException(status_code=400, detail="必须提供source_id、target_id和strength")
 
-    return await update_association(source_id, target_id, float(strength))
+    relation_id = f"{source_id}->{target_id}"
+    try:
+        result = await update_association(source_id, target_id, float(strength))
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_ASSOCIATION_UPDATE.value,
+            target_type=AuditTargetType.MEMORY_ASSOCIATION.value,
+            target_id=relation_id,
+            request=request,
+            success=True,
+            after={"strength": strength, "result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_ASSOCIATION_UPDATE.value,
+            target_type=AuditTargetType.MEMORY_ASSOCIATION.value,
+            target_id=relation_id,
+            request=request,
+            success=False,
+            after={"strength": strength},
+            error_message=str(exc),
+        )
+        raise
 
 @router.delete("/memory/association")
 async def delete_memory_association(
     source_id: str,
     target_id: str,
+    request: Request,
     current_user: User = Depends(get_current_active_user)
 ):
     """删除节点关联关系"""
     if not source_id or not target_id:
         raise HTTPException(status_code=400, detail="必须提供source_id和target_id")
 
-    return await delete_association(source_id, target_id)
+    relation_id = f"{source_id}->{target_id}"
+    try:
+        result = await delete_association(source_id, target_id)
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_ASSOCIATION_DELETE.value,
+            target_type=AuditTargetType.MEMORY_ASSOCIATION.value,
+            target_id=relation_id,
+            request=request,
+            success=True,
+            after={"result": result},
+        )
+        return result
+    except Exception as exc:
+        await record_operation_audit(
+            username=current_user.username,
+            action=AuditAction.MEMORY_ASSOCIATION_DELETE.value,
+            target_type=AuditTargetType.MEMORY_ASSOCIATION.value,
+            target_id=relation_id,
+            request=request,
+            success=False,
+            error_message=str(exc),
+        )
+        raise
 
 @router.get("/memory/conversations")
 async def get_memory_conversations(current_user: User = Depends(get_current_active_user)):

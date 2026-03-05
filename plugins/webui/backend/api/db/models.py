@@ -55,6 +55,27 @@ class Statistic(Model):
         table_description = "统计信息表"
 
 
+class OperationAuditLog(Model):
+    """操作审计日志"""
+
+    id = fields.IntField(primary_key=True)
+    username = fields.CharField(max_length=64, db_index=True)
+    action = fields.CharField(max_length=128, db_index=True)
+    target_type = fields.CharField(max_length=64, db_index=True)
+    target_id = fields.CharField(max_length=128, null=True, db_index=True)
+    success = fields.BooleanField(default=True, db_index=True)
+    detail = fields.TextField(null=True)
+    request_method = fields.CharField(max_length=16, null=True)
+    request_path = fields.CharField(max_length=255, null=True)
+    ip_address = fields.CharField(max_length=64, null=True)
+    user_agent = fields.CharField(max_length=255, null=True)
+    created_at = fields.DatetimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        table = "operation_audit_logs"
+        table_description = "操作审计日志表"
+
+
 from plugins.db_core.model_registry import register_model_module
 
 register_model_module("models", "plugins.webui.backend.api.db.models")

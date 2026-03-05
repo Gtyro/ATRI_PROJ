@@ -30,6 +30,10 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>模块统计</span>
         </el-menu-item>
+        <el-menu-item index="/admin/operation-audit">
+          <el-icon><Document /></el-icon>
+          <span>操作审计</span>
+        </el-menu-item>
       </el-menu>
     </div>
 
@@ -54,6 +58,7 @@ import {
   Clock,
   Setting,
   DataAnalysis,
+  Document,
 } from "@element-plus/icons-vue";
 import Navbar from "@/components/NavbarHeader.vue";
 

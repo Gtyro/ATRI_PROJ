@@ -9,6 +9,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
+from .audit import router as audit_router
 from .auth.router import router as auth_router
 from .dashboard import dashboard_router
 from .db.router import router as db_router
@@ -50,6 +51,7 @@ def configure_app(app: FastAPI, is_nonebot_app: bool = False):
     app.include_router(memory_router)
     app.include_router(plugin_policy_router)
     app.include_router(logs_router)
+    app.include_router(audit_router)
     app.include_router(module_metrics_router)
 
     # 注册主页重定向

@@ -25,5 +25,10 @@ class Settings(BaseSettings):
     # CORS设置
     CORS_ORIGINS: list = ["*"]  # 在生产环境中应该限制来源
 
+    # 操作审计日志设置
+    AUDIT_LOG_RETENTION_DAYS: int = 90
+    AUDIT_LOG_CLEANUP_HOUR: int = 3
+    AUDIT_LOG_CLEANUP_MINUTE: int = 10
+
 # 创建全局设置实例
 settings = Settings()

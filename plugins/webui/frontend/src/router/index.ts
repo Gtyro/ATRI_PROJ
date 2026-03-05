@@ -16,6 +16,7 @@ const WordCloudPage = () => import("@/views/wordcloud/WordCloudPage.vue");
 const MemoryTimeline = () => import("@/views/MemoryTimeline.vue");
 const PluginPolicyPage = () => import("@/views/PluginPolicyPage.vue");
 const ModuleMetricsPage = () => import("@/views/ModuleMetricsPage.vue");
+const OperationAuditPage = () => import("@/views/OperationAuditPage.vue");
 
 const routes: RouteRecordRaw[] = [
   {
@@ -69,6 +70,11 @@ const routes: RouteRecordRaw[] = [
       {
         path: "module-metrics",
         component: ModuleMetricsPage,
+        meta: { requiresAuth: true },
+      },
+      {
+        path: "operation-audit",
+        component: OperationAuditPage,
         meta: { requiresAuth: true },
       },
     ],
