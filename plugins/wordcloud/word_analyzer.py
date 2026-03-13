@@ -62,9 +62,9 @@ def init_jieba():
 
     jieba.load_userdict(str(user_dict_path))
 
-    # 启用新词发现
+    # 保持单进程分词，避免常驻 worker 占用过多内存
     if config.wordcloud_new_words_discovery:
-        jieba.enable_parallel(4)  # 启用并行分词
+        jieba.disable_parallel()
 
 # 过滤URL
 def filter_urls(text):
