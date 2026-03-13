@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "vite build --mode production",
+    "build:preview": "vite build --mode preview",
+    "preview": "npm run build:preview && vite preview --mode preview --host 127.0.0.1 --port 8081 --outDir .preview-dist --base /",
+    "preview:prod": "npm run build && vite preview --mode production --host 127.0.0.1 --port 8081 --outDir ../static/webui --base /webui/",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:contract": "vitest run src/api/__tests__/module_metrics.contract.spec.ts",
