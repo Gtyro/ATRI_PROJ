@@ -120,41 +120,16 @@ import type {
   ModuleMetricSeries,
   ModuleMetricXAxis,
 } from "@/types/module_metrics";
+import {
+  createResizeObserver,
+  disconnectObserver,
+  loadCoreEchartsRuntime,
+} from "@/utils/echarts";
 
 const OPTION_CACHE_LIMIT = 80;
 const VIRTUAL_TABLE_ROW_THRESHOLD = 120;
 const VIRTUAL_TABLE_COLUMN_THRESHOLD = 10;
 const optionCache = new Map<string, Record<string, unknown>>();
-let echartsRuntimePromise: Promise<typeof import("echarts/core")> | null = null;
-
-const loadEchartsRuntime = async (): Promise<typeof import("echarts/core")> => {
-  if (!echartsRuntimePromise) {
-    echartsRuntimePromise = Promise.all([
-      import("echarts/core"),
-      import("echarts/charts"),
-      import("echarts/components"),
-      import("echarts/renderers"),
-    ]).then(
-      ([echartsCore, echartsCharts, echartsComponents, echartsRenderers]) => {
-        echartsCore.use([
-          echartsCharts.LineChart,
-          echartsCharts.BarChart,
-          echartsCharts.PieChart,
-          echartsComponents.TooltipComponent,
-          echartsComponents.LegendComponent,
-          echartsComponents.GridComponent,
-          echartsComponents.DatasetComponent,
-          echartsComponents.TitleComponent,
-          echartsComponents.DataZoomComponent,
-          echartsRenderers.CanvasRenderer,
-        ]);
-        return echartsCore;
-      },
-    );
-  }
-
-  return echartsRuntimePromise;
-};
 
 const TABLE_COLUMN_LABELS: Record<string, string> = {
   created_at: "时间",
@@ -195,7 +170,7 @@ const chartRef = ref<HTMLDivElement | null>(null);
 const chartViewportRef = ref<HTMLDivElement | null>(null);
 const isChartVisible = ref(false);
 let chartInstance: EChartsType | null = null;
-let echartsRuntime: Awaited<ReturnType<typeof loadEchartsRuntime>> | null =
+let echartsRuntime: Awaited<ReturnType<typeof loadCoreEchartsRuntime>> | null =
   null;
 let resizeObserver: ResizeObserver | null = null;
 let visibilityObserver: IntersectionObserver | null = null;
@@ -729,7 +704,7 @@ const ensureChartInstance = async (): Promise<EChartsType | null> => {
   }
 
   if (!echartsRuntime) {
-    echartsRuntime = await loadEchartsRuntime();
+    echartsRuntime = await loadCoreEchartsRuntime();
   }
 
   if (!chartInstance) {
@@ -791,20 +766,8 @@ const bindVisibilityObserver = async (): Promise<void> => {
 };
 
 const bindResizeObserver = (): void => {
-  if (typeof ResizeObserver === "undefined") {
-    return;
-  }
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-  if (!chartRef.value) {
-    return;
-  }
-  resizeObserver = new ResizeObserver(() => {
-    handleResize();
-  });
-  resizeObserver.observe(chartRef.value);
+  resizeObserver = disconnectObserver(resizeObserver);
+  resizeObserver = createResizeObserver(chartRef.value, handleResize);
 };
 
 const renderEchart = async (): Promise<void> => {
@@ -862,10 +825,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("resize", handleResize);
   clearVisibilityObserver();
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
+  resizeObserver = disconnectObserver(resizeObserver);
   disposeChart();
 });
 </script>

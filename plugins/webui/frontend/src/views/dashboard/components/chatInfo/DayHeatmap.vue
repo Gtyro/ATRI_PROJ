@@ -5,8 +5,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from "vue";
-import * as echarts from "echarts";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+
+import {
+  createResizeObserver,
+  disconnectObserver,
+  disposeChart,
+  loadCoreEchartsRuntime,
+} from "@/utils/echarts";
 
 const props = defineProps({
   heatmapData: {
@@ -25,15 +31,26 @@ const props = defineProps({
 
 const heatmapRef = ref(null);
 let heatmapChart = null;
+let resizeObserver = null;
+let echartsRuntime = null;
+
+const formatDateKey = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const buildFallbackRange = () => {
   const end = new Date();
   const start = new Date();
   start.setMonth(end.getMonth() - 3);
-  return [
-    echarts.format.formatTime("yyyy-MM-dd", start),
-    echarts.format.formatTime("yyyy-MM-dd", end),
-  ];
+  return [formatDateKey(start), formatDateKey(end)];
 };
 
 const normalizeHeatmapData = () => {
@@ -54,12 +71,27 @@ const normalizeHeatmapData = () => {
     .filter(Boolean);
 };
 
-const initHeatmap = () => {
-  if (!heatmapRef.value) return;
-  heatmapChart = echarts.init(heatmapRef.value);
+const ensureRuntime = async () => {
+  if (!echartsRuntime) {
+    echartsRuntime = await loadCoreEchartsRuntime();
+  }
+  return echartsRuntime;
 };
 
-const renderHeatmap = () => {
+const initHeatmap = async () => {
+  await nextTick();
+  if (!heatmapRef.value || heatmapChart) return;
+
+  const runtime = await ensureRuntime();
+  heatmapChart = runtime.init(heatmapRef.value);
+  resizeObserver = disconnectObserver(resizeObserver);
+  resizeObserver = createResizeObserver(heatmapRef.value, handleResize);
+};
+
+const renderHeatmap = async () => {
+  if (!heatmapChart) {
+    await initHeatmap();
+  }
   if (!heatmapChart) return;
 
   const data = normalizeHeatmapData();
@@ -112,25 +144,20 @@ const handleResize = () => {
 };
 
 onMounted(() => {
-  initHeatmap();
-  renderHeatmap();
-  window.addEventListener("resize", handleResize);
+  void renderHeatmap();
 });
 
 watch(
   () => [props.heatmapData, props.startDate, props.endDate],
   () => {
-    renderHeatmap();
+    void renderHeatmap();
   },
   { deep: true },
 );
 
 onUnmounted(() => {
-  if (heatmapChart) {
-    heatmapChart.dispose();
-    heatmapChart = null;
-  }
-  window.removeEventListener("resize", handleResize);
+  resizeObserver = disconnectObserver(resizeObserver);
+  heatmapChart = disposeChart(heatmapChart);
 });
 </script>
 

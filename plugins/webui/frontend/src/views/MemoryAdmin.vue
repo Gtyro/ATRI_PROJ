@@ -82,13 +82,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   getCognitiveNodes,
   getAssociations,
   getConversations,
 } from "../api/db";
-import * as echarts from "echarts";
+import {
+  createResizeObserver,
+  disconnectObserver,
+  disposeChart,
+  loadCoreEchartsRuntime,
+} from "@/utils/echarts";
 
 // 数据与状态
 const graphContainer = ref(null);
@@ -102,6 +107,8 @@ const nodes = ref([]);
 const links = ref([]);
 const loading = ref(false);
 const error = ref(null);
+let resizeObserver = null;
+let echartsRuntime = null;
 
 // 计算属性
 const nodeCount = computed(() => (nodes.value && nodes.value.length) || 0);
@@ -113,18 +120,34 @@ const graphTitle = computed(() =>
 );
 
 // 初始化图表
-const initChart = () => {
+const ensureRuntime = async () => {
+  if (!echartsRuntime) {
+    echartsRuntime = await loadCoreEchartsRuntime();
+  }
+  return echartsRuntime;
+};
+
+const bindResizeObserver = () => {
+  resizeObserver = disconnectObserver(resizeObserver);
+  resizeObserver = createResizeObserver(graphContainer.value, () => {
+    chart.value?.resize();
+  });
+};
+
+const initChart = async () => {
+  await nextTick();
   if (!graphContainer.value) {
     console.error("图表容器不存在");
-    return;
+    return null;
   }
 
-  // 如果已经初始化过，先销毁
   if (chart.value) {
-    chart.value.dispose();
+    return chart.value;
   }
 
-  chart.value = echarts.init(graphContainer.value);
+  const runtime = await ensureRuntime();
+  chart.value = runtime.init(graphContainer.value);
+  bindResizeObserver();
 
   // 设置图表的基本配置
   const option = {
@@ -194,20 +217,20 @@ const initChart = () => {
   // 应用配置
   chart.value.setOption(option);
 
-  // 添加窗口大小调整事件
-  window.addEventListener("resize", () => {
-    chart.value && chart.value.resize();
-  });
-
   return chart.value;
 };
 
 // 转换数据为图表所需格式
-const formatGraphData = () => {
+const formatGraphData = async () => {
+  const instance = chart.value || (await initChart());
+  if (!instance) {
+    return;
+  }
+
   if (!nodes.value || !nodes.value.length) {
     console.warn("没有节点数据可用");
     // 应用空数据
-    chart.value.setOption({
+    instance.setOption({
       title: {
         text: graphTitle.value,
       },
@@ -249,7 +272,7 @@ const formatGraphData = () => {
       : [];
 
   // 更新图表数据
-  chart.value.setOption({
+  instance.setOption({
     title: {
       text: graphTitle.value,
     },
@@ -289,7 +312,7 @@ const loadGraphData = async () => {
     links.value = linksResponse.data.rows || [];
 
     // 更新图表
-    formatGraphData();
+    await formatGraphData();
   } catch (err) {
     console.error("加载图表数据失败:", err);
     error.value = "加载数据失败，请稍后再试";
@@ -323,7 +346,7 @@ const loadConvOptions = async () => {
 onMounted(async () => {
   try {
     // 初始化图表
-    initChart();
+    await initChart();
 
     // 先加载会话选项
     await loadConvOptions();
@@ -334,6 +357,11 @@ onMounted(async () => {
     console.error("初始化组件时出错:", err);
     error.value = "初始化组件时出错，请刷新页面重试";
   }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver = disconnectObserver(resizeObserver);
+  chart.value = disposeChart(chart.value);
 });
 </script>
 

@@ -99,14 +99,18 @@
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from "vue";
 import { ElNotification } from "element-plus";
 import { Loading, WarningFilled, Document } from "@element-plus/icons-vue";
-import * as echarts from "echarts";
-import "echarts-wordcloud";
 import defaultConfig from "./config";
 import {
   getWordCloudData,
   getWordCloudHistory,
   getConversations,
 } from "@/api/wordcloud";
+import {
+  createResizeObserver,
+  disconnectObserver,
+  disposeChart,
+  loadWordCloudRuntime,
+} from "@/utils/echarts";
 
 export default {
   name: "WordCloudComponent",
@@ -159,6 +163,7 @@ export default {
     const wordcloudRef = ref(null);
     const cloudContainer = ref(null);
     const chart = ref(null);
+    const echartsRuntime = ref(null);
     const words = ref([]);
     const loading = ref(false);
     const refreshing = ref(false);
@@ -174,32 +179,43 @@ export default {
     const autoRefreshTimer = ref(null);
 
     // 初始化图表
-    const initChart = () => {
-      if (!wordcloudRef.value) return;
+    const ensureChartInstance = async () => {
+      if (!wordcloudRef.value) return null;
 
-      // 初始化ECharts实例
-      if (chart.value) {
-        chart.value.dispose();
+      if (!echartsRuntime.value) {
+        echartsRuntime.value = await loadWordCloudRuntime();
       }
 
-      chart.value = echarts.init(wordcloudRef.value);
+      if (!chart.value) {
+        chart.value = echartsRuntime.value.init(wordcloudRef.value);
 
-      // 设置响应式
-      if (props.autoResize) {
-        setupResizeObserver();
+        if (props.autoResize) {
+          setupResizeObserver();
+        }
       }
 
-      // 渲染词云
-      renderWordCloud();
+      return chart.value;
+    };
+
+    const initChart = async () => {
+      chart.value = disposeChart(chart.value);
+      const instance = await ensureChartInstance();
+      if (!instance) return;
+
+      void renderWordCloud();
     };
 
     // 渲染词云
-    const renderWordCloud = () => {
-      if (!chart.value || words.value.length === 0) return;
+    const renderWordCloud = async () => {
+      const instance = await ensureChartInstance();
+      if (!instance) return;
+      if (words.value.length === 0) {
+        instance.clear();
+        return;
+      }
 
       // 计算字体大小范围
       const containerWidth = wordcloudRef.value.clientWidth;
-      const containerHeight = wordcloudRef.value.clientHeight;
       const maxFontSize = Math.min(
         config.value.cloudOptions.maxFontSize,
         Math.floor(containerWidth / config.value.cloudOptions.fontSizeRatio),
@@ -251,12 +267,12 @@ export default {
 
       // 设置动画
       if (config.value.cloudOptions.animation) {
-        chart.value.setOption(option, {
+        instance.setOption(option, {
           animationDuration: config.value.cloudOptions.animationDuration,
           animationEasing: "elasticOut",
         });
       } else {
-        chart.value.setOption(option);
+        instance.setOption(option);
       }
     };
 
@@ -327,7 +343,7 @@ export default {
 
         // 渲染词云
         nextTick(() => {
-          renderWordCloud();
+          void renderWordCloud();
         });
       }
     };
@@ -366,7 +382,7 @@ export default {
 
         // 渲染词云
         nextTick(() => {
-          renderWordCloud();
+          void renderWordCloud();
         });
       }
     };
@@ -401,33 +417,25 @@ export default {
 
     // 设置响应式
     const setupResizeObserver = () => {
-      if (!cloudContainer.value) return;
+      resizeObserver.value = disconnectObserver(resizeObserver.value);
+      if (!props.autoResize || !cloudContainer.value) return;
 
-      // 如果已经有观察者，先清除
-      if (resizeObserver.value) {
-        resizeObserver.value.disconnect();
-      }
-
-      // 创建新的观察者
-      resizeObserver.value = new ResizeObserver(() => {
+      resizeObserver.value = createResizeObserver(cloudContainer.value, () => {
         if (chart.value) {
           chart.value.resize();
-          renderWordCloud();
+          void renderWordCloud();
         }
       });
-
-      // 开始观察
-      resizeObserver.value.observe(cloudContainer.value);
     };
 
     // 组件挂载
     onMounted(() => {
       // 初始化图表
       nextTick(() => {
-        initChart();
+        void initChart();
 
         // 获取会话列表
-        fetchConversations();
+        void fetchConversations();
 
         // 设置自动刷新
         setupAutoRefresh();
@@ -437,16 +445,10 @@ export default {
     // 组件卸载
     onUnmounted(() => {
       // 清理图表
-      if (chart.value) {
-        chart.value.dispose();
-        chart.value = null;
-      }
+      chart.value = disposeChart(chart.value);
 
       // 清理观察者
-      if (resizeObserver.value) {
-        resizeObserver.value.disconnect();
-        resizeObserver.value = null;
-      }
+      resizeObserver.value = disconnectObserver(resizeObserver.value);
 
       // 清理定时器
       if (autoRefreshTimer.value) {
@@ -460,7 +462,7 @@ export default {
       () => props.customConfig,
       () => {
         nextTick(() => {
-          renderWordCloud();
+          void renderWordCloud();
         });
       },
       { deep: true },

@@ -5,8 +5,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from "vue";
-import * as echarts from "echarts";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+
+import {
+  createResizeObserver,
+  disconnectObserver,
+  disposeChart,
+  loadCoreEchartsRuntime,
+} from "@/utils/echarts";
 
 const props = defineProps({
   hours: {
@@ -21,6 +27,8 @@ const props = defineProps({
 
 const hourChartRef = ref(null);
 let hourChart = null;
+let resizeObserver = null;
+let echartsRuntime = null;
 
 const buildFallbackHours = () => {
   const now = new Date();
@@ -59,12 +67,27 @@ const getHourColor = (label) => {
   return "#ebedf0";
 };
 
-const initHourChart = () => {
-  if (!hourChartRef.value) return;
-  hourChart = echarts.init(hourChartRef.value);
+const ensureRuntime = async () => {
+  if (!echartsRuntime) {
+    echartsRuntime = await loadCoreEchartsRuntime();
+  }
+  return echartsRuntime;
 };
 
-const renderHourChart = () => {
+const initHourChart = async () => {
+  await nextTick();
+  if (!hourChartRef.value || hourChart) return;
+
+  const runtime = await ensureRuntime();
+  hourChart = runtime.init(hourChartRef.value);
+  resizeObserver = disconnectObserver(resizeObserver);
+  resizeObserver = createResizeObserver(hourChartRef.value, handleResize);
+};
+
+const renderHourChart = async () => {
+  if (!hourChart) {
+    await initHourChart();
+  }
   if (!hourChart) return;
 
   const { hours, data } = normalizeData();
@@ -124,25 +147,20 @@ const handleResize = () => {
 };
 
 onMounted(() => {
-  initHourChart();
-  renderHourChart();
-  window.addEventListener("resize", handleResize);
+  void renderHourChart();
 });
 
 watch(
   () => [props.hours, props.throughputData],
   () => {
-    renderHourChart();
+    void renderHourChart();
   },
   { deep: true },
 );
 
 onUnmounted(() => {
-  if (hourChart) {
-    hourChart.dispose();
-    hourChart = null;
-  }
-  window.removeEventListener("resize", handleResize);
+  resizeObserver = disconnectObserver(resizeObserver);
+  hourChart = disposeChart(hourChart);
 });
 </script>
 

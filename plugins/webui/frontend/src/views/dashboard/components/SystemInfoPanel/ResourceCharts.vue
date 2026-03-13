@@ -18,27 +18,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Loading } from "@element-plus/icons-vue";
-import * as echarts from "echarts/core";
-import { LineChart } from "echarts/charts";
 import {
-  GridComponent,
-  TooltipComponent,
-  TitleComponent,
-  LegendComponent,
-} from "echarts/components";
-import { CanvasRenderer } from "echarts/renderers";
-
-// 注册必要的ECharts组件
-echarts.use([
-  LineChart,
-  GridComponent,
-  TooltipComponent,
-  TitleComponent,
-  LegendComponent,
-  CanvasRenderer,
-]);
+  createResizeObserver,
+  disconnectObserver,
+  disposeChart,
+  loadCoreEchartsRuntime,
+} from "@/utils/echarts";
 
 // 工具函数：格式化时间戳为时:分:秒
 function formatTimestamp(timestamp) {
@@ -81,209 +68,148 @@ const cpuChartRef = ref(null);
 const memoryChartRef = ref(null);
 let cpuChart = null;
 let memoryChart = null;
+let cpuResizeObserver = null;
+let memoryResizeObserver = null;
+let echartsRuntime = null;
 
-// 初始化图表
-function initCharts() {
-  try {
-    if (cpuChartRef.value && !cpuChart) {
-      cpuChart = echarts.init(cpuChartRef.value);
-      cpuChart.setOption({
-        title: {
-          text: "",
-          left: "center",
-        },
-        tooltip: {
-          trigger: "axis",
-          formatter: function (params) {
-            const timeStr = formatTimestamp(params[0].axisValue);
-            if (!timeStr) {
-              return (
-                "时间: 未知<br/>" +
-                params[0].seriesName +
-                ": " +
-                params[0].value +
-                "%"
-              );
-            }
-            return (
-              "时间: " +
-              timeStr +
-              "<br/>" +
-              params[0].seriesName +
-              ": " +
-              params[0].value +
-              "%"
-            );
-          },
-        },
-        grid: {
-          left: "3%",
-          right: "4%",
-          bottom: "3%",
-          top: "8%",
-          containLabel: true,
-        },
-        xAxis: {
-          type: "category",
-          boundaryGap: false,
-          data: props.timeData || [],
-          axisLabel: {
-            formatter: (value) => {
-              const timeStr = formatTimestamp(value);
-              return timeStr || "-";
-            },
-          },
-        },
-        yAxis: {
-          type: "value",
-          min: 0,
-          max: 100,
-          axisLabel: {
-            formatter: "{value}%",
-          },
-        },
-        series: [
-          {
-            name: "CPU使用率",
-            type: "line",
-            smooth: true,
-            data: props.cpuData || [],
-            areaStyle: {
-              opacity: 0.3,
-            },
-            itemStyle: {
-              color: "#409EFF",
-            },
-          },
-        ],
-      });
-    }
-
-    if (memoryChartRef.value && !memoryChart) {
-      memoryChart = echarts.init(memoryChartRef.value);
-      memoryChart.setOption({
-        title: {
-          text: "",
-          left: "center",
-        },
-        tooltip: {
-          trigger: "axis",
-          formatter: function (params) {
-            const timeStr = formatTimestamp(params[0].axisValue);
-            if (!timeStr) {
-              return (
-                "时间: 未知<br/>" +
-                params[0].seriesName +
-                ": " +
-                params[0].value +
-                "%"
-              );
-            }
-            return (
-              "时间: " +
-              timeStr +
-              "<br/>" +
-              params[0].seriesName +
-              ": " +
-              params[0].value +
-              "%"
-            );
-          },
-        },
-        grid: {
-          left: "3%",
-          right: "4%",
-          bottom: "3%",
-          top: "8%",
-          containLabel: true,
-        },
-        xAxis: {
-          type: "category",
-          boundaryGap: false,
-          data: props.timeData || [],
-          axisLabel: {
-            formatter: (value) => {
-              const timeStr = formatTimestamp(value);
-              return timeStr || "-";
-            },
-          },
-        },
-        yAxis: {
-          type: "value",
-          min: 0,
-          max: 100,
-          axisLabel: {
-            formatter: "{value}%",
-          },
-        },
-        series: [
-          {
-            name: "内存使用率",
-            type: "line",
-            smooth: true,
-            data: props.memoryData || [],
-            areaStyle: {
-              opacity: 0.3,
-            },
-            itemStyle: {
-              color: "#67C23A",
-            },
-          },
-        ],
-      });
-    }
-
-    // 监听窗口大小变化，重新渲染图表
-    window.addEventListener("resize", resizeCharts);
-  } catch (error) {
-    console.error("初始化图表时出错:", error);
+const ensureRuntime = async () => {
+  if (!echartsRuntime) {
+    echartsRuntime = await loadCoreEchartsRuntime();
   }
-}
+  return echartsRuntime;
+};
 
-// 调整图表尺寸
-function resizeCharts() {
-  try {
-    if (cpuChart) cpuChart.resize();
-    if (memoryChart) memoryChart.resize();
-  } catch (error) {
-    console.error("调整图表尺寸时出错:", error);
+const buildResourceChartOption = (seriesName, color, data = []) => ({
+  title: {
+    text: "",
+    left: "center",
+  },
+  tooltip: {
+    trigger: "axis",
+    formatter(params) {
+      const timeStr = formatTimestamp(params[0]?.axisValue);
+      if (!timeStr) {
+        return `时间: 未知<br/>${seriesName}: ${params[0]?.value ?? "-"}%`;
+      }
+      return `时间: ${timeStr}<br/>${seriesName}: ${params[0]?.value ?? "-"}%`;
+    },
+  },
+  grid: {
+    left: "3%",
+    right: "4%",
+    bottom: "3%",
+    top: "8%",
+    containLabel: true,
+  },
+  xAxis: {
+    type: "category",
+    boundaryGap: false,
+    data: props.timeData || [],
+    axisLabel: {
+      formatter: (value) => {
+        const timeStr = formatTimestamp(value);
+        return timeStr || "-";
+      },
+    },
+  },
+  yAxis: {
+    type: "value",
+    min: 0,
+    max: 100,
+    axisLabel: {
+      formatter: "{value}%",
+    },
+  },
+  series: [
+    {
+      name: seriesName,
+      type: "line",
+      smooth: true,
+      data,
+      areaStyle: {
+        opacity: 0.3,
+      },
+      itemStyle: {
+        color,
+      },
+    },
+  ],
+});
+
+const ensureCpuChart = async () => {
+  await nextTick();
+  if (!cpuChartRef.value) {
+    return null;
   }
-}
+  if (!cpuChart) {
+    const runtime = await ensureRuntime();
+    cpuChart = runtime.init(cpuChartRef.value);
+    cpuResizeObserver = disconnectObserver(cpuResizeObserver);
+    cpuResizeObserver = createResizeObserver(cpuChartRef.value, () => {
+      cpuChart?.resize();
+    });
+  }
+  return cpuChart;
+};
+
+const ensureMemoryChart = async () => {
+  await nextTick();
+  if (!memoryChartRef.value) {
+    return null;
+  }
+  if (!memoryChart) {
+    const runtime = await ensureRuntime();
+    memoryChart = runtime.init(memoryChartRef.value);
+    memoryResizeObserver = disconnectObserver(memoryResizeObserver);
+    memoryResizeObserver = createResizeObserver(memoryChartRef.value, () => {
+      memoryChart?.resize();
+    });
+  }
+  return memoryChart;
+};
+
+const renderCharts = async () => {
+  try {
+    const [cpuInstance, memoryInstance] = await Promise.all([
+      ensureCpuChart(),
+      ensureMemoryChart(),
+    ]);
+
+    cpuInstance?.setOption(
+      buildResourceChartOption("CPU使用率", "#409EFF", props.cpuData || []),
+      true,
+    );
+    memoryInstance?.setOption(
+      buildResourceChartOption("内存使用率", "#67C23A", props.memoryData || []),
+      true,
+    );
+
+    cpuInstance?.resize();
+    memoryInstance?.resize();
+  } catch (error) {
+    console.error("渲染资源图表时出错:", error);
+  }
+};
 
 // 监听数据变化，更新图表
 watch(
   () => [props.cpuData, props.memoryData, props.timeData],
-  ([newCpuData, newMemoryData, newTimeData]) => {
-    try {
-      if (cpuChart) {
-        cpuChart.setOption({
-          xAxis: { data: newTimeData || [] },
-          series: [{ data: newCpuData || [] }],
-        });
-      }
-
-      if (memoryChart) {
-        memoryChart.setOption({
-          xAxis: { data: newTimeData || [] },
-          series: [{ data: newMemoryData || [] }],
-        });
-      }
-    } catch (error) {
-      console.error("更新图表数据时出错:", error);
-    }
+  () => {
+    void renderCharts();
   },
   { deep: true },
 );
 
 // 生命周期钩子
 onMounted(() => {
-  initCharts();
+  void renderCharts();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("resize", resizeCharts);
-  if (cpuChart) cpuChart.dispose();
-  if (memoryChart) memoryChart.dispose();
+  cpuResizeObserver = disconnectObserver(cpuResizeObserver);
+  memoryResizeObserver = disconnectObserver(memoryResizeObserver);
+  cpuChart = disposeChart(cpuChart);
+  memoryChart = disposeChart(memoryChart);
 });
 </script>
 
