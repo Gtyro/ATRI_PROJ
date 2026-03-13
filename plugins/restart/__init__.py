@@ -21,6 +21,7 @@ from nonebot_plugin_apscheduler import scheduler
 from .restart_manager import RestartManager
 from .config import RestartConfig
 from src.adapters.nonebot.command_registry import register_alconna, register_auto_feature, register_command
+from src.infra.logging.restart_diagnostics import summarize_issue_status
 
 # 声明依赖
 require("db_core")
@@ -167,6 +168,13 @@ async def handle_restart_status(bot: Bot, event: MessageEvent):
         await restart_status_cmd.finish("重启系统未初始化")
 
     status_info = await restart_manager.get_status_info()
+    log_diagnostics = status_info.get("log_diagnostics", {})
+    startup_summary = log_diagnostics.get("startup_summary", {})
+    previous_summary = log_diagnostics.get("previous_log_summary", {})
+    startup_samples = tuple(startup_summary.get("sample_messages", ()) or ())
+    startup_sample_line = "无"
+    if startup_samples:
+        startup_sample_line = " / ".join(str(message) for message in startup_samples[:2])
 
     # 构建状态文本
     status_text = f"""
@@ -184,6 +192,18 @@ async def handle_restart_status(bot: Bot, event: MessageEvent):
 🔹 重启原因: {status_info.get('restart_reason', '无')}
 🔹 运行时长: {status_info.get('uptime', '未知')}
 🔹 重启次数: {status_info.get('restart_count', 0)}
+
+📋 启动诊断
+------------------------
+🔹 启动日志: {log_diagnostics.get('current_log', '未找到')}
+🔹 启动状态: {summarize_issue_status(int(startup_summary.get('errors', 0)), int(startup_summary.get('warnings', 0)), str(startup_summary.get('status', '')))}
+🔹 问题样例: {startup_sample_line}
+
+📚 上一份日志
+------------------------
+🔹 日志文件: {log_diagnostics.get('previous_log', '未找到')}
+🔹 ERROR: {previous_summary.get('errors', 0)}
+🔹 WARNING: {previous_summary.get('warnings', 0)}
 """.strip()
 
     # 如果启用了通知，显示通知状态

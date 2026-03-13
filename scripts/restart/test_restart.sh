@@ -27,9 +27,11 @@ files=(
     "plugins/restart/config.py"
     "plugins/restart/restart_manager.py"
     "plugins/restart/README.md"
+    "src/infra/logging/restart_diagnostics.py"
     "scripts/restart/start_bot.sh"
     "scripts/restart/test_restart.sh"
     "scripts/restart/check_restart_plugin.sh"
+    "scripts/restart/log_diagnostics.py"
 )
 
 for file in "${files[@]}"; do

@@ -12,12 +12,16 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from datetime import datetime
+from typing import Dict, Any
 
 from nonebot import get_driver
 
 from .config import RestartConfig
+from src.infra.logging.restart_diagnostics import (
+    collect_restart_log_diagnostics,
+    summarize_issue_status,
+)
 
 
 class RestartManager:
@@ -372,6 +376,9 @@ rm -f "{os.path.abspath(restart_script_path)}"
             restart_reason = status_data.get("restart_reason", "未知原因")
             restart_count = status_data.get("restart_count", 0)
             last_restart = status_data.get("last_restart", "未知时间")
+            diagnostics = self._collect_log_diagnostics(status_data)
+            startup_summary = diagnostics.get("startup_summary", {})
+            previous_summary = diagnostics.get("previous_log_summary", {})
 
             # 计算运行时长
             start_time = status_data.get("start_time", time.time())
@@ -384,6 +391,17 @@ rm -f "{os.path.abspath(restart_script_path)}"
             else:
                 uptime_str = f"{uptime_minutes}分钟"
 
+            startup_status = summarize_issue_status(
+                int(startup_summary.get("errors", 0)),
+                int(startup_summary.get("warnings", 0)),
+                str(startup_summary.get("status", "")),
+            )
+            startup_samples = self._format_issue_samples(
+                startup_summary.get("sample_messages", ())
+            )
+            startup_log = diagnostics.get("current_log", "未找到")
+            previous_log = diagnostics.get("previous_log", "未找到")
+
             notification_text = f"""
 🎉 机器人重启完成通知
 
@@ -392,7 +410,14 @@ rm -f "{os.path.abspath(restart_script_path)}"
 🔹 当前运行时长: {uptime_str}
 🔹 总重启次数: {restart_count}
 
-✅ 系统已恢复正常运行！
+📋 本次启动诊断
+🔹 启动日志: {startup_log}
+🔹 启动状态: {startup_status}
+{startup_samples}
+📚 上一份日志摘要
+🔹 日志文件: {previous_log}
+🔹 ERROR: {previous_summary.get("errors", 0)}
+🔹 WARNING: {previous_summary.get("warnings", 0)}
 """.strip()
 
             # 发送通知给所有超级用户
@@ -446,6 +471,8 @@ rm -f "{os.path.abspath(restart_script_path)}"
             if last_startup != '未知':
                 last_startup = last_startup[:19].replace('T', ' ')
 
+            log_diagnostics = self._collect_log_diagnostics(status_data)
+
             return {
                 'last_startup': last_startup,
                 'last_restart': last_restart,
@@ -454,7 +481,8 @@ rm -f "{os.path.abspath(restart_script_path)}"
                 'uptime': uptime_str,
                 'notification_enabled': self.config.restart_notification_enabled,
                 'notification_sent': status_data.get('notification_sent', False),
-                'notification_time': status_data.get('notification_time', '未发送')
+                'notification_time': status_data.get('notification_time', '未发送'),
+                'log_diagnostics': log_diagnostics,
             }
 
         except Exception as e:
@@ -467,8 +495,25 @@ rm -f "{os.path.abspath(restart_script_path)}"
                 'uptime': '未知',
                 'notification_enabled': False,
                 'notification_sent': False,
-                'notification_time': '未发送'
+                'notification_time': '未发送',
+                'log_diagnostics': self._collect_log_diagnostics({}),
             }
+
+    def _collect_log_diagnostics(self, status_data: Dict[str, Any]) -> Dict[str, Any]:
+        return collect_restart_log_diagnostics(
+            log_dir="logs",
+            startup_reference=status_data.get("last_startup"),
+            status_file=self.status_file,
+        )
+
+    @staticmethod
+    def _format_issue_samples(sample_messages: Any) -> str:
+        if not sample_messages:
+            return "🔹 启动期问题样例: 无"
+
+        messages = tuple(sample_messages)
+        preview = " / ".join(str(message) for message in messages[:2])
+        return f"🔹 启动期问题样例: {preview}"
 
     async def _load_status(self) -> Dict[str, Any]:
         """加载状态数据"""

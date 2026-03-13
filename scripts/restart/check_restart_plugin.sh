@@ -12,6 +12,9 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}检查ATRI重启插件加载状态${NC}"
 echo "==============================="
 
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$PROJECT_DIR"
+
 # 检查是否有机器人进程在运行
 if screen -list 2>/dev/null | grep -q "atri"; then
     echo -e "✅ 发现机器人会话 'atri'"
@@ -63,13 +66,11 @@ if [ -d "$LOG_DIR" ] && [ "$(ls -A $LOG_DIR 2>/dev/null)" ]; then
         
         # 检查错误信息
         echo ""
-        echo -e "${BLUE}检查相关错误信息：${NC}"
-        ERROR_COUNT=$(grep -c "ERROR.*restart\|ERROR.*重启" "$LATEST_LOG" 2>/dev/null | head -1 || echo "0")
-        if [ "${ERROR_COUNT:-0}" -gt 0 ]; then
-            echo -e "${RED}发现 $ERROR_COUNT 个重启相关错误：${NC}"
-            grep "ERROR.*restart\|ERROR.*重启" "$LATEST_LOG" | tail -5
+        echo -e "${BLUE}启动与历史日志诊断：${NC}"
+        if [ -x "$PROJECT_DIR/.venv/bin/python" ]; then
+            "$PROJECT_DIR/.venv/bin/python" "$PROJECT_DIR/scripts/restart/log_diagnostics.py"
         else
-            echo -e "✅ 未发现重启相关错误"
+            echo -e "${YELLOW}⚠️  未找到 .venv/bin/python，跳过详细日志诊断${NC}"
         fi
         
     else
