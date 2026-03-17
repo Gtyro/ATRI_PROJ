@@ -216,6 +216,20 @@ class PersonaEngineCore:
     async def format_memories(self, query: str, user_id: str, conv_id: str) -> str:
         return await self.memory_service.format_memories(query, user_id, conv_id)
 
+    async def retrieve_memory_payload(
+        self,
+        query: str,
+        user_id: Optional[str] = None,
+        conv_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        return await self.memory_service.retrieve_memory_payload(
+            query,
+            user_id=user_id,
+            conv_id=conv_id,
+            **kwargs,
+        )
+
     async def parse_chat_history(self, bot_id: str, file_path: str, conv_id: str) -> List[Dict[str, Any]]:
         try:
             if not os.path.exists(file_path):

@@ -116,6 +116,9 @@ class LongTermRetriever:
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
+                    "last_accessed": memory.last_accessed.timestamp()
+                    if memory.last_accessed
+                    else datetime.now().timestamp(),
                     "created_at": memory.created_at.timestamp()
                     if memory.created_at
                     else datetime.now().timestamp(),
@@ -172,6 +175,9 @@ class LongTermRetriever:
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
+                    "last_accessed": memory.last_accessed.timestamp()
+                    if memory.last_accessed
+                    else datetime.now().timestamp(),
                     "created_at": memory.created_at.timestamp()
                     if memory.created_at
                     else datetime.now().timestamp(),
@@ -249,6 +255,9 @@ class LongTermRetriever:
                     "title": memory.title,
                     "content": memory.content,
                     "weight": memory.weight,
+                    "last_accessed": memory.last_accessed.timestamp()
+                    if memory.last_accessed
+                    else datetime.now().timestamp(),
                     "created_at": memory.created_at.timestamp()
                     if memory.created_at
                     else datetime.now().timestamp(),

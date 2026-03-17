@@ -80,3 +80,10 @@ class LLMProviderAdapter(LLMProvider):
             long_memory_prompt=long_memory_prompt,
             tool_choice=tool_choice,
         )
+
+    async def select_memory_candidates(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+    ) -> List[str]:
+        return await self._impl.select_memory_candidates(query, candidates)

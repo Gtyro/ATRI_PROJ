@@ -104,6 +104,17 @@ class _MessageProcessorStub:
     async def retrieve_memory_context(self, conv_id: str, keywords: List[str]) -> str:
         return ""
 
+    async def retrieve_memory_context_payload(self, conv_id: str, keywords: List[str]) -> Dict[str, Any]:
+        return {"query": " ".join(keywords), "memory_context": "", "selected_ids": []}
+
+    async def reinforce_memory_selection(
+        self,
+        conv_id: str,
+        query: str,
+        selected_ids: List[str],
+    ) -> None:
+        return None
+
     async def generate_reply(
         self,
         conv_id: str,

@@ -175,6 +175,6 @@ async def assemble_persona_engine(
         image_context_service=image_context_service,
     )
     if hasattr(llm_impl, "set_memory_retrieval_callback"):
-        llm_impl.set_memory_retrieval_callback(engine.format_memories)
+        llm_impl.set_memory_retrieval_callback(engine.retrieve_memory_payload)
 
     return engine

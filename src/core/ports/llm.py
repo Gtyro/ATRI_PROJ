@@ -23,3 +23,10 @@ class LLMProvider(Protocol):
         tool_choice: str = "required",
     ) -> str:
         ...
+
+    async def select_memory_candidates(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+    ) -> List[str]:
+        ...

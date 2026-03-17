@@ -76,14 +76,19 @@ class _ProviderStub:
         *,
         name: str,
         history_keywords: Optional[List[str]] = None,
+        selected_memory_ids: Optional[List[str]] = None,
         history_error: Optional[Exception] = None,
+        selection_error: Optional[Exception] = None,
         response_text: str = "收到",
     ):
         self.provider_name = name
         self.history_keywords = list(history_keywords or [])
+        self.selected_memory_ids = list(selected_memory_ids or [])
         self.history_error = history_error
+        self.selection_error = selection_error
         self.response_text = response_text
         self.history_calls = 0
+        self.selection_calls = 0
         self.generate_calls = 0
         self.last_long_memory_prompt = ""
         self.last_tool_choice = ""
@@ -113,6 +118,16 @@ class _ProviderStub:
         self.last_long_memory_prompt = long_memory_prompt
         self.last_tool_choice = tool_choice
         return self.response_text
+
+    async def select_memory_candidates(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+    ) -> List[str]:
+        self.selection_calls += 1
+        if self.selection_error is not None:
+            raise self.selection_error
+        return list(self.selected_memory_ids)
 
 
 def _build_service(
@@ -170,6 +185,7 @@ def test_keyword_chain_provider_fallback_keeps_hybrid_memory_injection():
     primary = _ProviderStub(
         name="primary",
         history_error=RuntimeError("primary unavailable"),
+        selection_error=RuntimeError("primary unavailable"),
     )
     secondary = _ProviderStub(
         name="secondary",
@@ -178,9 +194,19 @@ def test_keyword_chain_provider_fallback_keeps_hybrid_memory_injection():
     service, fallback_provider = _build_service(primary=primary, secondary=secondary)
     retrieval_queries: List[str] = []
 
-    def _retrieve_callback(query: str, user_id: Any = None, conv_id: str = "") -> str:
+    def _retrieve_callback(
+        query: str,
+        user_id: Any = None,
+        conv_id: str = "",
+        selected_ids: Optional[List[str]] = None,
+        reinforce_selected: bool = False,
+    ) -> dict:
         retrieval_queries.append(query)
-        return "我记得这些内容:\n1. [群聊]【张三】他最近在做项目A"
+        return {
+            "memory_context": "我记得这些内容:\n1. [群聊]【张三】他最近在做项目A",
+            "candidates": [],
+            "selected_ids": [],
+        }
 
     fallback_provider.set_memory_retrieval_callback(_retrieve_callback)
 
@@ -204,9 +230,19 @@ def test_keyword_chain_empty_keywords_skips_explicit_retrieval():
     service, fallback_provider = _build_service(primary=primary, secondary=secondary)
     retrieval_queries: List[str] = []
 
-    def _retrieve_callback(query: str, user_id: Any = None, conv_id: str = "") -> str:
+    def _retrieve_callback(
+        query: str,
+        user_id: Any = None,
+        conv_id: str = "",
+        selected_ids: Optional[List[str]] = None,
+        reinforce_selected: bool = False,
+    ) -> dict:
         retrieval_queries.append(query)
-        return "不应被调用"
+        return {
+            "memory_context": "不应被调用",
+            "candidates": [],
+            "selected_ids": [],
+        }
 
     fallback_provider.set_memory_retrieval_callback(_retrieve_callback)
 
@@ -220,3 +256,89 @@ def test_keyword_chain_empty_keywords_skips_explicit_retrieval():
     reply_provider = _resolve_reply_provider(primary, secondary)
     assert reply_provider.last_long_memory_prompt == ""
     assert reply_provider.last_tool_choice == "none"
+
+
+def test_hybrid_selected_memories_are_reinforced_after_reply():
+    primary = _ProviderStub(
+        name="primary",
+        history_error=RuntimeError("primary unavailable"),
+        selection_error=RuntimeError("primary unavailable"),
+    )
+    secondary = _ProviderStub(
+        name="secondary",
+        history_keywords=["张三", "项目A"],
+        selected_memory_ids=["mem-2"],
+    )
+    service, fallback_provider = _build_service(primary=primary, secondary=secondary)
+    callback_calls: List[Dict[str, Any]] = []
+
+    def _retrieve_callback(
+        query: str,
+        user_id: Any = None,
+        conv_id: str = "",
+        selected_ids: Optional[List[str]] = None,
+        reinforce_selected: bool = False,
+    ) -> dict:
+        callback_calls.append({
+            "query": query,
+            "conv_id": conv_id,
+            "selected_ids": list(selected_ids or []),
+            "reinforce_selected": reinforce_selected,
+        })
+        if selected_ids:
+            return {
+                "memory_context": "我记得这些内容:\n1. [群聊]【项目A】项目A延期到下周",
+                "candidates": [],
+                "selected_ids": list(selected_ids),
+            }
+        return {
+            "memory_context": "我记得这些内容:\n1. [群聊]【张三】他最近在做项目A",
+            "candidates": [
+                {
+                    "id": "mem-1",
+                    "title": "张三",
+                    "summary": "张三最近在做项目A",
+                    "source": "topic",
+                    "weight": 1.2,
+                    "created_at": 1742205600.0,
+                },
+                {
+                    "id": "mem-2",
+                    "title": "项目A",
+                    "summary": "项目A延期到下周",
+                    "source": "topic",
+                    "weight": 1.0,
+                    "created_at": 1742205601.0,
+                },
+            ],
+            "selected_ids": [],
+        }
+
+    fallback_provider.set_memory_retrieval_callback(_retrieve_callback)
+
+    result = asyncio.run(service.process_conversation("group_203", user_id="10003", is_direct=True))
+
+    assert result is not None
+    assert result["reply_content"] == ["收到"]
+    reply_provider = _resolve_reply_provider(primary, secondary)
+    assert "【项目A】项目A延期到下周" in reply_provider.last_long_memory_prompt
+    assert callback_calls == [
+        {
+            "query": "张三 项目A",
+            "conv_id": "group_203",
+            "selected_ids": [],
+            "reinforce_selected": False,
+        },
+        {
+            "query": "张三 项目A",
+            "conv_id": "group_203",
+            "selected_ids": ["mem-2"],
+            "reinforce_selected": False,
+        },
+        {
+            "query": "张三 项目A",
+            "conv_id": "group_203",
+            "selected_ids": ["mem-2"],
+            "reinforce_selected": True,
+        },
+    ]

@@ -89,3 +89,38 @@ def test_message_processor_retrieve_memory_context_requires_keyword_signature():
     context = asyncio.run(processor.retrieve_memory_context("group_1", ["张三"]))
 
     assert context == ""
+
+
+def test_message_processor_retrieve_memory_context_accepts_payload_dict():
+    provider = _FakeProvider()
+    processor = MessageProcessor(
+        config={"queue_history_size": 20},
+        llm_provider=provider,
+    )
+
+    async def payload_callback(query, user_id=None, conv_id=None):
+        assert query == "张三"
+        assert conv_id == "group_1"
+        return {"memory_context": "我记得这些内容:\n1. [topic]【张三近况】张三最近在做项目A (2026-03-17 10:00)\n"}
+
+    provider.memory_retrieval_callback = payload_callback
+    context = asyncio.run(processor.retrieve_memory_context("group_1", ["张三"]))
+
+    assert "我记得这些内容" in context
+
+
+def test_message_processor_retrieve_memory_context_rejects_legacy_string_payload():
+    provider = _FakeProvider()
+    processor = MessageProcessor(
+        config={"queue_history_size": 20},
+        llm_provider=provider,
+    )
+
+    async def legacy_callback(query, user_id=None, conv_id=None):
+        assert query == "张三"
+        return "我记得这些内容:\n1. [topic]【张三近况】张三最近在做项目A (2026-03-17 10:00)\n"
+
+    provider.memory_retrieval_callback = legacy_callback
+    context = asyncio.run(processor.retrieve_memory_context("group_1", ["张三"]))
+
+    assert context == ""

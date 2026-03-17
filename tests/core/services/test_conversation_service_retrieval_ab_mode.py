@@ -82,6 +82,8 @@ class _ImageContextServiceStub:
 class _MessageProcessorStub:
     def __init__(self, *, memory_context: str = "我记得这些内容:\n1. [群聊]【张三】他最近在做项目A"):
         self.retrieve_calls: List[List[str]] = []
+        self.retrieve_payload_calls: List[List[str]] = []
+        self.reinforce_calls: List[Dict[str, Any]] = []
         self.last_long_memory_prompt = ""
         self.last_tool_choice = ""
         self.history_keyword_calls = 0
@@ -104,6 +106,27 @@ class _MessageProcessorStub:
     async def retrieve_memory_context(self, conv_id: str, keywords: List[str]) -> str:
         self.retrieve_calls.append(list(keywords))
         return self.memory_context
+
+    async def retrieve_memory_context_payload(self, conv_id: str, keywords: List[str]) -> Dict[str, Any]:
+        self.retrieve_payload_calls.append(list(keywords))
+        self.retrieve_calls.append(list(keywords))
+        return {
+            "query": " ".join(keywords),
+            "memory_context": self.memory_context,
+            "selected_ids": [],
+        }
+
+    async def reinforce_memory_selection(
+        self,
+        conv_id: str,
+        query: str,
+        selected_ids: List[str],
+    ) -> None:
+        self.reinforce_calls.append({
+            "conv_id": conv_id,
+            "query": query,
+            "selected_ids": list(selected_ids),
+        })
 
     async def generate_reply(
         self,

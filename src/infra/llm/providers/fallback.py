@@ -75,6 +75,18 @@ class FallbackLLMProvider:
             tool_choice=tool_choice,
         )
 
+    async def select_memory_candidates(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+    ) -> List[str]:
+        return await self._call_with_fallback(
+            "select_memory_candidates",
+            [],
+            query,
+            candidates,
+        )
+
     def set_memory_retrieval_callback(self, callback: Callable[..., Any]) -> None:
         """向回退链中的可用 provider 下发记忆检索回调。"""
         self.memory_retrieval_callback = callback

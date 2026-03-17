@@ -615,3 +615,50 @@ class MemoryRepository:
         except Exception as e:
             logging.error(f"应用记忆衰减失败: {e}")
             return 0
+
+    async def reinforce_memories(
+        self,
+        memory_ids: List[str],
+        *,
+        boost: float = 0.08,
+        max_weight: float = 3.0,
+    ) -> int:
+        """强化指定记忆，并刷新最后访问时间。"""
+        try:
+            normalized_ids: List[str] = []
+            seen = set()
+            for memory_id in memory_ids:
+                normalized_id = str(memory_id or "").strip()
+                if not normalized_id or normalized_id in seen:
+                    continue
+                seen.add(normalized_id)
+                normalized_ids.append(normalized_id)
+
+            if not normalized_ids:
+                return 0
+
+            now = datetime.now()
+            updated = 0
+            for memory_id in normalized_ids:
+                memory = Memory.nodes.get_or_none(uid=memory_id)
+                if memory is None:
+                    continue
+
+                memory.last_accessed = now
+                if not memory.is_permanent:
+                    current_weight = float(memory.weight or 1.0)
+                    memory.weight = min(max_weight, current_weight + boost)
+                memory.save()
+                updated += 1
+
+            if updated > 0:
+                logging.info(
+                    "强化记忆完成: updated=%s boost=%s max_weight=%s",
+                    updated,
+                    boost,
+                    max_weight,
+                )
+            return updated
+        except Exception as e:
+            logging.error(f"强化记忆失败: {e}")
+            return 0

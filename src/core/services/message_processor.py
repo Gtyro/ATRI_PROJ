@@ -70,6 +70,15 @@ class MessageProcessor:
 
     async def retrieve_memory_context(self, conv_id: str, keywords: List[str]) -> str:
         """根据关键词显式检索记忆，返回可注入回复提示词的文本。"""
+        payload = await self.retrieve_memory_context_payload(conv_id, keywords)
+        return str(payload.get("memory_context", "") or "").strip()
+
+    async def retrieve_memory_context_payload(
+        self,
+        conv_id: str,
+        keywords: List[str],
+    ) -> Dict[str, Any]:
+        """根据关键词显式检索记忆，并在可用时进行候选选择。"""
         normalized_keywords: List[str] = []
         seen = set()
         for item in keywords:
@@ -80,12 +89,12 @@ class MessageProcessor:
             normalized_keywords.append(keyword)
 
         if not normalized_keywords:
-            return ""
+            return {"query": "", "memory_context": "", "selected_ids": []}
 
         callback = getattr(self.llm_provider, "memory_retrieval_callback", None)
         if not callable(callback):
             logging.warning("未配置 memory_retrieval_callback，跳过显式记忆检索")
-            return ""
+            return {"query": "", "memory_context": "", "selected_ids": []}
 
         query = " ".join(normalized_keywords)
         try:
@@ -96,10 +105,77 @@ class MessageProcessor:
             )
             if inspect.isawaitable(retrieval_result):
                 retrieval_result = await retrieval_result
-            return str(retrieval_result or "").strip()
+            if not isinstance(retrieval_result, dict):
+                raise TypeError("memory_retrieval_callback 必须返回包含 memory_context 的字典")
+            memory_context = str(retrieval_result.get("memory_context", "") or "").strip()
+            selected_ids: List[str] = []
+            candidates = retrieval_result.get("candidates", [])
+            selector = getattr(self.llm_provider, "select_memory_candidates", None)
+            if isinstance(candidates, list) and candidates and callable(selector):
+                selection_result = selector(query, candidates)
+                if inspect.isawaitable(selection_result):
+                    selection_result = await selection_result
+                if isinstance(selection_result, list):
+                    selected_ids = [
+                        str(memory_id or "").strip()
+                        for memory_id in selection_result
+                        if str(memory_id or "").strip()
+                    ]
+                if selected_ids:
+                    selected_payload = callback(
+                        query,
+                        user_id=None,
+                        conv_id=conv_id,
+                        selected_ids=selected_ids,
+                        reinforce_selected=False,
+                    )
+                    if inspect.isawaitable(selected_payload):
+                        selected_payload = await selected_payload
+                    if not isinstance(selected_payload, dict):
+                        raise TypeError("memory_retrieval_callback 必须返回包含 memory_context 的字典")
+                    memory_context = str(selected_payload.get("memory_context", "") or "").strip()
+            return {
+                "query": query,
+                "memory_context": memory_context,
+                "selected_ids": selected_ids,
+            }
         except Exception as e:
             logging.error(f"显式记忆检索失败: {e}")
-            return ""
+            return {
+                "query": query,
+                "memory_context": "",
+                "selected_ids": [],
+            }
+
+    async def reinforce_memory_selection(
+        self,
+        conv_id: str,
+        query: str,
+        selected_ids: List[str],
+    ) -> None:
+        """在回复成功后强化已选中的显式记忆。"""
+        callback = getattr(self.llm_provider, "memory_retrieval_callback", None)
+        if not callable(callback):
+            return
+        normalized_selected_ids = [
+            str(memory_id or "").strip()
+            for memory_id in selected_ids
+            if str(memory_id or "").strip()
+        ]
+        if not query or not normalized_selected_ids:
+            return
+        try:
+            result = callback(
+                query,
+                user_id=None,
+                conv_id=conv_id,
+                selected_ids=normalized_selected_ids,
+                reinforce_selected=True,
+            )
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:
+            logging.error(f"显式记忆强化失败: {e}")
 
     async def should_respond(self, conv_id: str, topics: List[Dict]) -> bool:
         """判断是否应该回复

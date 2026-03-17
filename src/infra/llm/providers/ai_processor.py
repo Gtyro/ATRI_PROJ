@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ..prompts import (
+    MEMORY_SELECTION_PROMPT,
     REPLY_HISTORY_KEYWORDS_PROMPT,
     TOPIC_EXTRACTION_PROMPT,
 )
@@ -114,6 +115,129 @@ class AIProcessor:
         for sep in separators:
             candidates = [part for keyword in candidates for part in keyword.split(sep)]
         return cls._normalize_keywords(candidates)
+
+    @staticmethod
+    def _normalize_memory_payload(payload: Any) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise TypeError("memory_retrieval_callback 必须返回结构化字典")
+
+        memory_context = str(payload.get("memory_context", "") or "").strip()
+        raw_candidates = payload.get("candidates", [])
+        candidates: List[Dict[str, Any]] = []
+        seen_ids = set()
+        if isinstance(raw_candidates, list):
+            for raw_candidate in raw_candidates:
+                if not isinstance(raw_candidate, dict):
+                    continue
+                memory_id = str(raw_candidate.get("id", "") or "").strip()
+                if not memory_id or memory_id in seen_ids:
+                    continue
+                seen_ids.add(memory_id)
+                candidates.append({
+                    "id": memory_id,
+                    "title": str(raw_candidate.get("title", "") or "").strip(),
+                    "summary": str(raw_candidate.get("summary", "") or "").strip(),
+                    "source": str(raw_candidate.get("source", "") or "").strip(),
+                    "weight": float(raw_candidate.get("weight", 0.0) or 0.0),
+                    "created_at": float(raw_candidate.get("created_at", 0.0) or 0.0),
+                })
+
+        selected_ids = [
+            str(item or "").strip()
+            for item in payload.get("selected_ids", []) or []
+            if str(item or "").strip()
+        ]
+        return {
+            "memory_context": memory_context,
+            "candidates": candidates,
+            "selected_ids": selected_ids,
+        }
+
+    @staticmethod
+    def _format_memory_candidates(candidates: List[Dict[str, Any]]) -> str:
+        lines: List[str] = []
+        for index, candidate in enumerate(candidates, 1):
+            lines.append(
+                (
+                    f"{index}. id={candidate['id']}\n"
+                    f"标题: {candidate.get('title') or '无标题'}\n"
+                    f"摘要: {candidate.get('summary') or '无摘要'}\n"
+                    f"来源: {candidate.get('source') or '未知'}\n"
+                    f"权重: {candidate.get('weight', 0.0):.2f}"
+                )
+            )
+        return "\n\n".join(lines)
+
+    @classmethod
+    def _parse_memory_selection_output(
+        cls,
+        result: Any,
+        raw_text: str,
+        *,
+        allowed_ids: List[str],
+    ) -> List[str]:
+        selected_ids: List[Any] = []
+        if isinstance(result, dict):
+            selected_ids = result.get("selected_ids", []) or []
+        elif isinstance(result, list):
+            selected_ids = result
+        else:
+            selected_ids = re.split(r"[\s,，]+", str(raw_text or "").strip())
+
+        normalized_ids: List[str] = []
+        seen = set()
+        allowed_id_set = {str(memory_id or "").strip() for memory_id in allowed_ids}
+        for candidate_id in selected_ids:
+            memory_id = str(candidate_id or "").strip()
+            if not memory_id or memory_id in seen or memory_id not in allowed_id_set:
+                continue
+            seen.add(memory_id)
+            normalized_ids.append(memory_id)
+        return normalized_ids[:3]
+
+    async def select_memory_candidates(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+    ) -> List[str]:
+        if not candidates or self._llm_client is None:
+            return []
+
+        candidate_text = self._format_memory_candidates(candidates)
+        params = LLMCallParams(temperature=0.2, max_tokens=300)
+        try:
+            output = await self._llm_client.structured_output(
+                [{
+                    "role": "user",
+                    "content": f"当前查询:\n{query}\n\n候选记忆:\n{candidate_text}",
+                }],
+                params=params,
+                system_prompt=MEMORY_SELECTION_PROMPT,
+                operation="memory_candidate_selection",
+                strict=False,
+            )
+            selected_ids = self._parse_memory_selection_output(
+                output.data,
+                output.raw_text,
+                allowed_ids=[candidate["id"] for candidate in candidates],
+            )
+            logging.info(
+                "记忆候选选择完成: query=%s candidate_count=%s selected_ids=%s",
+                query,
+                len(candidates),
+                selected_ids,
+            )
+            return selected_ids
+        except LLMProviderError as e:
+            logging.error(f"记忆候选选择失败: {e}")
+            if self.raise_on_error:
+                raise
+            return []
+        except Exception as e:
+            logging.error(f"记忆候选选择失败: {e}")
+            if self.raise_on_error:
+                raise
+            return []
 
     async def extract_topics(self, conv_id: str, messages: List[Dict]) -> List[Dict]:
         """从消息中提取话题
@@ -377,11 +501,33 @@ class AIProcessor:
                             logging.info(f"检索记忆: {query}")
 
                             if self.memory_retrieval_callback:
-                                memory_context = await self.memory_retrieval_callback(
-                                    query,
-                                    user_id=None,
-                                    conv_id=conv_id,
+                                retrieval_payload = self._normalize_memory_payload(
+                                    await self.memory_retrieval_callback(
+                                        query,
+                                        user_id=None,
+                                        conv_id=conv_id,
+                                    )
                                 )
+                                memory_context = retrieval_payload["memory_context"]
+                                candidates = retrieval_payload["candidates"]
+                                if candidates:
+                                    selected_ids = await self.select_memory_candidates(
+                                        query=query,
+                                        candidates=candidates,
+                                    )
+                                    if selected_ids:
+                                        selected_payload = self._normalize_memory_payload(
+                                            await self.memory_retrieval_callback(
+                                                query,
+                                                user_id=None,
+                                                conv_id=conv_id,
+                                                selected_ids=selected_ids,
+                                                reinforce_selected=True,
+                                            )
+                                        )
+                                        if selected_payload["memory_context"]:
+                                            memory_context = selected_payload["memory_context"]
+
                                 logging.info(f"记忆文本: {memory_context}")
                                 final_messages.append({
                                     "role": "tool",

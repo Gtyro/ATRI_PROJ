@@ -416,6 +416,8 @@ class ConversationService:
                 )
 
         reply_keywords: List[str] = []
+        explicit_memory_query = ""
+        explicit_selected_memory_ids: List[str] = []
         if retrieval_ab_mode == "hybrid":
             try:
                 reply_keywords = await self.msgprocessor.extract_reply_keywords_from_history(
@@ -436,7 +438,17 @@ class ConversationService:
 
         if retrieval_ab_mode == "hybrid":
             try:
-                memory_context = await self.msgprocessor.retrieve_memory_context(conv_id, reply_keywords)
+                retrieval_payload = await self.msgprocessor.retrieve_memory_context_payload(
+                    conv_id,
+                    reply_keywords,
+                )
+                explicit_memory_query = str(retrieval_payload.get("query", "") or "").strip()
+                explicit_selected_memory_ids = [
+                    str(memory_id or "").strip()
+                    for memory_id in retrieval_payload.get("selected_ids", []) or []
+                    if str(memory_id or "").strip()
+                ]
+                memory_context = str(retrieval_payload.get("memory_context", "") or "").strip()
                 if memory_context and "我似乎没有关于这方面的记忆" not in memory_context:
                     explicit_memory_hit = True
                     long_memory_prompt = self._merge_long_memory_prompt(
@@ -496,5 +508,12 @@ class ConversationService:
         }
         if reply_content and self.reply_callback:
             await self.reply_callback(conv_id, reply_dict)
+
+        if reply_content and explicit_selected_memory_ids:
+            await self.msgprocessor.reinforce_memory_selection(
+                conv_id,
+                explicit_memory_query,
+                explicit_selected_memory_ids,
+            )
 
         return reply_dict
