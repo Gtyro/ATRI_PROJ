@@ -59,6 +59,16 @@ class DecayManager:
             plugin_config_model = _PluginConfig
         self.plugin_config_model = plugin_config_model
 
+    @staticmethod
+    def _ensure_conv_id(group_or_conv_id: Any) -> str:
+        """将群组 gid 统一转换为实际使用的 conv_id。"""
+        normalized = str(group_or_conv_id or "").strip()
+        if not normalized:
+            return ""
+        if normalized.startswith(("group_", "private_")):
+            return normalized
+        return f"group_{normalized}"
+
     async def initialize(self):
         """初始化衰减管理器，确保配置数据存在"""
         try:
@@ -159,7 +169,10 @@ class DecayManager:
             total_cleaned = 0
 
             # 对每个会话进行清理
-            for conv_id in conv_ids:
+            for raw_conv_id in conv_ids:
+                conv_id = self._ensure_conv_id(raw_conv_id)
+                if not conv_id:
+                    continue
                 cleaned = await self.forget_node_by_conv(conv_id)
                 total_cleaned += cleaned
 
@@ -186,7 +199,10 @@ class DecayManager:
             total_cleaned = 0
 
             # 对每个会话进行记忆清理
-            for conv_id in conv_ids:
+            for raw_conv_id in conv_ids:
+                conv_id = self._ensure_conv_id(raw_conv_id)
+                if not conv_id:
+                    continue
                 cleaned = await self.memory_repo.clean_old_memories_by_conv(
                     conv_id,
                     max_memories=self.max_memories_per_conv,
