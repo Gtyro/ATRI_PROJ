@@ -48,6 +48,7 @@ class CommandDisplay:
     name: str
     plugin: str
     enabled: bool
+    status: Literal["enabled", "disabled", "contextual"] = "enabled"
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class CommandLookup:
     spec: CommandSpec
     enabled: bool
     permitted: bool
+    status: Literal["enabled", "disabled", "contextual"] = "enabled"
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ class AutoFeatureDisplay:
     name: str
     plugin: str
     enabled: bool
+    status: Literal["enabled", "disabled", "contextual"] = "enabled"
 
 
 class CommandRegistry:
@@ -269,6 +272,30 @@ async def _is_plugin_enabled(
         return bool(defaults.enabled)
 
 
+async def _resolve_plugin_status(
+    plugin: str,
+    gid: Optional[str],
+    *,
+    viewer_role: Role,
+    required_role: Role,
+    policy_plugins: set[str],
+) -> Tuple[bool, Literal["enabled", "disabled", "contextual"]]:
+    if plugin not in policy_plugins:
+        return True, "enabled"
+
+    # In private contexts, management commands/features for manageable plugins
+    # are determined by the target group rather than the current chat itself.
+    if not gid and viewer_role == "superuser" and required_role in {"admin", "superuser"}:
+        return True, "contextual"
+
+    enabled = await _is_plugin_enabled(
+        plugin,
+        gid,
+        policy_plugins=policy_plugins,
+    )
+    return enabled, ("enabled" if enabled else "disabled")
+
+
 async def list_commands_for_event(
     event: MessageEvent,
     *,
@@ -281,7 +308,7 @@ async def list_commands_for_event(
     plugin_enabled_cache: Dict[str, bool] = {}
     results: List[CommandDisplay] = []
 
-    policy_plugins = set(get_policy_plugins(include_hidden=True))
+    policy_plugins = set(get_policy_plugins())
 
     for spec in registry.list():
         if spec.hidden and not include_hidden:
@@ -292,11 +319,14 @@ async def list_commands_for_event(
             continue
 
         if spec.plugin not in plugin_enabled_cache:
-            plugin_enabled_cache[spec.plugin] = await _is_plugin_enabled(
+            enabled, _ = await _resolve_plugin_status(
                 spec.plugin,
                 gid,
+                viewer_role=viewer_role,
+                required_role=spec.role,
                 policy_plugins=policy_plugins,
             )
+            plugin_enabled_cache[spec.plugin] = enabled
         enabled = plugin_enabled_cache[spec.plugin]
 
         if enabled or viewer_role == "superuser":
@@ -305,6 +335,7 @@ async def list_commands_for_event(
                     name=spec.name,
                     plugin=spec.plugin,
                     enabled=enabled,
+                    status="enabled" if enabled else "disabled",
                 )
             )
     return results
@@ -317,7 +348,7 @@ async def list_commands_for_role(
     include_hidden: bool = False,
 ) -> List[CommandDisplay]:
     gid = _get_group_id(event)
-    policy_plugins = set(get_policy_plugins(include_hidden=True))
+    policy_plugins = set(get_policy_plugins())
 
     plugin_enabled_cache: Dict[str, bool] = {}
     results: List[CommandDisplay] = []
@@ -331,12 +362,19 @@ async def list_commands_for_role(
             continue
 
         if spec.plugin not in plugin_enabled_cache:
-            plugin_enabled_cache[spec.plugin] = await _is_plugin_enabled(
+            enabled, status = await _resolve_plugin_status(
                 spec.plugin,
                 gid,
+                viewer_role=target_role,
+                required_role=spec.role,
                 policy_plugins=policy_plugins,
             )
+            plugin_enabled_cache[spec.plugin] = enabled
+        else:
+            status = "enabled" if plugin_enabled_cache[spec.plugin] else "disabled"
         enabled = plugin_enabled_cache[spec.plugin]
+        if enabled and target_role == "superuser" and not gid and spec.role in {"admin", "superuser"} and spec.plugin in policy_plugins:
+            status = "contextual"
 
         if enabled or target_role == "superuser":
             results.append(
@@ -344,6 +382,7 @@ async def list_commands_for_role(
                     name=spec.name,
                     plugin=spec.plugin,
                     enabled=enabled,
+                    status=status,
                 )
             )
     return results
@@ -375,12 +414,24 @@ async def resolve_command_for_event(
         return None
     gid = _get_group_id(event)
     permitted = ROLE_RANK.get(spec.role, 0) <= ROLE_RANK.get(viewer_role, 0)
-    enabled = await _is_plugin_enabled(
+    policy_plugins = set(get_policy_plugins())
+
+    # In private help for management commands, the current chat context cannot
+    # represent the target group's policy state. Surface that as contextual
+    # instead of incorrectly marking the command as disabled.
+    enabled, status = await _resolve_plugin_status(
         spec.plugin,
         gid,
-        policy_plugins=set(get_policy_plugins(include_hidden=True)),
+        viewer_role=viewer_role,
+        required_role=spec.role,
+        policy_plugins=policy_plugins,
     )
-    return CommandLookup(spec=spec, enabled=enabled, permitted=permitted)
+    return CommandLookup(
+        spec=spec,
+        enabled=enabled,
+        permitted=permitted,
+        status=status,
+    )
 
 
 async def list_auto_features_for_event(
@@ -395,7 +446,7 @@ async def list_auto_features_for_event(
     plugin_enabled_cache: Dict[str, bool] = {}
     results: List[AutoFeatureDisplay] = []
 
-    policy_plugins = set(get_policy_plugins(include_hidden=True))
+    policy_plugins = set(get_policy_plugins())
 
     for spec in auto_feature_registry.list():
         if spec.hidden and not include_hidden:
@@ -404,11 +455,14 @@ async def list_auto_features_for_event(
             continue
 
         if spec.plugin not in plugin_enabled_cache:
-            plugin_enabled_cache[spec.plugin] = await _is_plugin_enabled(
+            enabled, _ = await _resolve_plugin_status(
                 spec.plugin,
                 gid,
+                viewer_role=viewer_role,
+                required_role=spec.role,
                 policy_plugins=policy_plugins,
             )
+            plugin_enabled_cache[spec.plugin] = enabled
         enabled = plugin_enabled_cache[spec.plugin]
 
         if enabled or viewer_role == "superuser":
@@ -417,6 +471,7 @@ async def list_auto_features_for_event(
                     name=spec.name,
                     plugin=spec.plugin,
                     enabled=enabled,
+                    status="enabled" if enabled else "disabled",
                 )
             )
     return results
@@ -429,7 +484,7 @@ async def list_auto_features_for_role(
     include_hidden: bool = False,
 ) -> List[AutoFeatureDisplay]:
     gid = _get_group_id(event)
-    policy_plugins = set(get_policy_plugins(include_hidden=True))
+    policy_plugins = set(get_policy_plugins())
 
     plugin_enabled_cache: Dict[str, bool] = {}
     results: List[AutoFeatureDisplay] = []
@@ -441,12 +496,19 @@ async def list_auto_features_for_role(
             continue
 
         if spec.plugin not in plugin_enabled_cache:
-            plugin_enabled_cache[spec.plugin] = await _is_plugin_enabled(
+            enabled, status = await _resolve_plugin_status(
                 spec.plugin,
                 gid,
+                viewer_role=target_role,
+                required_role=spec.role,
                 policy_plugins=policy_plugins,
             )
+            plugin_enabled_cache[spec.plugin] = enabled
+        else:
+            status = "enabled" if plugin_enabled_cache[spec.plugin] else "disabled"
         enabled = plugin_enabled_cache[spec.plugin]
+        if enabled and target_role == "superuser" and not gid and spec.role in {"admin", "superuser"} and spec.plugin in policy_plugins:
+            status = "contextual"
 
         if enabled or target_role == "superuser":
             results.append(
@@ -454,6 +516,7 @@ async def list_auto_features_for_role(
                     name=spec.name,
                     plugin=spec.plugin,
                     enabled=enabled,
+                    status=status,
                 )
             )
     return results

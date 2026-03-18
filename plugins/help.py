@@ -58,6 +58,14 @@ def _permission_denied_message(role: str) -> str:
     return "该功能当前不可用"
 
 
+def _status_label(status: str) -> str | None:
+    if status == "disabled":
+        return "已禁用"
+    if status == "contextual":
+        return "取决于目标群配置"
+    return None
+
+
 def _render_command_help(result) -> str:
     spec = result.spec
     meta = get_plugin_metadata(spec.plugin)
@@ -69,8 +77,9 @@ def _render_command_help(result) -> str:
     if spec.aliases:
         lines.append(f"别名: {'、'.join(spec.aliases)}")
     lines.append(f"范围: {_scope_label(spec.scope)}")
-    if not result.enabled:
-        lines.append("状态: 已禁用")
+    status_label = _status_label(getattr(result, "status", "enabled"))
+    if status_label:
+        lines.append(f"状态: {status_label}")
     lines.append(f"所属插件: {get_plugin_display_name(spec.plugin)}")
     if description:
         lines.append(f"描述: {description}")

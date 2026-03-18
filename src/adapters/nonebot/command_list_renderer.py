@@ -16,13 +16,20 @@ def _format_grouped_items(
     *,
     viewer_role: str,
     disabled_marker: str = " [禁用]",
+    contextual_marker: str = " [按群]",
 ) -> list[str]:
     lines: list[str] = []
     for plugin in sorted(grouped.keys()):
         display_name = get_plugin_display_name(plugin)
         lines.append(f"{display_name}:")
         for item in sorted(grouped[plugin], key=lambda cmd: cmd.name):
-            suffix = disabled_marker if viewer_role == "superuser" and not item.enabled else ""
+            suffix = ""
+            if viewer_role == "superuser":
+                status = getattr(item, "status", "enabled")
+                if status == "disabled":
+                    suffix = disabled_marker
+                elif status == "contextual":
+                    suffix = contextual_marker
             lines.append(f"- {item.name}{suffix}")
     return lines
 
