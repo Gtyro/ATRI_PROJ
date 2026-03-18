@@ -1,7 +1,7 @@
 from nonebot import get_driver, require
 from nonebot.plugin import PluginMetadata
 
-from .daily60s import daily60s_cmd, setup_scheduler
+from .daily60s import cleanup_daily_cache, daily60s_cmd, setup_scheduler
 
 require("db_core")
 
@@ -22,4 +22,5 @@ driver = get_driver()
 
 @driver.on_startup
 async def _():
+    cleanup_daily_cache()
     setup_scheduler()

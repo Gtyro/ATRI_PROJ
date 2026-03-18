@@ -76,3 +76,59 @@ class TempStorage:
             if item.is_file():
                 return item
         return None
+
+    @staticmethod
+    def _file_mtime(path: Path) -> Optional[float]:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return None
+
+    @staticmethod
+    def _safe_unlink(path: Path) -> int:
+        try:
+            path.unlink()
+            return 1
+        except FileNotFoundError:
+            return 0
+        except OSError:
+            return 0
+
+    def cleanup_expired(self, *, max_age_hours: float, now: Optional[float] = None) -> int:
+        normalized_hours = max(0.0, float(max_age_hours))
+        current_time = time.time() if now is None else float(now)
+        cutoff = current_time - normalized_hours * 3600.0
+        deleted = 0
+        referenced_files: set[str] = set()
+
+        for meta_path in self.base_dir.glob("*.json"):
+            meta = self.read_meta(meta_path.stem)
+            data_path = self.base_dir / meta.filename if meta else None
+
+            created_at = meta.created_at if meta and meta.created_at is not None else None
+            if created_at is None:
+                meta_mtime = self._file_mtime(meta_path)
+                data_mtime = self._file_mtime(data_path) if data_path else None
+                timestamps = [ts for ts in (meta_mtime, data_mtime) if ts is not None]
+                created_at = min(timestamps) if timestamps else None
+
+            if created_at is not None and created_at >= cutoff:
+                if meta and data_path is not None:
+                    referenced_files.add(data_path.name)
+                continue
+
+            deleted += self._safe_unlink(meta_path)
+            if data_path is not None:
+                deleted += self._safe_unlink(data_path)
+
+        for item in self.base_dir.iterdir():
+            if not item.is_file() or item.suffix == ".json":
+                continue
+            if item.name in referenced_files:
+                continue
+            mtime = self._file_mtime(item)
+            if mtime is None or mtime >= cutoff:
+                continue
+            deleted += self._safe_unlink(item)
+
+        return deleted

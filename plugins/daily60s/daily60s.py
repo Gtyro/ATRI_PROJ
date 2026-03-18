@@ -23,6 +23,7 @@ from .config import Daily60sConfig
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = (__package__ or "daily60s").split(".")[-1]
+TEMP_CACHE_RETENTION_HOURS = 24
 
 config = Daily60sConfig.load()
 temp_store = TempStorage("daily60s")
@@ -206,7 +207,24 @@ async def _fetch_daily_image() -> Tuple[bytes, str]:
         raise RuntimeError("API did not return image data")
 
 
+def cleanup_daily_cache(max_age_hours: float = TEMP_CACHE_RETENTION_HOURS) -> int:
+    try:
+        deleted = temp_store.cleanup_expired(max_age_hours=max_age_hours)
+    except Exception as exc:
+        logger.error("daily60s cache cleanup failed: %s", exc, exc_info=True)
+        return 0
+
+    if deleted > 0:
+        logger.info(
+            "daily60s cache cleanup finished: deleted=%s retention_hours=%s",
+            deleted,
+            max_age_hours,
+        )
+    return deleted
+
+
 async def get_daily_image_path(*, force_refresh: bool = False) -> Path:
+    cleanup_daily_cache()
     date_key = _today_key()
     cache_key = _cache_key(date_key)
 
