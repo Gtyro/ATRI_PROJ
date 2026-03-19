@@ -76,14 +76,13 @@ async def get_word_cloud_data(conv_id, date=None, hour=None):
 
 async def get_all_conversations():
     """获取所有有词云数据的会话ID列表"""
-    # 获取所有有词云数据的不同会话ID
-    conversations = await WordCloudData.all().distinct().values_list('conv_id', flat=True)
-
-    # 如果没有词云数据，尝试从消息表获取所有会话ID
-    if not conversations:
-        conversations = await BasicMessage.all().distinct().values_list('conv_id', flat=True)
-
-    return conversations
+    wordcloud_conversations = set(
+        await WordCloudData.all().distinct().values_list("conv_id", flat=True)
+    )
+    message_conversations = set(
+        await BasicMessage.all().distinct().values_list("conv_id", flat=True)
+    )
+    return sorted(wordcloud_conversations | message_conversations)
 
 
 from plugins.db_core.model_registry import register_model_module

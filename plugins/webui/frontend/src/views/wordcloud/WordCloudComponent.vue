@@ -37,9 +37,9 @@
         >
           <el-option
             v-for="conv in conversations"
-            :key="conv"
-            :label="conv"
-            :value="conv"
+            :key="conv.id"
+            :label="conv.label"
+            :value="conv.id"
           ></el-option>
         </el-select>
       </div>
@@ -64,10 +64,7 @@
         ></el-slider>
       </div>
 
-      <div
-        v-if="config.controlPanel.showHistorySelector"
-        class="history-selector"
-      >
+      <div v-if="shouldShowHistorySelector" class="history-selector">
         <el-date-picker
           v-model="selectedDate"
           type="date"
@@ -140,6 +137,14 @@ export default {
       type: Boolean,
       default: true,
     },
+    selectedConversationId: {
+      type: String,
+      default: "",
+    },
+    windowHours: {
+      type: Number,
+      default: 24,
+    },
   },
 
   setup(props, { emit }) {
@@ -177,6 +182,11 @@ export default {
     const conversations = ref([]);
     const resizeObserver = ref(null);
     const autoRefreshTimer = ref(null);
+    const shouldShowHistorySelector = computed(
+      () =>
+        config.value.controlPanel.showHistorySelector &&
+        props.windowHours === 24,
+    );
 
     // 初始化图表
     const ensureChartInstance = async () => {
@@ -285,7 +295,7 @@ export default {
 
           // 如果有会话且当前未选择会话，则选择第一个
           if (conversations.value.length > 0 && !selectedConversation.value) {
-            selectedConversation.value = conversations.value[0];
+            selectedConversation.value = conversations.value[0].id;
             await loadData();
           }
         }
@@ -320,6 +330,7 @@ export default {
         const response = await getWordCloudData(
           selectedConversation.value,
           limit.value,
+          props.windowHours,
           forceRefresh,
         );
         console.log("词云数据加载响应", response.data);
@@ -468,6 +479,44 @@ export default {
       { deep: true },
     );
 
+    watch(
+      () => props.initialLimit,
+      (value) => {
+        if (value == null || value === limit.value) {
+          return;
+        }
+        limit.value = value;
+        if (selectedConversation.value) {
+          void loadData();
+        }
+      },
+    );
+
+    watch(
+      () => props.selectedConversationId,
+      (value) => {
+        if (!value || value === selectedConversation.value) {
+          return;
+        }
+        selectedConversation.value = value;
+        void loadData();
+      },
+      { immediate: true },
+    );
+
+    watch(
+      () => props.windowHours,
+      (value, previousValue) => {
+        if (value !== 24 && previousValue === 24) {
+          selectedDate.value = "";
+          selectedHour.value = null;
+        }
+        if (selectedConversation.value && value !== previousValue) {
+          void loadData();
+        }
+      },
+    );
+
     return {
       wordcloudRef,
       cloudContainer,
@@ -481,6 +530,7 @@ export default {
       selectedHour,
       selectedConversation,
       conversations,
+      shouldShowHistorySelector,
       loadData,
       refreshData,
       onLimitChange,

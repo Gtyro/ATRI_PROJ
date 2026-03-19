@@ -17,7 +17,10 @@ except ValueError:
 if driver is not None:
     require("db_core")
 
-from . import handlers, models
+from . import models
+
+if driver is not None:
+    from . import handlers
 
 __plugin_meta__ = PluginMetadata(
     name="基础消息",
@@ -33,7 +36,10 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-__all__ = ["models", "handlers"]
+__all__ = ["models"]
+
+if driver is not None:
+    __all__.append("handlers")
 
 
 async def _run_basic_message_retention_cleanup(context: str) -> None:

@@ -11,6 +11,7 @@ from nonebot import get_driver
 
 from .config import Config
 from .models import get_messages, save_word_cloud_data
+from .window_policy import should_persist_wordcloud_snapshot
 
 # 获取配置
 driver = get_driver()
@@ -120,9 +121,8 @@ def discover_new_words(texts, top_n=20):
 
     # 重新加载用户词典
     jieba.load_userdict(str(user_dict_path))
-
 # 生成词云数据
-async def generate_word_cloud_data(conv_id, word_limit=None, hours=None):
+async def generate_word_cloud_data(conv_id, word_limit=None, hours=None, persist=None):
     """
     生成词云数据
 
@@ -139,6 +139,8 @@ async def generate_word_cloud_data(conv_id, word_limit=None, hours=None):
         word_limit = config.wordcloud_max_words
     if hours is None:
         hours = config.wordcloud_hours
+    if persist is None:
+        persist = should_persist_wordcloud_snapshot(hours, config.wordcloud_hours)
 
     # 初始化
     init_word_lists()
@@ -183,13 +185,14 @@ async def generate_word_cloud_data(conv_id, word_limit=None, hours=None):
     current_date = now.date()
     current_hour = now.hour
 
-    # 保存到数据库
-    await save_word_cloud_data(result, conv_id, current_date, current_hour)
+    # 仅为默认窗口保留历史小时快照，避免其他统计窗口覆盖24小时历史
+    if persist:
+        await save_word_cloud_data(result, conv_id, current_date, current_hour)
 
     return result
 
 # 获取词云数据函数（提供给前端和命令使用）
-async def get_word_cloud_data(conv_id, limit=None):
+async def get_word_cloud_data(conv_id, limit=None, hours=None, refresh=False):
     """
     获取词云数据
 
@@ -202,12 +205,30 @@ async def get_word_cloud_data(conv_id, limit=None):
     """
     from .models import get_latest_word_cloud_data
 
+    if hours is None:
+        hours = config.wordcloud_hours
+
+    persist_snapshot = should_persist_wordcloud_snapshot(hours, config.wordcloud_hours)
+
+    if refresh or not persist_snapshot:
+        return await generate_word_cloud_data(
+            conv_id,
+            word_limit=limit,
+            hours=hours,
+            persist=persist_snapshot,
+        )
+
     # 获取最新的词云数据
     data = await get_latest_word_cloud_data(conv_id)
 
     if not data:
         # 如果没有缓存的数据，则实时生成
-        return await generate_word_cloud_data(conv_id, word_limit=limit)
+        return await generate_word_cloud_data(
+            conv_id,
+            word_limit=limit,
+            hours=hours,
+            persist=True,
+        )
 
     word_data = data.word_data
 

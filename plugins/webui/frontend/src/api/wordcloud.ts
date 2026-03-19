@@ -2,9 +2,15 @@ import type { AxiosResponse } from "axios";
 
 import { request } from "./index";
 
+export interface WordCloudConversationOption {
+  id: string;
+  label: string;
+}
+
 export function getWordCloudData(
   convId: string,
   limit: number | null = null,
+  hours: number | null = null,
   refresh = false,
 ): Promise<AxiosResponse<Record<string, unknown>>> {
   const params: Record<string, string | number | boolean> = {
@@ -13,6 +19,10 @@ export function getWordCloudData(
 
   if (limit != null) {
     params.limit = limit;
+  }
+
+  if (hours != null) {
+    params.hours = hours;
   }
 
   if (refresh) {

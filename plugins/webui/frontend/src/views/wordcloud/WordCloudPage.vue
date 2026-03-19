@@ -19,9 +19,9 @@
             >
               <el-option
                 v-for="conv in conversations"
-                :key="conv"
-                :label="conv"
-                :value="conv"
+                :key="conv.id"
+                :label="conv.label"
+                :value="conv.id"
               ></el-option>
             </el-select>
 
@@ -49,6 +49,8 @@
           ref="wordCloudRef"
           :custom-config="customConfig"
           :initial-limit="wordLimit"
+          :selected-conversation-id="selectedConversation"
+          :window-hours="windowHours"
           @data-loaded="onDataLoaded"
           @data-error="onDataError"
         />
@@ -59,10 +61,10 @@
       <el-form label-width="120px">
         <el-form-item label="时间范围">
           <el-select v-model="configForm.hours" placeholder="选择时间范围">
-            <el-option label="最近12小时" :value="12" />
             <el-option label="最近24小时" :value="24" />
             <el-option label="最近48小时" :value="48" />
             <el-option label="最近7天" :value="168" />
+            <el-option label="最近30天" :value="720" />
           </el-select>
         </el-form-item>
 
@@ -104,7 +106,7 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted, nextTick } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import { ElNotification, ElMessageBox } from "element-plus";
 import { Setting } from "@element-plus/icons-vue";
 import WordCloudComponent from "./WordCloudComponent.vue";
@@ -123,6 +125,7 @@ export default {
     // 状态变量
     const cloudHeight = ref(500);
     const wordLimit = ref(80);
+    const windowHours = ref(24);
     const generating = ref(false);
     const showConfig = ref(false);
     const selectedConversation = ref(""); // 当前选择的会话
@@ -147,6 +150,7 @@ export default {
     // 应用配置
     const applyConfig = () => {
       wordLimit.value = configForm.wordLimit;
+      windowHours.value = configForm.hours;
 
       customConfig.value = {
         controlPanel: {
@@ -156,13 +160,6 @@ export default {
       };
 
       showConfig.value = false;
-
-      // 通知词云组件更新
-      nextTick(() => {
-        if (wordCloudRef.value) {
-          wordCloudRef.value.loadData();
-        }
-      });
     };
 
     // 获取会话列表
@@ -173,12 +170,7 @@ export default {
           conversations.value = response.data.data || [];
           // 如果有会话且未选择会话，自动选择第一个
           if (conversations.value.length > 0 && !selectedConversation.value) {
-            selectedConversation.value = conversations.value[0];
-            if (wordCloudRef.value) {
-              wordCloudRef.value.selectedConversation =
-                selectedConversation.value;
-              wordCloudRef.value.loadData();
-            }
+            selectedConversation.value = conversations.value[0].id;
           }
         }
       } catch (err) {
@@ -194,10 +186,6 @@ export default {
     // 会话切换
     const onConversationChange = (convId) => {
       selectedConversation.value = convId;
-      if (wordCloudRef.value) {
-        wordCloudRef.value.selectedConversation = convId;
-        wordCloudRef.value.loadData();
-      }
     };
 
     // 生成新词云数据
@@ -226,8 +214,8 @@ export default {
 
         const response = await generateWordCloud(
           selectedConversation.value,
-          configForm.wordLimit,
-          configForm.hours,
+          wordLimit.value,
+          windowHours.value,
         );
 
         if (response.data.success) {
@@ -288,6 +276,7 @@ export default {
       wordCloudRef,
       cloudHeight,
       wordLimit,
+      windowHours,
       generating,
       showConfig,
       configForm,
