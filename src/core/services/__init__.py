@@ -4,6 +4,7 @@ from .message_ingestor import MessageIngestor
 from .module_metrics_provider import ModuleMetricsProviderRegistry, ModuleMetricsQuery
 from .module_metrics_service import ModuleMetricsService, build_default_module_metrics_service
 from .plugin_policy_service import PluginPolicyService
+from .queue_recovery_service import QueueRecoveryService
 
 __all__ = [
     "MessageIngestor",
@@ -12,4 +13,5 @@ __all__ = [
     "ModuleMetricsService",
     "build_default_module_metrics_service",
     "PluginPolicyService",
+    "QueueRecoveryService",
 ]

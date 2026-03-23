@@ -10,11 +10,13 @@ from src.infra.db.neo4j_gateway import (
     delete_association,
     delete_cognitive_node,
     execute_neo4j_query,
+    get_neo4j_unavailable_reason,
     get_associations,
     get_cognitive_nodes,
     get_conversations,
     get_node_by_id,
     initialize_neo4j,
+    neo4j_is_available,
     update_association,
     update_cognitive_node,
 )
@@ -22,6 +24,8 @@ from src.infra.db.neo4j_gateway import (
 __all__ = [
     "initialize_neo4j",
     "close_neo4j",
+    "neo4j_is_available",
+    "get_neo4j_unavailable_reason",
     "execute_neo4j_query",
     "get_cognitive_nodes",
     "get_node_by_id",

@@ -68,6 +68,9 @@ class PersonaFacade:
     async def clear_queue(self, conv_id: str) -> int:
         return await self._engine.clear_queue(conv_id)
 
+    async def rebuild_queue_from_basic_messages(self, conv_id: str) -> Dict[str, int]:
+        return await self._engine.rebuild_queue_from_basic_messages(conv_id)
+
     async def set_group_prompt_file(self, group_id: str, prompt_file: str) -> None:
         await self._engine.set_group_prompt_file(group_id, prompt_file)
 
@@ -77,6 +80,13 @@ class PersonaFacade:
         test_message: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         return await self._engine.simulate_reply(conv_id, test_message=test_message)
+
+    async def force_reply(
+        self,
+        conv_id: str,
+        test_message: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        return await self._engine.force_reply(conv_id, test_message=test_message)
 
     async def create_permanent_memory(
         self,

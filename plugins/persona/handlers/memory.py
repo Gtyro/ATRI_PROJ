@@ -8,15 +8,8 @@ from nonebot.typing import T_State
 
 from .. import psstate
 from ..psstate import is_enabled
+from src.adapters.nonebot.command_args import normalize_alconna_tokens
 from src.adapters.nonebot.command_registry import register_alconna
-
-
-def _normalize_tokens(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    return [str(value)]
 
 # 记忆查询命令
 memories = register_alconna(
@@ -43,7 +36,7 @@ async def handle_memories(bot: Bot, event: Event, state: T_State, arp: Arparma):
 
     user_id = event.get_user_id()
     conv_id = arp.all_matched_args.get("conv_id")
-    query_parts = _normalize_tokens(arp.all_matched_args.get("query"))
+    query_parts = normalize_alconna_tokens(arp.all_matched_args.get("query"))
     query = " ".join(query_parts).strip()
 
     # 格式: 记得 [conv_id] [query]

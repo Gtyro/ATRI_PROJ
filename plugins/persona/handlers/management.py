@@ -3,13 +3,15 @@ import os
 
 from arclet.alconna import Args, Arparma, MultiVar
 from nonebot import get_driver
-from nonebot.adapters.onebot.v11 import Bot, Event, Message
+from nonebot.adapters.onebot.v11 import Bot, Event, GroupMessageEvent
 from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 from nonebot.typing import T_State
+from nonebot_plugin_alconna.uniseg import Target, UniMessage
 
 from .. import psstate
 from ..psstate import is_enabled
+from src.adapters.nonebot.command_args import normalize_alconna_tokens, parse_reply_send_mode
 from src.core.services.persona_policy_flags import (
     LLM_ACTIVE_REPLY_ENABLED_KEY,
     LLM_KEYWORD_EXTRACT_ENABLED_KEY,
@@ -157,6 +159,84 @@ async def handle_process_now(bot: Bot, event: Event, state: T_State, arp: Arparm
         logging.error(f"处理消息异常: {e}")
         await process_now.send(f"处理消息失败: {str(e)}")
 
+
+reply_once = register_alconna(
+    "回复一次",
+    aliases={"强制回复", "立即回复一次"},
+    role="superuser",
+    permission=SUPERUSER,
+    rule=to_me(),
+    priority=5,
+    block=True,
+    use_cmd_start=True,
+    use_cmd_sep=True,
+    alconna_args=[Args["group_id", str]["rest", MultiVar(str, "*")]],
+    description="默认预览 Persona 回复，显式加“发送”才实际发群并入库",
+    usage="回复一次 [群号] [可选测试消息] 或 回复一次 [群号] 发送 [可选测试消息]",
+    examples=[
+        "回复一次 591710353",
+        "回复一次 591710353 摸摸",
+        "回复一次 591710353 发送",
+        "回复一次 591710353 发送 摸摸",
+    ],
+)
+
+
+@reply_once.handle()
+async def handle_reply_once(bot: Bot, event: Event, state: T_State, arp: Arparma):
+    """生成并实际发送一次 Persona 回复。"""
+    if not is_enabled():
+        await reply_once.finish("人格系统未启用，请检查配置和日志")
+
+    group_id = arp.all_matched_args.get("group_id")
+    rest_tokens = normalize_alconna_tokens(arp.all_matched_args.get("rest"))
+    if not group_id:
+        await reply_once.finish("格式错误：回复一次 [群号] [可选测试消息] 或 回复一次 [群号] 发送 [可选测试消息]")
+
+    group_id = str(group_id)
+    if not group_id.isdigit():
+        await reply_once.finish("群号格式不正确")
+
+    conv_id = f"group_{group_id}"
+    send_mode, test_message = parse_reply_send_mode(rest_tokens)
+
+    try:
+        if send_mode:
+            reply_data = await psstate.persona_system.force_reply(conv_id, test_message=test_message)
+        else:
+            reply_data = await psstate.persona_system.simulate_reply(conv_id, test_message=test_message)
+    except Exception as e:
+        logging.error(f"回复一次异常: {e}")
+        await reply_once.finish(f"回复一次失败: {str(e)}")
+        return
+
+    if not reply_data or not reply_data.get("reply_content"):
+        await reply_once.finish("没有生成可用的回复")
+
+    if not send_mode:
+        reply_content = str(reply_data.get("reply_content") or "").strip()
+        if not reply_content:
+            await reply_once.finish("生成的预览回复为空")
+        await reply_once.finish(f"预览回复（群 {group_id}）:\n{reply_content}")
+
+    target = Target(id=group_id)
+    sent_count = 0
+    for item in reply_data.get("reply_content", []):
+        text = str(item).strip()
+        if not text:
+            continue
+        await UniMessage(text).send(target)
+        sent_count += 1
+
+    if sent_count <= 0:
+        await reply_once.finish("生成了回复，但没有可发送的有效内容")
+        return
+
+    if isinstance(event, GroupMessageEvent) and str(event.group_id) == group_id:
+        return
+
+    await reply_once.finish(f"已向群 {group_id} 发送 1 次回复")
+
 # 清空队列命令
 clear_queue = register_alconna(
     "清空队列",
@@ -193,6 +273,61 @@ async def handle_clear_queue(bot: Bot, event: Event, state: T_State, arp: Arparm
         logging.error(f"清空消息队列异常: {e}")
         await clear_queue.finish("清空消息队列失败，请检查日志")
     await clear_queue.finish(f"已清空群 {group_id} 的消息队列，共删除 {deleted} 条")
+
+
+rebuild_queue = register_alconna(
+    "重建队列",
+    aliases={"补回队列", "恢复队列"},
+    role="superuser",
+    permission=SUPERUSER,
+    rule=to_me(),
+    priority=5,
+    block=True,
+    use_cmd_start=True,
+    use_cmd_sep=True,
+    alconna_args=[Args["group_id?", str]["extra", MultiVar(str, "*")]],
+    description="从基础消息表恢复指定群的人格短期记忆队列",
+    usage="重建队列 [群号] 或 在群里直接使用 重建队列",
+    examples=["重建队列 591710353", "重建队列"],
+)
+
+
+@rebuild_queue.handle()
+async def handle_rebuild_queue(bot: Bot, event: Event, state: T_State, arp: Arparma):
+    """从基础消息表恢复指定群的短期记忆队列。"""
+    if not is_enabled():
+        await rebuild_queue.finish("人格系统未启用，请检查配置和日志")
+
+    group_id = arp.all_matched_args.get("group_id")
+    if group_id is None:
+        if isinstance(event, GroupMessageEvent):
+            group_id = str(event.group_id)
+        else:
+            await rebuild_queue.finish("私聊中请指定群号：重建队列 [群号]")
+    else:
+        group_id = str(group_id)
+
+    if not group_id.isdigit():
+        await rebuild_queue.finish("群号格式不正确")
+
+    conv_id = f"group_{group_id}"
+    try:
+        result = await psstate.persona_system.rebuild_queue_from_basic_messages(conv_id)
+    except Exception as e:
+        logging.error(f"重建消息队列异常: {e}")
+        await rebuild_queue.finish("重建消息队列失败，请检查日志")
+        return
+
+    restored = result.get("restored", 0)
+    source_count = result.get("source_count", 0)
+    cleared = result.get("cleared", 0)
+    if restored <= 0:
+        await rebuild_queue.finish(f"群 {group_id} 没有可恢复的基础消息")
+
+    await rebuild_queue.finish(
+        f"已从基础消息恢复群 {group_id} 的短期记忆队列："
+        f"清空 {cleared} 条，重建 {restored}/{source_count} 条"
+    )
 
 
 llm_switch = register_alconna(

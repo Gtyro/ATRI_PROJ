@@ -11,15 +11,8 @@ from nonebot.rule import to_me
 from plugins.message_basic.models import BasicMessage
 from .. import psstate
 from ..psstate import is_enabled
+from src.adapters.nonebot.command_args import normalize_alconna_tokens
 from src.adapters.nonebot.command_registry import register_alconna
-
-
-def _normalize_tokens(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    return [str(value)]
 
 # 设置拟人测试指令
 test_persona = register_alconna(
@@ -46,7 +39,7 @@ async def handle_test_persona(bot: Bot, event: Event, arp: Arparma):
 
     # 解析参数获取群号和可选的测试消息
     group_id = arp.all_matched_args.get("group_id")
-    message_parts = _normalize_tokens(arp.all_matched_args.get("message"))
+    message_parts = normalize_alconna_tokens(arp.all_matched_args.get("message"))
     if not group_id:
         await test_persona.finish("格式错误，正确格式：测试 [群号] [消息]，消息是可选的")
 
@@ -154,7 +147,7 @@ async def handle_memory_extract_test(bot: Bot, event: Event, arp: Arparma):
         await memory_extract_test.finish("人格系统未启用，请检查配置和日志")
 
     group_id = arp.all_matched_args.get("group_id")
-    rest = _normalize_tokens(arp.all_matched_args.get("rest"))
+    rest = normalize_alconna_tokens(arp.all_matched_args.get("rest"))
     if not group_id or len(rest) < 2:
         await memory_extract_test.finish("格式错误：记忆提取 群号 起始时间 [条数]")
 
@@ -223,7 +216,7 @@ async def handle_keyword_extract_test(bot: Bot, event: Event, arp: Arparma):
         await keyword_extract_test.finish("人格系统未启用，请检查配置和日志")
 
     group_id = arp.all_matched_args.get("group_id")
-    rest = _normalize_tokens(arp.all_matched_args.get("rest"))
+    rest = normalize_alconna_tokens(arp.all_matched_args.get("rest"))
     if not group_id or len(rest) < 2:
         await keyword_extract_test.finish("格式错误：关键词提取 群号 起始时间 [条数]")
 

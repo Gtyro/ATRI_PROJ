@@ -11,8 +11,10 @@ from ..domain import PersonaConfig
 from ..services.conversation_service import ConversationService
 from ..services.memory_service import MemoryService
 from ..services.maintenance_service import MaintenanceService
-from ..services.reply_service import ReplyService
 from ..services.plugin_policy_service import PluginPolicyService
+from ..services.queue_recovery_service import QueueRecoveryService
+from ..services.reply_service import ReplyService
+from src.infra.db.neo4j.unavailable import is_memory_repo_available
 
 
 class PersonaEngineCore:
@@ -35,6 +37,7 @@ class PersonaEngineCore:
         aiprocessor: Any = None,
         plugin_policy_service: Optional[PluginPolicyService] = None,
         image_context_service: Optional[Any] = None,
+        basic_message_loader: Optional[Any] = None,
     ) -> None:
         self.config = config
         self.plugin_name = plugin_name
@@ -50,6 +53,7 @@ class PersonaEngineCore:
         self.aiprocessor = aiprocessor
         self.plugin_policy_service = plugin_policy_service
         self.image_context_service = image_context_service
+        self.basic_message_loader = basic_message_loader
 
         self.memory_service = MemoryService(self.memory_repo, self.retriever)
         self.conversation_service = ConversationService(
@@ -76,6 +80,15 @@ class PersonaEngineCore:
             decay_manager=self.decay_manager,
             plugin_name=self.plugin_name,
             plugin_policy_service=self.plugin_policy_service,
+        )
+        self.queue_recovery_service = (
+            QueueRecoveryService(
+                short_term=self.short_term,
+                queue_history_size=self.config.queue_history_size,
+                recent_loader=self.basic_message_loader,
+            )
+            if self.basic_message_loader is not None
+            else None
         )
 
     def set_reply_callback(self, reply_callback: Optional[Callable]) -> None:
@@ -175,13 +188,22 @@ class PersonaEngineCore:
 
         db_type = "PostgreSQL" if self.config.use_postgres else "SQLite"
         reply += f"- 短期记忆数据库: {db_type}\n"
-        reply += "- 长期记忆数据库: Neo4j\n"
+        if is_memory_repo_available(self.memory_repo):
+            reply += "- 长期记忆数据库: Neo4j\n"
+        else:
+            reply += "- 长期记忆数据库: Neo4j（不可用，当前为降级模式）\n"
 
         return reply
 
     async def clear_queue(self, conv_id: str) -> int:
         """清空指定会话的短期记忆队列"""
         return await self.short_term.clear_messages(conv_id)
+
+    async def rebuild_queue_from_basic_messages(self, conv_id: str) -> Dict[str, int]:
+        """从基础消息表恢复指定会话的短期记忆队列。"""
+        if self.queue_recovery_service is None:
+            raise RuntimeError("基础消息恢复服务不可用")
+        return await self.queue_recovery_service.rebuild_from_basic_messages(conv_id)
 
     async def set_group_prompt_file(self, group_id: str, prompt_file: str) -> None:
         if not self.group_config:
@@ -198,6 +220,13 @@ class PersonaEngineCore:
         test_message: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         return await self.reply_service.simulate_reply(conv_id, test_message=test_message)
+
+    async def force_reply(
+        self,
+        conv_id: str,
+        test_message: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        return await self.reply_service.force_reply(conv_id, test_message=test_message)
 
     async def create_permanent_memory(
         self,

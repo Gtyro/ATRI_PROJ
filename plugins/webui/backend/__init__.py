@@ -30,9 +30,11 @@ async def start_webui():
         configure_app(nonebot_app, is_nonebot_app=True)
 
         # 初始化数据库
-        await initialize_database_system()
-
-        logger.success("WebUI管理面板已启动，访问 http://127.0.0.1:8080/webui")
+        neo4j_ready = await initialize_database_system()
+        if neo4j_ready:
+            logger.success("WebUI管理面板已启动，访问 http://127.0.0.1:8080/webui")
+        else:
+            logger.warning("WebUI管理面板已启动，但 Neo4j 当前不可用，相关功能暂时降级")
     except Exception as e:
         logger.error(f"启动WebUI失败: {e}")
 

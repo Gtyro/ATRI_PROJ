@@ -10,20 +10,13 @@ from nonebot_plugin_uninfo import Uninfo
 
 from .. import psstate
 from ..psstate import is_enabled
+from src.adapters.nonebot.command_args import normalize_alconna_tokens
 from src.adapters.nonebot.command_registry import register_alconna, register_auto_feature
 from src.adapters.nonebot.message_metadata import (
     build_onebot_metadata,
     extract_onebot_image_metadata,
     normalize_content_for_storage,
 )
-
-
-def _normalize_tokens(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    return [str(value)]
 
 
 def UserName():
@@ -144,7 +137,7 @@ async def handle_parse_history(bot: Bot, event: Event, arp: Arparma):
 
     # 获取参数
     group_id = arp.all_matched_args.get("group_id")
-    file_path_parts = _normalize_tokens(arp.all_matched_args.get("file_path"))
+    file_path_parts = normalize_alconna_tokens(arp.all_matched_args.get("file_path"))
     if not group_id or not file_path_parts:
         await parse_history.finish("参数不足，格式：解析历史记录 群号 文件路径")
 

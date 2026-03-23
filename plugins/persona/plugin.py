@@ -124,7 +124,10 @@ async def init_persona_system():
         await psstate.persona_system.initialize(reply_callback=persona_callback)
         _register_message_subscriber()
         psstate.PERSONA_SYSTEM_ENABLED = True
-        logging.debug("人格系统初始化成功")
+        if getattr(engine, "neo4j_available", True):
+            logging.debug("人格系统初始化成功")
+        else:
+            logging.warning("人格系统初始化完成，但 Neo4j 当前不可用，已进入降级模式")
     except Exception as e:
         logging.error(f"人格系统初始化失败，功能将被禁用: {e}", exc_info=True)
         psstate.persona_system = None

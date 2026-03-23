@@ -12,11 +12,23 @@ from src.core.services.message_processor import MessageProcessor
 from src.core.services.plugin_policy_service import PluginPolicyService
 from src.adapters.nonebot.image_resolver import NapcatImageResolver
 from src.infra.db.neo4j_gateway import initialize_neo4j
+from src.infra.db.neo4j.unavailable import (
+    get_memory_repo_unavailable_reason,
+    is_memory_repo_available,
+)
 from src.infra.db.tortoise.message_repository import MessageRepository
 from src.infra.db.tortoise.module_metrics_event_writer import ModuleMetricEventWriter
 from src.infra.llm.providers import get_llm_provider_registry
 from src.infra.llm.providers.image_understander import ImageUnderstander
-from src.infra.memory import DecayManager, LongTermMemory, LongTermRetriever, ShortTermMemory
+from src.infra.memory import (
+    DecayManager,
+    DisabledDecayManager,
+    DisabledLongTermMemory,
+    DisabledLongTermRetriever,
+    LongTermMemory,
+    LongTermRetriever,
+    ShortTermMemory,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +58,33 @@ async def _persist_module_metric_event(event: dict) -> None:
     await writer.write_event(event)
 
 
+async def _load_recent_basic_messages(conv_id: str, limit: int) -> list[dict]:
+    """从基础消息表按时间升序加载最近消息，用于短期队列恢复。"""
+    try:
+        from plugins.message_basic.models import BasicMessage
+    except Exception as exc:
+        logger.warning("加载基础消息模型失败，无法恢复短期队列: %s", exc)
+        return []
+
+    rows = await BasicMessage.filter(conv_id=conv_id).order_by("-created_at").limit(limit).all()
+    rows = list(reversed(rows))
+
+    return [
+        {
+            "conv_id": row.conv_id,
+            "user_id": row.user_id,
+            "user_name": row.user_name,
+            "content": row.content,
+            "created_at": row.created_at,
+            "is_processed": row.is_processed,
+            "is_direct": row.is_direct,
+            "is_bot": row.is_bot,
+            "metadata": row.metadata if isinstance(row.metadata, dict) else {},
+        }
+        for row in rows
+    ]
+
+
 async def assemble_persona_engine(
     config: PersonaConfig,
     group_config: Any,
@@ -66,7 +105,7 @@ async def assemble_persona_engine(
     except Exception as e:
         logging.warning(f"启动时清理短期记忆失败: {e}")
 
-    memory_repo = await initialize_neo4j(config)
+    memory_repo = await initialize_neo4j(config, allow_unavailable=True)
 
     short_term_impl = ShortTermMemory(message_repo, config)
     short_term = ShortTermMemoryAdapter(short_term_impl)
@@ -146,17 +185,27 @@ async def assemble_persona_engine(
         module_metric_event_callback=_persist_module_metric_event,
     )
 
-    long_term_impl = LongTermMemory(memory_repo, config)
+    neo4j_available = is_memory_repo_available(memory_repo)
+    if neo4j_available:
+        long_term_impl = LongTermMemory(memory_repo, config)
+        retriever = LongTermRetriever(memory_repo)
+        decay_manager = DecayManager(
+            memory_repo,
+            config.node_decay_rate,
+            group_config=group_config,
+            plugin_name=plugin_name,
+            config=config,
+        )
+        await decay_manager.initialize()
+    else:
+        unavailable_reason = get_memory_repo_unavailable_reason(memory_repo) or "Neo4j 当前不可用"
+        logger.warning("Neo4j 不可用，人格系统将以降级模式启动: %s", unavailable_reason)
+        long_term_impl = DisabledLongTermMemory(unavailable_reason)
+        retriever = DisabledLongTermRetriever(unavailable_reason)
+        decay_manager = DisabledDecayManager(unavailable_reason)
+        await decay_manager.initialize()
+
     long_term = LongTermMemoryAdapter(long_term_impl)
-    retriever = LongTermRetriever(memory_repo)
-    decay_manager = DecayManager(
-        memory_repo,
-        config.node_decay_rate,
-        group_config=group_config,
-        plugin_name=plugin_name,
-        config=config,
-    )
-    await decay_manager.initialize()
 
     engine = PersonaEngineCore(
         config=config,
@@ -173,8 +222,11 @@ async def assemble_persona_engine(
         aiprocessor=llm_impl,
         plugin_policy_service=plugin_policy_service,
         image_context_service=image_context_service,
+        basic_message_loader=_load_recent_basic_messages,
     )
     if hasattr(llm_impl, "set_memory_retrieval_callback"):
         llm_impl.set_memory_retrieval_callback(engine.retrieve_memory_payload)
+
+    setattr(engine, "neo4j_available", neo4j_available)
 
     return engine
