@@ -1,6 +1,7 @@
 from src.adapters.nonebot.message_metadata import (
     build_onebot_metadata,
     extract_onebot_image_metadata,
+    extract_onebot_mention_metadata,
     normalize_content_for_storage,
 )
 
@@ -30,6 +31,25 @@ def test_extract_onebot_image_metadata_keeps_required_fields():
             "file": "abc.jpg",
             "mime": "image/jpeg",
             "size": 2048,
+        }
+    ]
+
+
+def test_extract_onebot_mention_metadata_marks_self_mention():
+    message = [
+        {"type": "at", "data": {"qq": "2539518078", "name": "月 月"}},
+        {"type": "text", "data": {"text": "你好"}},
+    ]
+
+    mentions = extract_onebot_mention_metadata(message, self_id="2539518078")
+
+    assert mentions == [
+        {
+            "segment_index": 0,
+            "text": "@月 月",
+            "qq": "2539518078",
+            "name": "月 月",
+            "is_self": True,
         }
     ]
 
@@ -66,13 +86,46 @@ def test_normalize_content_for_storage_rebuilds_mixed_segments_by_segment_index(
     assert message == "先看 [图片] 再看 [图片]"
 
 
+def test_normalize_content_for_storage_keeps_mention_only_message():
+    segments = [
+        {"type": "at", "data": {"qq": "2539518078"}},
+    ]
+
+    message = normalize_content_for_storage(
+        "",
+        [],
+        message_segments=segments,
+    )
+
+    assert message == "@2539518078"
+
+
+def test_normalize_content_for_storage_rebuilds_mention_text_and_image_segments():
+    segments = [
+        {"type": "at", "data": {"qq": "2539518078"}},
+        {"type": "text", "data": {"text": "你好"}},
+        {"type": "image", "data": {"url": "https://example.com/a.jpg"}},
+    ]
+
+    message = normalize_content_for_storage(
+        "你好",
+        [{"segment_index": 2, "url": "https://example.com/a.jpg"}],
+        message_segments=segments,
+    )
+
+    assert message == "@2539518078 你好 [图片]"
+
+
 def test_build_onebot_metadata_includes_media_and_onebot_fields():
     metadata = build_onebot_metadata(
         self_id=123456,
         message_id=777,
         images=[{"segment_index": 0, "url": "https://example.com/a.jpg"}],
+        mentions=[{"segment_index": 1, "text": "@月 月", "is_self": True}],
     )
 
     assert metadata["onebot"]["self_id"] == "123456"
     assert metadata["onebot"]["message_id"] == "777"
+    assert metadata["onebot"]["mentioned_self"] is True
+    assert metadata["onebot"]["mentions"][0]["text"] == "@月 月"
     assert metadata["media"]["images"][0]["url"] == "https://example.com/a.jpg"

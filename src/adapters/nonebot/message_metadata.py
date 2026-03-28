@@ -38,6 +38,54 @@ def _to_int_or_none(value: Any) -> int | None:
         return None
 
 
+def _render_mention_segment(segment: Any) -> str:
+    data = _segment_data(segment)
+    qq = data.get("qq")
+    if qq == "all":
+        return "@全体成员"
+
+    display_name = data.get("name") or data.get("nickname")
+    if display_name not in (None, ""):
+        return f"@{display_name}"
+    if qq not in (None, ""):
+        return f"@{qq}"
+    return "@提及"
+
+
+def extract_onebot_mention_metadata(message: Any, *, self_id: Any = None) -> List[Dict[str, Any]]:
+    """从 OneBot 消息段中提取 @ 元信息。"""
+    try:
+        segments = list(message or [])
+    except TypeError:
+        return []
+
+    normalized_self_id = str(self_id or "").strip()
+    mentions: List[Dict[str, Any]] = []
+    for index, segment in enumerate(segments):
+        if _segment_type(segment) != "at":
+            continue
+
+        data = _segment_data(segment)
+        qq = str(data.get("qq") or "").strip()
+        name = str(data.get("name") or data.get("nickname") or "").strip()
+        text = _render_mention_segment(segment)
+        item: Dict[str, Any] = {
+            "segment_index": index,
+            "text": text,
+        }
+        if qq:
+            item["qq"] = qq
+        if name:
+            item["name"] = name
+        if qq == "all":
+            item["is_all"] = True
+        if normalized_self_id and qq == normalized_self_id:
+            item["is_self"] = True
+        mentions.append(item)
+
+    return mentions
+
+
 def extract_onebot_image_metadata(message: Any) -> List[Dict[str, Any]]:
     """从 OneBot 消息段中提取图片元信息。"""
     try:
@@ -81,7 +129,7 @@ def normalize_content_for_storage(
     message_segments: Any = None,
 ) -> str:
     """根据文本与图片情况，生成用于入库的 content。"""
-    if images and message_segments is not None:
+    if message_segments is not None:
         rebuilt = _rebuild_content_with_segment_index(
             message_segments,
             images,
@@ -128,14 +176,25 @@ def _rebuild_content_with_segment_index(
     parts: List[str] = []
     has_image = False
     has_index_mapping = bool(image_count_by_index)
+    previous_segment_type = ""
     for index, segment in enumerate(segments):
         segment_type = _segment_type(segment)
         if segment_type == "text":
             text = str(_segment_data(segment).get("text") or "")
             if text:
-                if parts and parts[-1] == image_only_placeholder and not text[:1].isspace():
+                if (
+                    parts
+                    and previous_segment_type in {"at", "image"}
+                    and not text[:1].isspace()
+                ):
                     parts.append(" ")
                 parts.append(text)
+        elif segment_type == "at":
+            mention = _render_mention_segment(segment)
+            if mention:
+                if parts and not parts[-1].endswith((" ", "\t", "\n")):
+                    parts.append(" ")
+                parts.append(mention)
 
         placeholder_count = image_count_by_index.get(index, 0)
         if placeholder_count <= 0 and not has_index_mapping and segment_type == "image":
@@ -146,6 +205,7 @@ def _rebuild_content_with_segment_index(
                 parts.append(" ")
             parts.append(image_only_placeholder)
             has_image = True
+        previous_segment_type = segment_type
 
     rebuilt = "".join(parts).strip()
     if rebuilt:
@@ -160,6 +220,7 @@ def build_onebot_metadata(
     self_id: Any,
     message_id: Any,
     images: List[Dict[str, Any]],
+    mentions: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """构造标准化 metadata。"""
     onebot: Dict[str, Any] = {}
@@ -167,6 +228,10 @@ def build_onebot_metadata(
         onebot["self_id"] = str(self_id)
     if message_id is not None:
         onebot["message_id"] = str(message_id)
+    if mentions:
+        onebot["mentions"] = mentions
+        if any(bool(item.get("is_self")) for item in mentions if isinstance(item, dict)):
+            onebot["mentioned_self"] = True
 
     return {
         "onebot": onebot,

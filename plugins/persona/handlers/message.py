@@ -15,6 +15,7 @@ from src.adapters.nonebot.command_registry import register_alconna, register_aut
 from src.adapters.nonebot.message_metadata import (
     build_onebot_metadata,
     extract_onebot_image_metadata,
+    extract_onebot_mention_metadata,
     normalize_content_for_storage,
 )
 
@@ -49,6 +50,7 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
     plain_text = event.get_plaintext()
     message_segments = event.get_message()
     images = extract_onebot_image_metadata(message_segments)
+    mentions = extract_onebot_mention_metadata(message_segments, self_id=bot.self_id)
     message = normalize_content_for_storage(
         plain_text,
         images,
@@ -95,6 +97,7 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         self_id=bot.self_id,
         message_id=getattr(event, "message_id", None),
         images=images,
+        mentions=mentions,
     )
 
     message_data = { # 此处有8个字段+自动生成的id和created_at
