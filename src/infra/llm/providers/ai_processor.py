@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
+from src.core.message_history_formatter import format_message_history_entry
 from ..prompts import (
     MEMORY_SELECTION_PROMPT,
     REPLY_HISTORY_KEYWORDS_PROMPT,
@@ -253,14 +254,8 @@ class AIProcessor:
         history_text = []
         seqid2msgid = {}
         for i, msg in enumerate(messages):
-            sender = "你" if msg.get("is_bot", False) else msg.get("user_name", "用户")
-            receiver = "你" if msg["is_direct"] else None
-            content = msg.get("content", "")
             formatted_time = msg["created_at"].strftime("%Y-%m-%d %H:%M")  # 只保留到分钟
-            if receiver:
-                history_text.append(f"[{i}] [{formatted_time}] [{sender}]对{receiver}说: {content}")
-            else:
-                history_text.append(f"[{i}] [{formatted_time}] [{sender}]说: {content}")
+            history_text.append(f"[{i}] [{formatted_time}] {format_message_history_entry(msg)}")
             seqid2msgid[i] = msg["id"]
         history_str = "\n".join(history_text)
         logging.info(f"话题提取消息历史: \n{history_str}")
@@ -343,15 +338,10 @@ class AIProcessor:
 
         lines = []
         for index, msg in enumerate(messages, 1):
-            sender = "你" if msg.get("is_bot", False) else msg.get("user_name", "用户")
-            receiver = "你" if msg.get("is_direct") else None
-            content = str(msg.get("content", "")).strip()
-            if not content:
+            formatted_entry = format_message_history_entry(msg)
+            if not formatted_entry:
                 continue
-            if receiver:
-                lines.append(f"{index}. [{sender}]对{receiver}说: {content}")
-            else:
-                lines.append(f"{index}. [{sender}]说: {content}")
+            lines.append(f"{index}. {formatted_entry}")
 
         if not lines:
             return []
@@ -412,7 +402,12 @@ class AIProcessor:
             return ""
 
         # 构建系统提示词
-        system_prompt = "你需要扮演一位指定角色，根据角色的信息，模仿ta的语气进行线上的日常对话，一次回复不要包含太多内容，直接说话，不要带上\"[角色]说\"。\n"
+        system_prompt = (
+            "你需要扮演一位指定角色，根据角色的信息，模仿ta的语气进行线上的日常对话，"
+            "一次回复不要包含太多内容，直接说话，不要带上\"[角色]说\"。\n"
+            "只回复当前这一轮消息，不要重复、轻微改写、补说或续写你最近一条回复；"
+            "除非用户明确要求你复述、继续或重发上一条回复。\n"
+        )
         fallback_system_prompt = "你是一只群友"
         try:
             if conv_id.startswith("group_"):

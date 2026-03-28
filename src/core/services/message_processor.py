@@ -6,6 +6,7 @@ import random
 from typing import Any, Dict, List, Optional, Union
 
 from src.core.domain import PersonaConfig
+from src.core.message_history_formatter import format_message_history_entry
 from src.core.ports import LLMProvider
 
 
@@ -253,13 +254,11 @@ class MessageProcessor:
             if not isinstance(msg, dict):  # 如果是记忆数据，则直接插入到消息历史中
                 continue
 
-            user_name = msg.get("user_name", "用户")
             content = msg.get("content", "")
-            is_direct = msg.get("is_direct", False)
             is_bot = msg.get("is_bot", False)
 
             role = "assistant" if is_bot else "user"
-            message_text = f"[{user_name}]{'对你' if is_direct else ''}说: {content}" if not is_bot else content
+            message_text = format_message_history_entry(msg) if not is_bot else content
 
             chat_messages.append({"role": role, "content": message_text})
         history_lines = [f"[{msg['role']}] {msg['content']}" for msg in chat_messages]

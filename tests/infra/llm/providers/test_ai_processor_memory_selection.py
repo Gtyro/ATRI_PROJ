@@ -12,6 +12,7 @@ from src.infra.llm.providers.types import (
 class _FakeLLMClient:
     def __init__(self):
         self.final_messages = None
+        self.system_prompts = []
 
     async def chat_with_tools(
         self,
@@ -26,6 +27,7 @@ class _FakeLLMClient:
         usage_context=None,
     ):
         assert operation == "memory_tool_call"
+        self.system_prompts.append((operation, system_prompt))
         tool_call = LLMToolCall(
             id="tool-1",
             name="retrieve_memories",
@@ -78,8 +80,10 @@ class _FakeLLMClient:
         usage_context=None,
     ):
         if operation == "final_response":
+            self.system_prompts.append((operation, system_prompt))
             self.final_messages = list(messages)
             return "收到"
+        self.system_prompts.append((operation, system_prompt))
         return "fallback"
 
 
@@ -166,3 +170,50 @@ def test_generate_response_selects_memory_candidates_and_uses_selected_context()
         message.get("role") == "tool" and "【项目A状态】项目A延期到下周" in message.get("content", "")
         for message in processor._llm_client.final_messages
     )
+    assert any(
+        "不要重复、轻微改写、补说或续写你最近一条回复" in (system_prompt or "")
+        for _, system_prompt in processor._llm_client.system_prompts
+    )
+
+
+class _PromptOnlyLLMClient:
+    def __init__(self):
+        self.system_prompts = []
+
+    async def chat(
+        self,
+        messages,
+        params,
+        *,
+        system_prompt=None,
+        operation="chat",
+        request_id=None,
+        usage_context=None,
+    ):
+        self.system_prompts.append((operation, system_prompt))
+        return "收到"
+
+
+def test_generate_response_adds_anti_repeat_instruction_to_prompt():
+    processor = object.__new__(AIProcessor)
+    processor.group_character = {}
+    processor.memory_retrieval_callback = None
+    processor.raise_on_error = True
+    processor._llm_client = _PromptOnlyLLMClient()
+
+    response = asyncio.run(
+        processor.generate_response(
+            conv_id="private_1",
+            messages=[{"role": "user", "content": "么么哒"}],
+            tool_choice="none",
+        )
+    )
+
+    assert response == "收到"
+    assert processor._llm_client.system_prompts == [
+        (
+            "no_tool_response",
+            processor._llm_client.system_prompts[0][1],
+        )
+    ]
+    assert "不要重复、轻微改写、补说或续写你最近一条回复" in processor._llm_client.system_prompts[0][1]
