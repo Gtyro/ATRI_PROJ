@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -73,18 +73,58 @@ def _parse_env_float(env_key: str, default: float) -> float:
 
 
 @dataclass
+class ImageUnderstandingProviderConfig:
+    name: str = ""
+    api_key: str = ""
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-5.4"
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: Optional[Dict[str, Any]] = None,
+        *,
+        default_name: str = "",
+        default_api_key: str = "",
+        default_base_url: str = "https://api.openai.com/v1",
+        default_model: str = "gpt-5.4",
+        source: str = "image_understanding.providers",
+    ) -> "ImageUnderstandingProviderConfig":
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            raise ValueError(f"{source} 必须是字典")
+        return cls(
+            name=str(data.get("name", default_name) or "").strip(),
+            api_key=str(data.get("api_key", default_api_key) or "").strip(),
+            base_url=str(data.get("base_url", default_base_url) or "").strip(),
+            model=str(data.get("model", default_model) or "").strip(),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "api_key": self.api_key,
+            "base_url": self.base_url,
+            "model": self.model,
+        }
+
+
+@dataclass
 class ImageUnderstandingConfig:
     enabled: bool = True
     api_key: str = ""
-    base_url: str = "https://openrouter.ai/api/v1"
-    model: str = "google/gemini-3-pro-preview"
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-5.4"
     timeout_seconds: float = 60.0
     http_timeout_seconds: float = 30.0
     max_tokens: int = 2000
+    detail: str = "auto"
     max_images_per_round: int = 5
     analyze_window_size: int = 20
     cache_enabled: bool = True
     retrieval_ab_mode: str = "tool_only"
+    providers: List[ImageUnderstandingProviderConfig] = field(default_factory=list)
 
     @staticmethod
     def _normalize_retrieval_ab_mode(mode_value: Any, *, source: str) -> str:
@@ -92,6 +132,68 @@ class ImageUnderstandingConfig:
         if mode not in {"tool_only", "hybrid"}:
             raise ValueError(f"{source} 仅支持 tool_only 或 hybrid")
         return mode
+
+    @staticmethod
+    def _normalize_detail(detail_value: Any, *, source: str) -> str:
+        detail = str(detail_value or "auto").strip().lower() or "auto"
+        if detail not in {"auto", "high", "low"}:
+            raise ValueError(f"{source} 仅支持 auto、high 或 low")
+        return detail
+
+    @classmethod
+    def _normalize_providers(
+        cls,
+        raw_providers: Any,
+        *,
+        default_api_key: str,
+        default_base_url: str,
+        default_model: str,
+        source: str,
+    ) -> List[ImageUnderstandingProviderConfig]:
+        if raw_providers is None:
+            if not (default_api_key or default_base_url or default_model):
+                return []
+            return [
+                ImageUnderstandingProviderConfig(
+                    name="primary",
+                    api_key=default_api_key,
+                    base_url=default_base_url,
+                    model=default_model,
+                )
+            ]
+        if not isinstance(raw_providers, list):
+            raise ValueError(f"{source} 必须是数组")
+        providers: List[ImageUnderstandingProviderConfig] = []
+        for index, item in enumerate(raw_providers):
+            provider = ImageUnderstandingProviderConfig.from_dict(
+                item,
+                default_name=f"provider_{index + 1}",
+                default_api_key=default_api_key,
+                default_base_url=default_base_url,
+                default_model=default_model,
+                source=f"{source}[{index}]",
+            )
+            if not (provider.base_url and provider.model):
+                raise ValueError(f"{source}[{index}] 缺少 base_url/model")
+            providers.append(provider)
+        return providers
+
+    @staticmethod
+    def _parse_env_provider_list(env_key: str, default: List[ImageUnderstandingProviderConfig]) -> List[ImageUnderstandingProviderConfig]:
+        raw_value = os.environ.get(env_key)
+        if raw_value is None:
+            return list(default)
+        try:
+            parsed = yaml.safe_load(raw_value)
+        except Exception as exc:
+            raise ValueError(f"{env_key} 必须是有效的 YAML/JSON 数组") from exc
+        return ImageUnderstandingConfig._normalize_providers(
+            parsed,
+            default_api_key="",
+            default_base_url="https://api.openai.com/v1",
+            default_model="gpt-5.4",
+            source=env_key,
+        )
 
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]] = None) -> "ImageUnderstandingConfig":
@@ -104,22 +206,44 @@ class ImageUnderstandingConfig:
             data.get("retrieval_ab_mode", "tool_only"),
             source="image_understanding.retrieval_ab_mode",
         )
+        detail = cls._normalize_detail(
+            data.get("detail", "auto"),
+            source="image_understanding.detail",
+        )
+        default_api_key = str(data.get("api_key", "")).strip()
+        default_base_url = str(data.get("base_url", "https://api.openai.com/v1")).strip()
+        default_model = str(data.get("model", "gpt-5.4")).strip()
+        providers = cls._normalize_providers(
+            data.get("providers"),
+            default_api_key=default_api_key,
+            default_base_url=default_base_url,
+            default_model=default_model,
+            source="image_understanding.providers",
+        )
+        primary = providers[0] if providers else ImageUnderstandingProviderConfig(
+            name="primary",
+            api_key=default_api_key,
+            base_url=default_base_url,
+            model=default_model,
+        )
 
         max_images_per_round = max(1, int(data.get("max_images_per_round", 5)))
         analyze_window_size = max(1, int(data.get("analyze_window_size", 20)))
 
         return cls(
             enabled=_to_bool(data.get("enabled"), default=True),
-            api_key=str(data.get("api_key", "")).strip(),
-            base_url=str(data.get("base_url", "https://openrouter.ai/api/v1")).strip(),
-            model=str(data.get("model", "google/gemini-3-pro-preview")).strip(),
+            api_key=primary.api_key,
+            base_url=primary.base_url,
+            model=primary.model,
             timeout_seconds=float(data.get("timeout_seconds", 60.0)),
             http_timeout_seconds=float(data.get("http_timeout_seconds", 30.0)),
             max_tokens=int(data.get("max_tokens", 2000)),
+            detail=detail,
             max_images_per_round=max_images_per_round,
             analyze_window_size=analyze_window_size,
             cache_enabled=_to_bool(data.get("cache_enabled"), default=True),
             retrieval_ab_mode=mode,
+            providers=providers,
         )
 
     def apply_env_overrides(self) -> "ImageUnderstandingConfig":
@@ -130,6 +254,10 @@ class ImageUnderstandingConfig:
             ),
             source="IMAGE_UNDERSTANDING_RETRIEVAL_AB_MODE",
         )
+        detail = self._normalize_detail(
+            _env_or_default("IMAGE_UNDERSTANDING_DETAIL", self.detail),
+            source="IMAGE_UNDERSTANDING_DETAIL",
+        )
 
         max_images_per_round = max(
             1,
@@ -139,6 +267,34 @@ class ImageUnderstandingConfig:
             1,
             _parse_env_int("IMAGE_UNDERSTANDING_ANALYZE_WINDOW_SIZE", self.analyze_window_size),
         )
+        providers = self._parse_env_provider_list(
+            "IMAGE_UNDERSTANDING_PROVIDERS",
+            self.providers,
+        )
+        if os.environ.get("IMAGE_UNDERSTANDING_PROVIDERS") is None:
+            primary = providers[0] if providers else ImageUnderstandingProviderConfig(
+                name="primary",
+                api_key=self.api_key,
+                base_url=self.base_url,
+                model=self.model,
+            )
+            primary = replace(
+                primary,
+                api_key=_env_or_default("IMAGE_UNDERSTANDING_API_KEY", primary.api_key),
+                base_url=_env_or_default("IMAGE_UNDERSTANDING_BASE_URL", primary.base_url),
+                model=_env_or_default("IMAGE_UNDERSTANDING_MODEL", primary.model),
+            )
+            if primary.api_key or primary.base_url or primary.model:
+                if providers:
+                    providers[0] = primary
+                else:
+                    providers = [primary]
+        primary = providers[0] if providers else ImageUnderstandingProviderConfig(
+            name="primary",
+            api_key=_env_or_default("IMAGE_UNDERSTANDING_API_KEY", self.api_key),
+            base_url=_env_or_default("IMAGE_UNDERSTANDING_BASE_URL", self.base_url),
+            model=_env_or_default("IMAGE_UNDERSTANDING_MODEL", self.model),
+        )
 
         return replace(
             self,
@@ -146,15 +302,16 @@ class ImageUnderstandingConfig:
                 os.environ.get("IMAGE_UNDERSTANDING_ENABLED"),
                 default=self.enabled,
             ),
-            api_key=_env_or_default("IMAGE_UNDERSTANDING_API_KEY", self.api_key),
-            base_url=_env_or_default("IMAGE_UNDERSTANDING_BASE_URL", self.base_url),
-            model=_env_or_default("IMAGE_UNDERSTANDING_MODEL", self.model),
+            api_key=primary.api_key,
+            base_url=primary.base_url,
+            model=primary.model,
             timeout_seconds=_parse_env_float("IMAGE_UNDERSTANDING_TIMEOUT_SECONDS", self.timeout_seconds),
             http_timeout_seconds=_parse_env_float(
                 "IMAGE_UNDERSTANDING_HTTP_TIMEOUT_SECONDS",
                 self.http_timeout_seconds,
             ),
             max_tokens=_parse_env_int("IMAGE_UNDERSTANDING_MAX_TOKENS", self.max_tokens),
+            detail=detail,
             max_images_per_round=max_images_per_round,
             analyze_window_size=analyze_window_size,
             cache_enabled=_to_bool(
@@ -162,21 +319,21 @@ class ImageUnderstandingConfig:
                 default=self.cache_enabled,
             ),
             retrieval_ab_mode=mode,
+            providers=providers,
         )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "enabled": self.enabled,
-            "api_key": self.api_key,
-            "base_url": self.base_url,
-            "model": self.model,
             "timeout_seconds": self.timeout_seconds,
             "http_timeout_seconds": self.http_timeout_seconds,
             "max_tokens": self.max_tokens,
+            "detail": self.detail,
             "max_images_per_round": self.max_images_per_round,
             "analyze_window_size": self.analyze_window_size,
             "cache_enabled": self.cache_enabled,
             "retrieval_ab_mode": self.retrieval_ab_mode,
+            "providers": [provider.to_dict() for provider in self.providers],
         }
 
 

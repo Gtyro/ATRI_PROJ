@@ -80,12 +80,22 @@ class LLMClient:
             return json.loads(cleaned)
         except json.JSONDecodeError:
             # 兜底：尝试截取首尾 JSON
-            if "{" in cleaned and "}" in cleaned:
+            if cleaned.startswith("{"):
+                if "{" in cleaned and "}" in cleaned:
+                    candidate = cleaned[cleaned.find("{") : cleaned.rfind("}") + 1]
+                else:
+                    raise
+            elif cleaned.startswith("["):
+                if "[" in cleaned and "]" in cleaned:
+                    candidate = cleaned[cleaned.find("[") : cleaned.rfind("]") + 1]
+                else:
+                    raise
+            elif "{" in cleaned and "}" in cleaned:
                 candidate = cleaned[cleaned.find("{") : cleaned.rfind("}") + 1]
             elif "[" in cleaned and "]" in cleaned:
                 candidate = cleaned[cleaned.find("[") : cleaned.rfind("]") + 1]
             else:
-                candidate = cleaned
+                raise
             return json.loads(candidate)
 
     def _log_event(
@@ -118,6 +128,44 @@ class LLMClient:
         }
 
     @staticmethod
+    def _extract_responses_usage(response: Any) -> Dict[str, Optional[int]]:
+        usage = getattr(response, "usage", None)
+        if not usage:
+            return {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+        return {
+            "prompt_tokens": getattr(usage, "input_tokens", None),
+            "completion_tokens": getattr(usage, "output_tokens", None),
+            "total_tokens": getattr(usage, "total_tokens", None),
+        }
+
+    def _normalize_responses_input_items(self, input_items: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], Optional[str]]:
+        normalized_items: List[Dict[str, Any]] = []
+        effective_detail: Optional[str] = None
+        for item in input_items:
+            if not isinstance(item, dict):
+                normalized_items.append(item)
+                continue
+            normalized_item = dict(item)
+            if normalized_item.get("type") is None and normalized_item.get("role") and "content" in normalized_item:
+                normalized_item["type"] = "message"
+            content = normalized_item.get("content")
+            if isinstance(content, list):
+                normalized_content: List[Any] = []
+                for content_item in content:
+                    if not isinstance(content_item, dict):
+                        normalized_content.append(content_item)
+                        continue
+                    normalized_block = dict(content_item)
+                    if normalized_block.get("type") == "input_image":
+                        detail = str(normalized_block.get("detail") or "").strip().lower()
+                        if detail:
+                            effective_detail = detail
+                    normalized_content.append(normalized_block)
+                normalized_item["content"] = normalized_content
+            normalized_items.append(normalized_item)
+        return normalized_items, effective_detail
+
+    @staticmethod
     def _normalize_usage_context(usage_context: Optional[Dict[str, Any]]) -> Dict[str, str]:
         if not isinstance(usage_context, dict):
             return {}
@@ -128,6 +176,75 @@ class LLMClient:
                 continue
             normalized[key] = str(value)
         return normalized
+
+    @staticmethod
+    def _normalize_usage_extra(usage_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if not isinstance(usage_context, dict):
+            return {}
+        extras: Dict[str, Any] = {}
+        for key, value in usage_context.items():
+            if key in {"plugin_name", "module_name", "operation", "phase", "resolved_via", "conv_id", "message_id"}:
+                continue
+            if value is None:
+                continue
+            extras[key] = value
+        return extras
+
+    @staticmethod
+    def _extract_incomplete_reason(response: Any) -> Optional[str]:
+        details = getattr(response, "incomplete_details", None)
+        reason = getattr(details, "reason", None)
+        if reason is not None:
+            return str(reason)
+        model_dump = getattr(response, "model_dump", None)
+        if callable(model_dump):
+            try:
+                payload = model_dump(exclude_none=True)
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                details_payload = payload.get("incomplete_details")
+                if isinstance(details_payload, dict):
+                    raw_reason = details_payload.get("reason")
+                    if raw_reason is not None:
+                        return str(raw_reason)
+        return None
+
+    @staticmethod
+    def _looks_like_truncated_json(raw_text: str) -> bool:
+        text = str(raw_text or "").strip()
+        if not text:
+            return False
+        if text.startswith("{") and not text.endswith("}"):
+            return True
+        if text.startswith("[") and not text.endswith("]"):
+            return True
+        return False
+
+    @classmethod
+    def _infer_truncation_reason(
+        cls,
+        response: Any,
+        *,
+        params: LLMCallParams,
+        usage: Optional[Dict[str, Optional[int]]],
+        raw_text: str,
+    ) -> Optional[str]:
+        explicit_reason = cls._extract_incomplete_reason(response)
+        if explicit_reason:
+            return explicit_reason
+        completion_tokens = (usage or {}).get("completion_tokens")
+        max_output_tokens = getattr(params, "max_tokens", None)
+        if (
+            isinstance(completion_tokens, int)
+            and isinstance(max_output_tokens, int)
+            and max_output_tokens > 0
+            and completion_tokens >= max_output_tokens
+        ):
+            if cls._looks_like_truncated_json(raw_text):
+                return "max_output_tokens_exhausted_inferred"
+            return "max_output_tokens_reached"
+        return None
 
     @staticmethod
     def _resolve_error_type(exc: BaseException) -> str:
@@ -168,6 +285,7 @@ class LLMClient:
             "total_tokens": None,
             "error_type": error_type,
         }
+        event.update(self._normalize_usage_extra(usage_context))
         if success and usage:
             event["prompt_tokens"] = usage.get("prompt_tokens")
             event["completion_tokens"] = usage.get("completion_tokens")
@@ -278,6 +396,154 @@ class LLMClient:
                     text_parts.append(text.strip())
             return "\n".join(text_parts)
         return str(content)
+
+    async def response_json(
+        self,
+        *,
+        input_items: List[Dict[str, Any]],
+        schema: Dict[str, Any],
+        params: LLMCallParams,
+        schema_name: str = "output",
+        instructions: Optional[str] = None,
+        operation: str = "response_json",
+        request_id: Optional[str] = None,
+        usage_context: Optional[Dict[str, Any]] = None,
+    ) -> LLMStructuredOutput:
+        if self._client is None:
+            raise LLMProviderError(
+                "LLM客户端未初始化",
+                provider=self.provider_name,
+                operation=operation,
+                request_id=request_id,
+            )
+        request_id = request_id or uuid.uuid4().hex
+        self._log_event(
+            logging.INFO,
+            "request.start",
+            request_id=request_id,
+            operation=operation,
+            inputs=len(input_items),
+        )
+        usage: Optional[Dict[str, Optional[int]]] = None
+        effective_usage_context = dict(usage_context or {})
+        try:
+            try:
+                kwargs = params.to_responses_kwargs(self.model)
+                normalized_input_items, effective_detail = self._normalize_responses_input_items(input_items)
+                kwargs["input"] = normalized_input_items
+                kwargs["text"] = {
+                    "format": {
+                        "type": "json_schema",
+                        "name": schema_name,
+                        "strict": True,
+                        "schema": schema,
+                    }
+                }
+                if instructions:
+                    kwargs["instructions"] = instructions
+                if effective_detail:
+                    effective_usage_context["detail"] = effective_detail
+                response = await self._client.responses.create(**kwargs)
+            except Exception as exc:
+                self._log_event(
+                    logging.ERROR,
+                    "request.error",
+                    request_id=request_id,
+                    operation=operation,
+                    error_type=type(exc).__name__,
+                )
+                raise LLMProviderError(
+                    "LLM结构化输出请求失败",
+                    provider=self.provider_name,
+                    operation=operation,
+                    request_id=request_id,
+                    retryable=True,
+                    cause=exc,
+                ) from exc
+
+            usage = self._extract_responses_usage(response)
+            self._log_event(
+                logging.INFO,
+                "request.success",
+                request_id=request_id,
+                operation=operation,
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+                total_tokens=usage["total_tokens"],
+                max_output_tokens=params.max_tokens,
+            )
+            raw_text = str(getattr(response, "output_text", "") or "").strip()
+            truncation_reason = self._infer_truncation_reason(
+                response,
+                params=params,
+                usage=usage,
+                raw_text=raw_text,
+            )
+            if truncation_reason:
+                self._log_event(
+                    logging.WARNING,
+                    "response.truncation",
+                    request_id=request_id,
+                    operation=operation,
+                    reason=truncation_reason,
+                    completion_tokens=usage["completion_tokens"],
+                    max_output_tokens=params.max_tokens,
+                    raw_text_len=len(raw_text),
+                )
+            if not raw_text:
+                raise LLMProviderError(
+                    "LLM结构化输出为空",
+                    provider=self.provider_name,
+                    operation=operation,
+                    request_id=request_id,
+                    retryable=True,
+                )
+            try:
+                data = self._parse_json_payload(raw_text)
+            except Exception as exc:
+                truncation_reason = truncation_reason or self._infer_truncation_reason(
+                    response,
+                    params=params,
+                    usage=usage,
+                    raw_text=raw_text,
+                )
+                if truncation_reason:
+                    self._log_event(
+                        logging.ERROR,
+                        "response.parse_error",
+                        request_id=request_id,
+                        operation=operation,
+                        reason=truncation_reason,
+                        completion_tokens=(usage or {}).get("completion_tokens"),
+                        max_output_tokens=params.max_tokens,
+                        raw_text_len=len(raw_text),
+                    )
+                raise LLMOutputParseError(
+                    "LLM结构化输出解析失败",
+                    provider=self.provider_name,
+                    operation=operation,
+                    request_id=request_id,
+                    retryable=True,
+                    cause=exc,
+                ) from exc
+        except Exception as exc:
+            await self._emit_usage_event(
+                request_id=request_id,
+                operation=operation,
+                success=False,
+                usage_context=effective_usage_context,
+                error_type=self._resolve_error_type(exc),
+            )
+            raise
+
+        await self._emit_usage_event(
+            request_id=request_id,
+            operation=operation,
+            success=True,
+            usage_context=effective_usage_context,
+            usage=usage,
+        )
+        return LLMStructuredOutput(data=data, raw_text=raw_text)
 
     async def chat(
         self,

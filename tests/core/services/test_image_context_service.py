@@ -5,6 +5,14 @@ from src.adapters.nonebot.image_resolver import ResolvedImage
 from src.core.services.image_context_service import ImageContextService
 
 
+def _observation_result(display_text, *, observation=None, detail="auto"):
+    return {
+        "display_text": display_text,
+        "observation": observation or {},
+        "detail": detail,
+    }
+
+
 class _FakeResolver:
     def __init__(self, result_by_url, telemetry_by_url=None):
         self.result_by_url = result_by_url
@@ -30,13 +38,16 @@ class _FakeResolver:
 
 
 class _FakeUnderstander:
-    def __init__(self, summaries):
-        self.summaries = summaries
+    def __init__(self, results):
+        self.results = results
         self.calls = []
+        self.model = "gpt-5.4"
+        self.detail = "auto"
+        self.provider_name = "primary"
 
-    async def summarize_images(self, images, *, usage_contexts=None):
+    async def inspect_images(self, images, *, usage_contexts=None):
         self.calls.append({"images": images, "usage_contexts": usage_contexts})
-        return list(self.summaries[: len(images)])
+        return list(self.results[: len(images)])
 
 
 class _FakeRepo:
@@ -48,7 +59,7 @@ class _FakeRepo:
         return True
 
 
-def test_build_context_uses_cache_and_persists_new_summary(caplog):
+def test_build_context_uses_cache_and_persists_new_understanding(caplog):
     resolver = _FakeResolver(
         {
             "https://example.com/new.jpg": ResolvedImage(
@@ -59,7 +70,7 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
             )
         }
     )
-    understander = _FakeUnderstander(["新图片摘要"])
+    understander = _FakeUnderstander([_observation_result("新图片摘要")])
     repo = _FakeRepo()
     service = ImageContextService(
         config={
@@ -88,7 +99,12 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
                     "images": [
                         {
                             "url": "https://example.com/cached.jpg",
-                            "understanding": {"summary": "缓存摘要"},
+                            "understanding": {
+                                "version": 2,
+                                "status": "ok",
+                                "display_text": "缓存摘要",
+                                "observation": {},
+                            },
                         }
                     ]
                 }
@@ -113,13 +129,15 @@ def test_build_context_uses_cache_and_persists_new_summary(caplog):
     assert usage_context["resolved_via"] == "url"
     assert repo.updated[0][0] == 1
     assert (
-        repo.updated[0][1]["media"]["images"][0]["understanding"]["summary"]
-        == "新图片摘要"
+        repo.updated[0][1]["media"]["images"][0]["understanding"]["display_text"] == "新图片摘要"
     )
-    assert (
-        repo.updated[0][1]["media"]["images"][0]["understanding"]["resolved_via"]
-        == "url"
-    )
+    understanding = repo.updated[0][1]["media"]["images"][0]["understanding"]
+    assert understanding["version"] == 2
+    assert understanding["status"] == "ok"
+    assert understanding["resolved_via"] == "url"
+    assert understanding["detail"] == "auto"
+    assert understanding["model"] == "gpt-5.4"
+    assert understanding["provider_name"] == "primary"
     assert "fetch_source" not in repo.updated[0][1]["media"]["images"][0]["understanding"]
     assert "image_cache_hit=1" in caplog.text
     assert "image_understanding_cost=1" in caplog.text
@@ -143,7 +161,10 @@ def test_build_context_respects_max_images_budget(caplog):
             ),
         }
     )
-    understander = _FakeUnderstander(["摘要1", "摘要2"])
+    understander = _FakeUnderstander([
+        _observation_result("摘要1"),
+        _observation_result("摘要2"),
+    ])
     repo = _FakeRepo()
     service = ImageContextService(
         config={
@@ -204,7 +225,7 @@ def test_build_context_respects_segment_index_order_within_message(caplog):
             ),
         }
     )
-    understander = _FakeUnderstander(["首图摘要"])
+    understander = _FakeUnderstander([_observation_result("首图摘要")])
     repo = _FakeRepo()
     service = ImageContextService(
         config={
@@ -261,7 +282,7 @@ def test_build_context_forwards_onebot_self_id_to_resolver():
             }
         },
         image_resolver=resolver,
-        image_understander=_FakeUnderstander(["摘要"]),
+        image_understander=_FakeUnderstander([_observation_result("摘要")]),
         message_repo=_FakeRepo(),
     )
     messages = [
@@ -292,7 +313,7 @@ def test_build_context_cache_hit_skips_re_resolve_and_re_understand():
             )
         }
     )
-    understander = _FakeUnderstander(["首次摘要"])
+    understander = _FakeUnderstander([_observation_result("首次摘要")])
     repo = _FakeRepo()
     service = ImageContextService(
         config={
@@ -369,8 +390,11 @@ def test_build_context_resolve_failed_marks_resolved_via_failed():
     assert context == ""
     assert len(repo.updated) == 1
     understanding = repo.updated[0][1]["media"]["images"][0]["understanding"]
+    assert understanding["version"] == 2
+    assert understanding["status"] == "failed"
     assert understanding["resolved_via"] == "failed"
     assert understanding["error"] == "resolve_failed"
+    assert understanding["provider_name"] == "primary"
 
 
 def test_build_context_logs_resolver_error_category_and_retry_stats(caplog):
@@ -390,7 +414,7 @@ def test_build_context_logs_resolver_error_category_and_retry_stats(caplog):
             }
         },
     )
-    understander = _FakeUnderstander(["摘要"])
+    understander = _FakeUnderstander([_observation_result("摘要")])
     service = ImageContextService(
         config={
             "image_understanding": {
@@ -432,7 +456,7 @@ def test_build_context_emits_image_fetch_summary_events():
             )
         }
     )
-    understander = _FakeUnderstander(["摘要"])
+    understander = _FakeUnderstander([_observation_result("摘要")])
     events = []
 
     async def _event_callback(event):

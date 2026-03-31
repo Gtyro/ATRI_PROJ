@@ -99,6 +99,17 @@ def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monke
             timeout_seconds=30.0,
             http_timeout_seconds=10.0,
             max_tokens=256,
+            detail="auto",
+            providers=[
+                SimpleNamespace(
+                    to_dict=lambda: {
+                        "name": "primary",
+                        "api_key": "ik",
+                        "base_url": "https://img.example.com",
+                        "model": "img-model",
+                    }
+                )
+            ],
         ),
     )
 
@@ -116,3 +127,4 @@ def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monke
     status_reply = asyncio.run(engine.get_queue_status_reply())
     assert "降级模式" in status_reply
     assert registry.provider.memory_retrieval_callback is not None
+    assert engine.image_context_service is not None

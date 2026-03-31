@@ -175,6 +175,8 @@ async def assemble_persona_engine(
         model=image_cfg.model,
         timeout_seconds=image_cfg.timeout_seconds,
         max_tokens=image_cfg.max_tokens,
+        detail=image_cfg.detail,
+        providers=[provider.to_dict() for provider in getattr(image_cfg, "providers", [])],
     )
     image_understander.set_usage_event_callback(_persist_module_metric_event)
     image_context_service = ImageContextService(

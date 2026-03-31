@@ -155,6 +155,41 @@ class PersonaImageUnderstandingMetricsProvider(_BaseModuleMetricsProvider):
     title = "图片理解"
     description = "统计图片理解调用与 Tokens 使用情况。"
 
+    @staticmethod
+    def _extract_detail(row: Mapping[str, Any]) -> str:
+        extra = _parse_extra(row.get("extra"))
+        detail = _normalize_text(extra.get("detail"))
+        if detail:
+            return detail
+        return "unknown"
+
+    @staticmethod
+    def _extract_response_api(row: Mapping[str, Any]) -> str:
+        extra = _parse_extra(row.get("extra"))
+        response_api = _normalize_text(extra.get("response_api"))
+        if response_api:
+            return response_api
+        return "unknown"
+
+    @staticmethod
+    def _extract_provider_name(row: Mapping[str, Any]) -> str:
+        provider_name = _normalize_text(row.get("provider_name"))
+        if provider_name:
+            return provider_name
+        return "unknown"
+
+    @classmethod
+    def _build_distribution(
+        cls,
+        rows: List[Mapping[str, Any]],
+        extractor,
+    ) -> List[Dict[str, Any]]:
+        counter: Dict[str, int] = {}
+        for row in rows:
+            key = extractor(row)
+            counter[key] = counter.get(key, 0) + 1
+        return [{"name": name, "value": counter[name]} for name in sorted(counter.keys())]
+
     async def get_overview(self, query: ModuleMetricsQuery) -> Dict[str, Any]:
         filters = self._build_filters(query)
         summary = await self.repository.get_summary(filters, interval="day")
@@ -184,17 +219,24 @@ class PersonaImageUnderstandingMetricsProvider(_BaseModuleMetricsProvider):
         filters = self._build_filters(query)
         day_summary = await self.repository.get_summary(filters, interval="day")
         hour_summary = await self.repository.get_summary(filters, interval="hour")
+        rows = await self.repository.list_rows(filters, fields=("extra", "provider_name"))
         events = await self.repository.list_events(filters, page=1, size=20)
 
         kpis = _build_common_kpis(day_summary)
         total_calls = _to_int(day_summary.get("total_calls"))
         failed_calls = _to_int(day_summary.get("failed_calls"))
         success_calls = max(0, total_calls - failed_calls)
+        detail_distribution = self._build_distribution(rows, self._extract_detail)
+        response_api_distribution = self._build_distribution(rows, self._extract_response_api)
+        provider_distribution = self._build_distribution(rows, self._extract_provider_name)
 
         event_rows: List[Dict[str, Any]] = []
         for row in list(events.get("items") or []):
             normalized = dict(row)
             normalized["created_at"] = _normalize_datetime(normalized.get("created_at"))
+            normalized["detail"] = self._extract_detail(normalized)
+            normalized["response_api"] = self._extract_response_api(normalized)
+            normalized["provider_name"] = self._extract_provider_name(normalized)
             event_rows.append(normalized)
 
         charts = [
@@ -239,6 +281,30 @@ class PersonaImageUnderstandingMetricsProvider(_BaseModuleMetricsProvider):
                     {"name": "失败", "value": failed_calls},
                 ],
                 series=[{"field": "value", "name": "调用次数", "type": "pie"}],
+            ),
+            _build_chart(
+                chart_id=f"{self.module_id}.detail.detail",
+                title="detail 分布",
+                chart_type="pie",
+                dataset=detail_distribution,
+                series=[{"field": "value", "name": "调用次数", "type": "pie"}],
+                meta={"dimension": "detail"},
+            ),
+            _build_chart(
+                chart_id=f"{self.module_id}.detail.api",
+                title="调用接口分布",
+                chart_type="pie",
+                dataset=response_api_distribution,
+                series=[{"field": "value", "name": "调用次数", "type": "pie"}],
+                meta={"dimension": "response_api"},
+            ),
+            _build_chart(
+                chart_id=f"{self.module_id}.detail.provider",
+                title="Provider 分布",
+                chart_type="pie",
+                dataset=provider_distribution,
+                series=[{"field": "value", "name": "调用次数", "type": "pie"}],
+                meta={"dimension": "provider_name"},
             ),
             _build_chart(
                 chart_id=f"{self.module_id}.detail.events",

@@ -128,6 +128,17 @@ class _MessageProcessorStub:
         return "收到"
 
 
+def _understanding(display_text: str, *, status: str = "ok") -> Dict[str, Any]:
+    return {
+        "version": 2,
+        "status": status,
+        "display_text": display_text,
+        "observation": {},
+        "detail": "auto",
+        "model": "gpt-5.4",
+    }
+
+
 def _build_service(
     *,
     messages: List[Dict[str, Any]],
@@ -167,7 +178,7 @@ def test_failed_image_understanding_keeps_original_text_without_placeholder_fall
                     "images": [
                         {
                             "url": "https://example.com/1.jpg",
-                            "understanding": {"summary": "", "error": "understand_failed"},
+                            "understanding": _understanding("", status="failed"),
                         }
                     ]
                 }
@@ -194,7 +205,7 @@ def test_successful_image_understanding_keeps_original_text_history():
                     "images": [
                         {
                             "url": "https://example.com/2.jpg",
-                            "understanding": {"summary": "一个人在笑", "error": ""},
+                            "understanding": _understanding("一个人在笑"),
                         }
                     ]
                 }
@@ -224,7 +235,7 @@ def test_successful_image_understanding_replaces_image_placeholder_in_history():
                     "images": [
                         {
                             "url": "https://example.com/3.jpg",
-                            "understanding": {"summary": "一张恐怖游戏场景截图", "error": ""},
+                            "understanding": _understanding("一张恐怖游戏场景截图"),
                         }
                     ]
                 }
@@ -255,12 +266,12 @@ def test_successful_image_understanding_replaces_multiple_placeholders_in_segmen
                         {
                             "segment_index": 3,
                             "url": "https://example.com/4b.jpg",
-                            "understanding": {"summary": "第二张图", "error": ""},
+                            "understanding": _understanding("第二张图"),
                         },
                         {
                             "segment_index": 1,
                             "url": "https://example.com/4a.jpg",
-                            "understanding": {"summary": "第一张图", "error": ""},
+                            "understanding": _understanding("第一张图"),
                         },
                     ]
                 }

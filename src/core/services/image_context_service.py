@@ -121,7 +121,7 @@ class ImageContextService:
         candidates = candidates[:max_images]
 
         cache_enabled = self._cache_enabled()
-        summary_slots: List[str] = ["" for _ in candidates]
+        context_slots: List[str] = ["" for _ in candidates]
         cache_hit = 0
         pending_for_understanding: List[Tuple[int, Dict[str, Any], Dict[str, Any], str]] = []
         pending_metadata_updates: Dict[int, Dict[str, Any]] = {}
@@ -131,9 +131,12 @@ class ImageContextService:
         image_understanding_cost = 0
 
         for index, entry in enumerate(candidates):
-            cached_summary = self._read_cached_summary(entry["image"]) if cache_enabled else ""
-            if cached_summary:
-                summary_slots[index] = cached_summary
+            cached_understanding = self._read_cached_understanding(entry["image"]) if cache_enabled else None
+            if cached_understanding:
+                context_slots[index] = self._build_context_line(
+                    user_name=str(entry["message"].get("user_name") or "用户"),
+                    understanding=cached_understanding,
+                )
                 cache_hit += 1
                 continue
 
@@ -160,8 +163,13 @@ class ImageContextService:
                 if cache_enabled:
                     self._write_understanding(
                         entry["image"],
-                        summary="",
+                        status="failed",
+                        display_text="",
+                        observation={},
                         resolved_via="failed",
+                        model=self._understanding_model(),
+                        provider_name=self._understanding_provider_name(),
+                        detail=self._understanding_detail(),
                         error="resolve_failed",
                     )
                     self._mark_pending_metadata(entry, pending_metadata_updates)
@@ -208,39 +216,56 @@ class ImageContextService:
                 }
                 for item in pending_for_understanding
             ]
-            summaries = await self.image_understander.summarize_images(
+            results = await self.image_understander.inspect_images(
                 payloads,
                 usage_contexts=usage_contexts,
             )
-            if len(summaries) < len(pending_for_understanding):
-                summaries.extend([""] * (len(pending_for_understanding) - len(summaries)))
+            if len(results) < len(pending_for_understanding):
+                results.extend(
+                    [self._empty_observation_result() for _ in range(len(pending_for_understanding) - len(results))]
+                )
 
-            for (index, entry, _, source), summary in zip(pending_for_understanding, summaries):
-                text = str(summary or "").strip()
+            for (index, entry, _, source), result in zip(pending_for_understanding, results):
+                normalized_result = self._normalize_observation_result(result)
+                text = normalized_result["display_text"]
                 if text:
-                    summary_slots[index] = text
+                    understanding = self._write_understanding(
+                        entry["image"],
+                        status="ok",
+                        display_text=text,
+                        observation=normalized_result["observation"],
+                        resolved_via=source,
+                        model=normalized_result["model"] or self._understanding_model(),
+                        provider_name=normalized_result["provider_name"] or self._understanding_provider_name(),
+                        detail=normalized_result["detail"],
+                        error="",
+                    )
+                    context_slots[index] = self._build_context_line(
+                        user_name=str(entry["message"].get("user_name") or "用户"),
+                        understanding=understanding,
+                    )
                     if cache_enabled:
-                        self._write_understanding(
-                            entry["image"],
-                            summary=text,
-                            resolved_via=source,
-                            error="",
-                        )
                         self._mark_pending_metadata(entry, pending_metadata_updates)
-                elif cache_enabled:
+                else:
                     logger.warning(
-                        "图片理解返回空摘要: conv_id=%s message_id=%s resolved_via=%s",
+                        "图片理解返回空观察结果: conv_id=%s message_id=%s resolved_via=%s",
                         conv_id,
                         entry.get("message_id"),
                         source or "unknown",
                     )
-                    self._write_understanding(
-                        entry["image"],
-                        summary="",
-                        resolved_via=source,
-                        error="understand_failed",
-                    )
-                    self._mark_pending_metadata(entry, pending_metadata_updates)
+                    if cache_enabled:
+                        self._write_understanding(
+                            entry["image"],
+                            status="failed",
+                            display_text="",
+                            observation=normalized_result["observation"],
+                            resolved_via=source,
+                            model=normalized_result["model"] or self._understanding_model(),
+                            provider_name=normalized_result["provider_name"] or self._understanding_provider_name(),
+                            detail=normalized_result["detail"],
+                            error="understand_failed",
+                        )
+                        self._mark_pending_metadata(entry, pending_metadata_updates)
 
         metadata_updated_count = 0
         if pending_metadata_updates:
@@ -257,11 +282,10 @@ class ImageContextService:
             )
 
         lines = []
-        for entry, summary in zip(candidates, summary_slots):
-            if not summary:
+        for line in context_slots:
+            if not line:
                 continue
-            user_name = str(entry["message"].get("user_name") or "用户")
-            lines.append(f"- {user_name} 发图：{summary}")
+            lines.append(line)
 
         self._log_build_metrics(
             conv_id,
@@ -378,22 +402,44 @@ class ImageContextService:
         return str(onebot.get("message_id") or "").strip()
 
     @staticmethod
-    def _read_cached_summary(image_meta: Dict[str, Any]) -> str:
+    def _read_cached_understanding(image_meta: Dict[str, Any]) -> Dict[str, Any]:
         data = image_meta.get("understanding")
         if not isinstance(data, dict):
-            return ""
-        return str(data.get("summary") or "").strip()
+            return {}
+        try:
+            version = int(data.get("version") or 0)
+        except (TypeError, ValueError):
+            version = 0
+        if version != 2:
+            return {}
+        if str(data.get("status") or "").strip().lower() != "ok":
+            return {}
+        display_text = str(data.get("display_text") or "").strip()
+        if not display_text:
+            return {}
+        return data
 
     @staticmethod
     def _write_understanding(
         image_meta: Dict[str, Any],
         *,
-        summary: str,
+        status: str,
+        display_text: str,
+        observation: Any,
         resolved_via: str,
+        model: str,
+        provider_name: str,
+        detail: str,
         error: str,
-    ) -> None:
-        payload = {
-            "summary": summary,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "version": 2,
+            "status": status,
+            "display_text": display_text,
+            "observation": observation if isinstance(observation, dict) else {},
+            "model": model,
+            "provider_name": provider_name,
+            "detail": detail,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         if resolved_via:
@@ -401,6 +447,93 @@ class ImageContextService:
         if error:
             payload["error"] = error
         image_meta["understanding"] = payload
+        return payload
+
+    @staticmethod
+    def _empty_observation_result() -> Dict[str, Any]:
+        return {
+            "display_text": "",
+            "observation": {},
+            "detail": "auto",
+            "provider_name": "",
+            "model": "",
+        }
+
+    @staticmethod
+    def _normalize_observation_result(result: Any) -> Dict[str, Any]:
+        if isinstance(result, dict):
+            display_text = str(result.get("display_text") or "").strip()
+            observation = result.get("observation", {})
+            detail = str(result.get("detail", "auto") or "auto").strip().lower() or "auto"
+            provider_name = str(result.get("provider_name") or "").strip()
+            model = str(result.get("model") or "").strip()
+        else:
+            display_text = str(getattr(result, "display_text", "") or "").strip()
+            observation = getattr(result, "observation", {})
+            detail = str(getattr(result, "detail", "auto") or "auto").strip().lower() or "auto"
+            provider_name = str(getattr(result, "provider_name", "") or "").strip()
+            model = str(getattr(result, "model", "") or "").strip()
+        if detail not in {"auto", "high", "low"}:
+            detail = "auto"
+        if not isinstance(observation, dict):
+            observation = {}
+        return {
+            "display_text": display_text,
+            "observation": observation,
+            "detail": detail,
+            "provider_name": provider_name,
+            "model": model,
+        }
+
+    @staticmethod
+    def _collect_observation_segments(observation: Dict[str, Any], limit: int = 2) -> List[str]:
+        extras: List[str] = []
+        seen = set()
+        for key in ("key_values", "visible_facts", "ocr_text", "ui_elements", "charts", "tables"):
+            values = observation.get(key)
+            if not isinstance(values, list):
+                continue
+            for item in values:
+                text = str(item or "").strip()
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                extras.append(text)
+                if len(extras) >= limit:
+                    return extras
+        return extras
+
+    @classmethod
+    def _build_context_line(cls, *, user_name: str, understanding: Dict[str, Any]) -> str:
+        display_text = str(understanding.get("display_text") or "").strip()
+        if not display_text:
+            return ""
+        parts = [display_text]
+        observation = understanding.get("observation")
+        if isinstance(observation, dict):
+            for segment in cls._collect_observation_segments(observation):
+                if segment == display_text:
+                    continue
+                parts.append(segment)
+        merged = "；".join(parts[:3]).strip("； ")
+        if not merged:
+            return ""
+        return f"- {user_name} 发图：{merged}"
+
+    def _understanding_model(self) -> str:
+        return str(getattr(self.image_understander, "model", "") or "").strip()
+
+    def _understanding_provider_name(self) -> str:
+        runtimes = getattr(self.image_understander, "_provider_runtimes", None)
+        if isinstance(runtimes, list) and runtimes:
+            return str(getattr(runtimes[0], "provider_name", "") or "").strip()
+        return str(getattr(self.image_understander, "provider_name", "") or "").strip()
+
+    def _understanding_detail(self) -> str:
+        detail = str(getattr(self.image_understander, "detail", "auto") or "auto").strip().lower()
+        if detail not in {"auto", "high", "low"}:
+            return "auto"
+        return detail
 
     @staticmethod
     def _mark_pending_metadata(

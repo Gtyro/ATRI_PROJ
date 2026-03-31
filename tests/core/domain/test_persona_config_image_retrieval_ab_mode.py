@@ -13,7 +13,116 @@ def test_image_understanding_uses_2000_as_default_max_tokens():
     assert cfg.max_tokens == 2000
 
 
+def test_image_understanding_uses_auto_as_default_detail():
+    cfg = ImageUnderstandingConfig.from_dict({})
+    assert cfg.detail == "auto"
+
+
+def test_image_understanding_supports_multiple_providers():
+    cfg = ImageUnderstandingConfig.from_dict(
+        {
+            "api_key": "primary-key",
+            "base_url": "https://primary.example.com/v1",
+            "model": "gpt-5.4",
+            "providers": [
+                {
+                    "name": "primary",
+                    "api_key": "primary-key",
+                    "base_url": "https://primary.example.com/v1",
+                    "model": "gpt-5.4",
+                },
+                {
+                    "name": "backup",
+                    "api_key": "backup-key",
+                    "base_url": "https://backup.example.com/v1",
+                    "model": "gpt-5.4-mini",
+                },
+            ],
+        }
+    )
+
+    assert cfg.api_key == "primary-key"
+    assert cfg.base_url == "https://primary.example.com/v1"
+    assert cfg.model == "gpt-5.4"
+    assert [provider.name for provider in cfg.providers] == ["primary", "backup"]
+    assert cfg.providers[1].model == "gpt-5.4-mini"
+
+
+def test_image_understanding_allows_blank_provider_api_keys():
+    cfg = ImageUnderstandingConfig.from_dict(
+        {
+            "providers": [
+                {
+                    "name": "primary",
+                    "api_key": "",
+                    "base_url": "https://api.openai.com/v1",
+                    "model": "gpt-5.4",
+                }
+            ]
+        }
+    )
+
+    assert cfg.providers[0].api_key == ""
+    assert cfg.base_url == "https://api.openai.com/v1"
+
+
+def test_image_understanding_env_can_override_full_provider_list(monkeypatch):
+    monkeypatch.setenv(
+        "IMAGE_UNDERSTANDING_PROVIDERS",
+        """
+        - name: primary
+          api_key: env-primary
+          base_url: https://primary.example.com/v1
+          model: gpt-5.4
+        - name: backup
+          api_key: env-backup
+          base_url: https://backup.example.com/v1
+          model: gpt-5.4-mini
+        """,
+    )
+
+    cfg = ImageUnderstandingConfig.from_dict({}).apply_env_overrides()
+
+    assert cfg.api_key == "env-primary"
+    assert cfg.providers[0].name == "primary"
+    assert cfg.providers[1].name == "backup"
+    assert cfg.providers[1].api_key == "env-backup"
+
+
+def test_image_understanding_to_dict_only_serializes_providers():
+    cfg = ImageUnderstandingConfig.from_dict(
+        {
+            "providers": [
+                {
+                    "name": "primary",
+                    "api_key": "primary-key",
+                    "base_url": "https://primary.example.com/v1",
+                    "model": "gpt-5.4",
+                }
+            ]
+        }
+    )
+
+    payload = cfg.to_dict()
+
+    assert "api_key" not in payload
+    assert "base_url" not in payload
+    assert "model" not in payload
+    assert payload["providers"][0]["api_key"] == "primary-key"
+
+
 @pytest.mark.parametrize("mode", ["ab_split", "unknown"])
 def test_image_understanding_rejects_unsupported_mode(mode):
     with pytest.raises(ValueError):
         ImageUnderstandingConfig.from_dict({"retrieval_ab_mode": mode})
+
+
+@pytest.mark.parametrize("detail", ["original", "invalid"])
+def test_image_understanding_rejects_unsupported_detail(detail):
+    with pytest.raises(ValueError):
+        ImageUnderstandingConfig.from_dict({"detail": detail})
+
+
+def test_image_understanding_rejects_invalid_providers_shape():
+    with pytest.raises(ValueError):
+        ImageUnderstandingConfig.from_dict({"providers": {"name": "primary"}})

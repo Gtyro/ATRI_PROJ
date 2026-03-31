@@ -102,8 +102,22 @@ class ConversationService:
         raise ValueError(f"未知 retrieval_ab_mode={mode}，无法决定 tool_choice")
 
     @staticmethod
+    def _image_display_text(understanding: Any) -> str:
+        if not isinstance(understanding, dict):
+            return ""
+        try:
+            version = int(understanding.get("version") or 0)
+        except (TypeError, ValueError):
+            version = 0
+        if version != 2:
+            return ""
+        if str(understanding.get("status") or "").strip().lower() != "ok":
+            return ""
+        return str(understanding.get("display_text") or "").strip()
+
+    @staticmethod
     def _inject_image_summaries(messages: List[Dict[str, Any]]) -> int:
-        """将识图摘要注入消息 content，替换 [图片] 占位符。"""
+        """将识图显示文本注入消息 content，替换 [图片] 占位符。"""
         injected_count = 0
         for message in messages:
             if not isinstance(message, dict):
@@ -130,9 +144,7 @@ class ConversationService:
                 if not isinstance(image, dict):
                     continue
                 understanding = image.get("understanding")
-                if not isinstance(understanding, dict):
-                    continue
-                summary = str(understanding.get("summary") or "").strip()
+                summary = ConversationService._image_display_text(understanding)
                 if not summary:
                     continue
                 segment_index = image.get("segment_index")

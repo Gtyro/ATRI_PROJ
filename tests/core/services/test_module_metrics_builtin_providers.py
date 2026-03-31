@@ -71,6 +71,8 @@ class _FakeRepository:
                         "operation": "image_understanding",
                         "success": False,
                         "error_type": "RuntimeError",
+                        "provider_name": "backup",
+                        "extra": {"detail": "auto", "response_api": "responses"},
                     }
                 ],
                 "total": 1,
@@ -96,6 +98,12 @@ class _FakeRepository:
         }
 
     async def list_rows(self, filters, *, fields=None):
+        if filters.module_id == "persona.image_understanding":
+            return [
+                {"provider_name": "primary", "extra": {"detail": "auto", "response_api": "responses"}},
+                {"provider_name": "backup", "extra": {"detail": "auto", "response_api": "responses"}},
+                {"provider_name": "backup", "extra": {"detail": "high", "response_api": "responses"}},
+            ]
         return [
             {
                 "operation": "image_fetch",
@@ -167,8 +175,23 @@ def test_image_understanding_provider_outputs_detail_chart_collection():
 
     chart_types = [chart["type"] for chart in payload["charts"]]
     assert payload["module_id"] == "persona.image_understanding"
-    assert chart_types == ["kpi", "line", "line", "pie", "table"]
+    assert chart_types == ["kpi", "line", "line", "pie", "pie", "pie", "pie", "table"]
+    assert payload["charts"][4]["chart_id"] == "persona.image_understanding.detail.detail"
+    assert payload["charts"][4]["dataset"] == [
+        {"name": "auto", "value": 2},
+        {"name": "high", "value": 1},
+    ]
+    assert payload["charts"][5]["chart_id"] == "persona.image_understanding.detail.api"
+    assert payload["charts"][5]["dataset"] == [{"name": "responses", "value": 3}]
+    assert payload["charts"][6]["chart_id"] == "persona.image_understanding.detail.provider"
+    assert payload["charts"][6]["dataset"] == [
+        {"name": "backup", "value": 2},
+        {"name": "primary", "value": 1},
+    ]
     assert payload["charts"][-1]["dataset"][0]["created_at"] == "2026-01-01T12:00:00"
+    assert payload["charts"][-1]["dataset"][0]["detail"] == "auto"
+    assert payload["charts"][-1]["dataset"][0]["response_api"] == "responses"
+    assert payload["charts"][-1]["dataset"][0]["provider_name"] == "backup"
 
 
 def test_image_fetch_provider_outputs_pie_overview_chart():

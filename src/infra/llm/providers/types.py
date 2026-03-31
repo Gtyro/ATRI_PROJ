@@ -35,6 +35,18 @@ class LLMCallParams:
             kwargs.update(self.extra)
         return kwargs
 
+    def to_responses_kwargs(self, default_model: str) -> Dict[str, Any]:
+        kwargs: Dict[str, Any] = {
+            "model": self.model or default_model,
+            "temperature": self.temperature,
+            "max_output_tokens": self.max_tokens,
+        }
+        if self.top_p is not None:
+            kwargs["top_p"] = self.top_p
+        if self.extra:
+            kwargs.update(self.extra)
+        return kwargs
+
 
 @dataclass
 class LLMToolCall:
@@ -53,4 +65,3 @@ class LLMToolCallResponse:
 class LLMStructuredOutput:
     data: Any
     raw_text: str
-
