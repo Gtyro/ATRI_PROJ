@@ -161,8 +161,8 @@ async def handle_process_now(bot: Bot, event: Event, state: T_State, arp: Arparm
 
 
 reply_once = register_alconna(
-    "回复一次",
-    aliases={"强制回复", "立即回复一次"},
+    "预览回复",
+    aliases={"模拟回复"},
     role="superuser",
     permission=SUPERUSER,
     rule=to_me(),
@@ -172,26 +172,26 @@ reply_once = register_alconna(
     use_cmd_sep=True,
     alconna_args=[Args["group_id", str]["rest", MultiVar(str, "*")]],
     description="默认预览 Persona 回复，显式加“发送”才实际发群并入库",
-    usage="回复一次 [群号] [可选测试消息] 或 回复一次 [群号] 发送 [可选测试消息]",
+    usage="预览回复 [群号] [可选测试消息] 或 预览回复 [群号] 发送 [可选测试消息]",
     examples=[
-        "回复一次 591710353",
-        "回复一次 591710353 摸摸",
-        "回复一次 591710353 发送",
-        "回复一次 591710353 发送 摸摸",
+        "预览回复 591710353",
+        "预览回复 591710353 摸摸",
+        "预览回复 591710353 发送",
+        "预览回复 591710353 发送 摸摸",
     ],
 )
 
 
 @reply_once.handle()
 async def handle_reply_once(bot: Bot, event: Event, state: T_State, arp: Arparma):
-    """生成并实际发送一次 Persona 回复。"""
+    """预览或显式发送一次 Persona 回复。"""
     if not is_enabled():
         await reply_once.finish("人格系统未启用，请检查配置和日志")
 
     group_id = arp.all_matched_args.get("group_id")
     rest_tokens = normalize_alconna_tokens(arp.all_matched_args.get("rest"))
     if not group_id:
-        await reply_once.finish("格式错误：回复一次 [群号] [可选测试消息] 或 回复一次 [群号] 发送 [可选测试消息]")
+        await reply_once.finish("格式错误：预览回复 [群号] [可选测试消息] 或 预览回复 [群号] 发送 [可选测试消息]")
 
     group_id = str(group_id)
     if not group_id.isdigit():
@@ -206,8 +206,8 @@ async def handle_reply_once(bot: Bot, event: Event, state: T_State, arp: Arparma
         else:
             reply_data = await psstate.persona_system.simulate_reply(conv_id, test_message=test_message)
     except Exception as e:
-        logging.error(f"回复一次异常: {e}")
-        await reply_once.finish(f"回复一次失败: {str(e)}")
+        logging.error(f"预览回复异常: {e}")
+        await reply_once.finish(f"预览回复失败: {str(e)}")
         return
 
     if not reply_data or not reply_data.get("reply_content"):

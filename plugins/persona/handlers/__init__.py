@@ -10,8 +10,7 @@ from .memory import (handle_memories, handle_remember_permanent, memories,
 # 如果需要，也可以导出处理函数
 from .message import handle_message, message_handler
 from .test import (handle_keyword_extract_test, handle_memory_extract_test,
-                   handle_test_persona, keyword_extract_test, memory_extract_test,
-                   test_persona)
+                   keyword_extract_test, memory_extract_test)
 
 # 定义__all__列表，控制from handlers import *时导入的内容
 __all__ = [
@@ -21,5 +20,5 @@ __all__ = [
     "reply_once",
     "rebuild_queue",
     "llm_switch",
-    "memory_extract_test", "keyword_extract_test", "test_persona"
+    "memory_extract_test", "keyword_extract_test"
 ]
