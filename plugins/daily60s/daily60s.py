@@ -4,7 +4,7 @@ import logging
 import mimetypes
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import httpx
 from nonebot import get_bots
@@ -12,6 +12,13 @@ from nonebot.adapters.onebot.v11 import Bot
 from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
 from nonebot_plugin_apscheduler import scheduler
 
+from plugins.daily60s_fetch_policy import (
+    DailyImageFetchResult,
+    build_success_record,
+    fetch_with_date_guard,
+    read_success_record,
+    write_success_record,
+)
 from src.adapters.nonebot.command_registry import register_auto_feature, register_command
 from src.core.services.plugin_policy_service import PluginPolicyService
 from src.infra.temp_storage import TempStorage
@@ -24,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = (__package__ or "daily60s").split(".")[-1]
 TEMP_CACHE_RETENTION_HOURS = 24
+LAST_SUCCESS_RECORD_PATH = Path("data/daily60s_last_success.json")
 
 config = Daily60sConfig.load()
 temp_store = TempStorage("daily60s")
@@ -148,7 +156,10 @@ async def _send_daily_image_to_groups() -> None:
     use_fallback = not group_bot_map and fallback_bot is not None
 
     try:
-        image_path = await get_daily_image_path()
+        image_path = await get_daily_image_path(
+            date_mismatch_max_retries=config.date_mismatch_max_retries,
+            date_mismatch_retry_seconds=config.date_mismatch_retry_seconds,
+        )
     except Exception as exc:
         logger.error("daily60s auto send failed to fetch image: %s", exc)
         return
@@ -171,7 +182,7 @@ async def _send_daily_image_to_groups() -> None:
     logger.info("daily60s auto send finished: sent=%s target=%s", sent, len(group_ids))
 
 
-async def _fetch_daily_image() -> Tuple[bytes, str]:
+async def _fetch_daily_image() -> DailyImageFetchResult:
     if not config.alapi_key:
         raise RuntimeError("Missing alapi_key in config")
 
@@ -185,7 +196,12 @@ async def _fetch_daily_image() -> Tuple[bytes, str]:
 
         content_type = response.headers.get("content-type", "")
         if content_type.startswith("image/"):
-            return response.content, content_type
+            return DailyImageFetchResult(
+                image_bytes=response.content,
+                content_type=content_type,
+                source_url=str(response.url),
+                last_modified=response.headers.get("last-modified", ""),
+            )
 
         try:
             payload = response.json()
@@ -202,7 +218,12 @@ async def _fetch_daily_image() -> Tuple[bytes, str]:
             if image_url:
                 image_resp = await client.get(image_url, follow_redirects=True)
                 image_resp.raise_for_status()
-                return image_resp.content, image_resp.headers.get("content-type", "")
+                return DailyImageFetchResult(
+                    image_bytes=image_resp.content,
+                    content_type=image_resp.headers.get("content-type", ""),
+                    source_url=str(image_resp.url),
+                    last_modified=image_resp.headers.get("last-modified", ""),
+                )
 
         raise RuntimeError("API did not return image data")
 
@@ -223,7 +244,12 @@ def cleanup_daily_cache(max_age_hours: float = TEMP_CACHE_RETENTION_HOURS) -> in
     return deleted
 
 
-async def get_daily_image_path(*, force_refresh: bool = False) -> Path:
+async def get_daily_image_path(
+    *,
+    force_refresh: bool = False,
+    date_mismatch_max_retries: int = 0,
+    date_mismatch_retry_seconds: float = 0.0,
+) -> Path:
     cleanup_daily_cache()
     date_key = _today_key()
     cache_key = _cache_key(date_key)
@@ -233,14 +259,27 @@ async def get_daily_image_path(*, force_refresh: bool = False) -> Path:
         if cached and cached.exists() and cached.stat().st_size > 0:
             return cached
 
-    image_bytes, content_type = await _fetch_daily_image()
-    suffix = _guess_suffix(content_type)
-    return temp_store.write_bytes(
-        cache_key,
-        image_bytes,
-        suffix=suffix,
-        content_type=content_type,
+    last_success_record = read_success_record(LAST_SUCCESS_RECORD_PATH)
+    fetch_result = await fetch_with_date_guard(
+        _fetch_daily_image,
+        expected_date_key=date_key,
+        last_success_record=last_success_record,
+        max_retries=date_mismatch_max_retries,
+        retry_delay_seconds=date_mismatch_retry_seconds,
+        logger=logger,
     )
+    suffix = _guess_suffix(fetch_result.content_type)
+    image_path = temp_store.write_bytes(
+        cache_key,
+        fetch_result.image_bytes,
+        suffix=suffix,
+        content_type=fetch_result.content_type,
+    )
+    write_success_record(
+        LAST_SUCCESS_RECORD_PATH,
+        build_success_record(fetch_result, date_key=date_key),
+    )
+    return image_path
 
 
 def setup_scheduler() -> None:

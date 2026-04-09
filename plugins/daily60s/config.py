@@ -16,6 +16,8 @@ class Daily60sConfig:
     auto_enabled: bool
     schedule_time: str
     timeout_seconds: int
+    date_mismatch_max_retries: int
+    date_mismatch_retry_seconds: int
 
     @classmethod
     def load(cls, path: str = "data/daily60s.yaml") -> "Daily60sConfig":
@@ -36,4 +38,6 @@ class Daily60sConfig:
             auto_enabled=bool(data.get("auto_enabled", True)),
             schedule_time=str(data.get("schedule_time", "10:00")).strip() or "10:00",
             timeout_seconds=int(data.get("timeout_seconds", 15)),
+            date_mismatch_max_retries=max(0, int(data.get("date_mismatch_max_retries", 4))),
+            date_mismatch_retry_seconds=max(0, int(data.get("date_mismatch_retry_seconds", 300))),
         )
