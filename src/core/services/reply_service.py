@@ -32,6 +32,8 @@ class ReplyService:
             last_message["is_direct"] = True
             messages.append(last_message)
 
+        ConversationService._inject_image_summaries(messages)
+
         return messages
 
     async def simulate_reply(self, conv_id: str, test_message: Optional[str] = None) -> Optional[Dict[str, Any]]:

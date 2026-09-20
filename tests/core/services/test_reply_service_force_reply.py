@@ -67,3 +67,38 @@ def test_force_reply_returns_none_without_history():
     assert reply_data is None
     assert short_term.bot_messages == []
     assert msgprocessor.calls == []
+
+
+def test_force_reply_injects_image_summary_into_history_messages():
+    short_term = _ShortTermStub(
+        [
+            {
+                "user_name": "Alice",
+                "content": "看这个 [图片]",
+                "is_bot": False,
+                "is_direct": False,
+                "metadata": {
+                    "media": {
+                        "images": [
+                            {
+                                "url": "https://example.com/a.jpg",
+                                "understanding": {
+                                    "version": 2,
+                                    "status": "ok",
+                                    "display_text": "一张测试截图",
+                                    "observation": {},
+                                },
+                            }
+                        ]
+                    }
+                },
+            }
+        ]
+    )
+    msgprocessor = _MsgProcessorStub(reply_content="你好")
+    service = ReplyService(short_term=short_term, msgprocessor=msgprocessor, queue_history_size=20)
+
+    reply_data = asyncio.run(service.force_reply("group_1"))
+
+    assert reply_data is not None
+    assert msgprocessor.calls[0]["messages"][0]["content"] == "看这个 [图片: 一张测试截图]"

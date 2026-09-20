@@ -248,8 +248,8 @@ def test_successful_image_understanding_replaces_image_placeholder_in_history():
         image_context="【图片上下文】\n- Alice 发图：一张恐怖游戏场景截图",
     )
 
-    assert processor.last_keyword_messages[0]["content"] == "看这个 [图片内容: 一张恐怖游戏场景截图]"
-    assert processor.last_messages[0]["content"] == "看这个 [图片内容: 一张恐怖游戏场景截图]"
+    assert processor.last_keyword_messages[0]["content"] == "看这个 [图片: 一张恐怖游戏场景截图]"
+    assert processor.last_messages[0]["content"] == "看这个 [图片: 一张恐怖游戏场景截图]"
 
 
 def test_successful_image_understanding_replaces_multiple_placeholders_in_segment_order():
@@ -284,6 +284,6 @@ def test_successful_image_understanding_replaces_multiple_placeholders_in_segmen
         image_context="【图片上下文】\n- Alice 发图：第一张图\n- Alice 发图：第二张图",
     )
 
-    expected = "先看 [图片内容: 第一张图] 再看 [图片内容: 第二张图]"
+    expected = "先看 [图片: 第一张图] 再看 [图片: 第二张图]"
     assert processor.last_keyword_messages[0]["content"] == expected
     assert processor.last_messages[0]["content"] == expected

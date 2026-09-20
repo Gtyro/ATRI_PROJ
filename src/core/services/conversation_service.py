@@ -19,6 +19,8 @@ from .plugin_policy_service import PluginPolicyService
 class ConversationService:
     """负责消息入库、话题提取与回复生成的服务。"""
 
+    IMAGE_SUMMARY_PREFIX = "[图片: "
+
     def __init__(
         self,
         short_term: ShortTermMemoryPort,
@@ -126,7 +128,7 @@ class ConversationService:
             content = str(message.get("content") or "")
             if "[图片]" not in content:
                 continue
-            if "[图片内容:" in content:
+            if ConversationService.IMAGE_SUMMARY_PREFIX in content:
                 continue
 
             metadata = message.get("metadata")
@@ -172,7 +174,7 @@ class ConversationService:
                     seen.add(summary)
                     merged_summaries.append(summary)
                 summary_text = "；".join(merged_summaries[:3])
-                replacement = f"[图片内容: {summary_text}]"
+                replacement = f"{ConversationService.IMAGE_SUMMARY_PREFIX}{summary_text}]"
                 new_content = content.replace("[图片]", replacement, 1)
             else:
                 index = 0
@@ -182,7 +184,7 @@ class ConversationService:
                     if index < len(summaries):
                         summary = summaries[index]
                         index += 1
-                        return f"[图片内容: {summary}]"
+                        return f"{ConversationService.IMAGE_SUMMARY_PREFIX}{summary}]"
                     index += 1
                     return "[图片]"
 
