@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Sequence
+from zoneinfo import ZoneInfo
 
 from nonebot import get_bots, get_driver
 from nonebot.adapters.onebot.v11 import Bot
@@ -14,11 +16,13 @@ from src.adapters.nonebot.command_registry import register_auto_feature, registe
 
 from .config import ItadGiveawaysConfig
 from .service import (
+    DailyGiveawayState,
     Giveaway,
+    build_daily_report,
     fetch_active_giveaways,
     format_giveaway_messages,
     load_state,
-    select_new_giveaways,
+    mark_notification_sent,
     write_state,
 )
 
@@ -31,8 +35,8 @@ config = ItadGiveawaysConfig.load()
 @dataclass(frozen=True)
 class CheckResult:
     fetched_count: int
-    new_count: int
-    notified: bool
+    todays_giveaways: tuple[Giveaway, ...]
+    state: DailyGiveawayState | None = None
     reason: str = ""
 
 
@@ -71,15 +75,6 @@ def _recipient_ids() -> list[str]:
     return list(dict.fromkeys(str(user_id) for user_id in superusers if str(user_id).isdigit()))
 
 
-def _persist_current_ids(current_ids: Sequence[int]) -> str:
-    try:
-        write_state(STATE_PATH, current_ids)
-    except OSError as exc:
-        logger.error("Failed to persist ITAD giveaway state: %s", exc, exc_info=True)
-        return "状态文件写入失败，将在下次检查时重试"
-    return ""
-
-
 async def _send_messages_to_recipients(messages: Sequence[str]) -> tuple[bool, str]:
     recipients = _recipient_ids()
     if not recipients:
@@ -108,7 +103,22 @@ async def _send_messages_to_recipients(messages: Sequence[str]) -> tuple[bool, s
 async def run_giveaway_check() -> CheckResult:
     if not config.api_key:
         logger.warning("ITAD giveaways check skipped: API key is not configured")
-        return CheckResult(0, 0, False, "未配置 ITAD API Key")
+        return CheckResult(0, (), reason="未配置 ITAD API Key")
+
+    try:
+        report_date = datetime.now(ZoneInfo(config.timezone)).date().isoformat()
+    except Exception as exc:
+        logger.error("Invalid ITAD giveaways timezone %s: %s", config.timezone, exc)
+        return CheckResult(0, (), reason="时区配置无效")
+
+    previous_state = load_state(STATE_PATH)
+    if previous_state.report_date == report_date:
+        logger.info("ITAD giveaways check reused daily report for %s", report_date)
+        return CheckResult(
+            len(previous_state.snapshot_ids),
+            previous_state.todays_giveaways,
+            previous_state,
+        )
 
     try:
         giveaways = await fetch_active_giveaways(
@@ -118,33 +128,31 @@ async def run_giveaway_check() -> CheckResult:
         )
     except Exception as exc:
         logger.error("Failed to fetch ITAD giveaways: %s", exc, exc_info=True)
-        return CheckResult(0, 0, False, "ITAD 请求失败")
+        return CheckResult(0, (), reason="ITAD 请求失败")
 
-    previous_state = load_state(STATE_PATH)
-    new_giveaways = select_new_giveaways(giveaways, previous_state.giveaway_ids)
-    current_ids = [giveaway.id for giveaway in giveaways]
-    if not new_giveaways:
-        reason = _persist_current_ids(current_ids)
-        if reason:
-            return CheckResult(len(giveaways), 0, False, reason)
-        logger.info("ITAD giveaways check finished: no new giveaways")
-        return CheckResult(len(giveaways), 0, False)
+    try:
+        state = build_daily_report(
+            giveaways,
+            previous_state=previous_state,
+            report_date=report_date,
+        )
+        write_state(STATE_PATH, state)
+    except Exception as exc:
+        logger.error("Failed to save ITAD daily giveaway report: %s", exc, exc_info=True)
+        return CheckResult(len(giveaways), (), reason="日报状态写入失败")
 
-    messages = format_giveaway_messages(new_giveaways)
-    notified, reason = await _send_messages_to_recipients(messages)
-    if not notified:
-        logger.warning("ITAD giveaways found but state was not updated: %s", reason)
-        return CheckResult(len(giveaways), len(new_giveaways), False, reason)
-
-    reason = _persist_current_ids(current_ids)
-    if reason:
-        return CheckResult(len(giveaways), len(new_giveaways), True, reason)
     logger.info(
-        "ITAD giveaways notification finished: fetched=%s new=%s",
+        "ITAD giveaways check finished: fetched=%s today=%s",
         len(giveaways),
-        len(new_giveaways),
+        len(state.todays_giveaways),
     )
-    return CheckResult(len(giveaways), len(new_giveaways), True)
+    return CheckResult(len(giveaways), state.todays_giveaways, state)
+
+
+def _format_daily_report(result: CheckResult) -> list[str]:
+    if result.todays_giveaways:
+        return format_giveaway_messages(result.todays_giveaways)
+    return [f"ITAD 限免日报：今日无新增活动。当前有效活动 {result.fetched_count} 项。"]
 
 
 def setup_scheduler() -> None:
@@ -160,7 +168,24 @@ def setup_scheduler() -> None:
 
     @scheduler.scheduled_job("cron", hour=hour, minute=minute, id="itad_giveaways_daily_check")
     async def _scheduled_itad_giveaways_check() -> None:
-        await run_giveaway_check()
+        result = await run_giveaway_check()
+        if result.state is not None and result.state.notification_sent:
+            logger.info("ITAD daily giveaway report was already sent for %s", result.state.report_date)
+            return
+        messages = (
+            [f"ITAD 限免日报检查失败：{result.reason}"]
+            if result.reason
+            else _format_daily_report(result)
+        )
+        notified, reason = await _send_messages_to_recipients(messages)
+        if not notified:
+            logger.error("Failed to send ITAD daily giveaway report: %s", reason)
+            return
+        if result.state is not None:
+            try:
+                mark_notification_sent(STATE_PATH, result.state)
+            except OSError as exc:
+                logger.error("Failed to mark ITAD daily giveaway report as notified: %s", exc)
 
 
 @itad_giveaways_check.handle()
@@ -168,8 +193,7 @@ async def handle_itad_giveaways_check() -> None:
     result = await run_giveaway_check()
     if result.reason:
         await itad_giveaways_check.finish(f"ITAD 限免检查未完成：{result.reason}")
-    if result.new_count == 0:
-        await itad_giveaways_check.finish(f"检查完成：当前 {result.fetched_count} 项限免，无新增活动")
-    await itad_giveaways_check.finish(
-        f"检查完成：发现 {result.new_count} 项新增限免，已私聊通知超级用户"
-    )
+    messages = _format_daily_report(result)
+    for message in messages[:-1]:
+        await itad_giveaways_check.send(message)
+    await itad_giveaways_check.finish(messages[-1])

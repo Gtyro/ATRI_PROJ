@@ -41,6 +41,7 @@ class ItadGiveawaysConfig:
     auto_enabled: bool
     schedule_time: str
     timeout_seconds: float
+    timezone: str
     recipient_ids: Tuple[str, ...]
 
     @classmethod
@@ -72,5 +73,6 @@ class ItadGiveawaysConfig:
             auto_enabled=_as_bool(data.get("auto_enabled", True), True),
             schedule_time=str(data.get("schedule_time", "09:00")).strip() or "09:00",
             timeout_seconds=timeout_seconds,
+            timezone=str(data.get("timezone", "Asia/Shanghai")).strip() or "Asia/Shanghai",
             recipient_ids=_as_recipient_ids(data.get("recipient_ids")),
         )

@@ -26,8 +26,11 @@ class Giveaway:
 
 
 @dataclass(frozen=True)
-class GiveawayState:
-    giveaway_ids: frozenset[int]
+class DailyGiveawayState:
+    report_date: str | None
+    snapshot_ids: frozenset[int]
+    todays_giveaways: tuple[Giveaway, ...]
+    notification_sent: bool
 
 
 def _coerce_giveaway(raw: object) -> Giveaway | None:
@@ -161,20 +164,12 @@ def select_new_giveaways(
     return [giveaway for giveaway in giveaways if giveaway.id not in previous_ids]
 
 
-def load_state(path: Path) -> GiveawayState:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return GiveawayState(giveaway_ids=frozenset())
-    except (OSError, json.JSONDecodeError):
-        return GiveawayState(giveaway_ids=frozenset())
-
-    raw_ids = payload.get("giveaway_ids", []) if isinstance(payload, Mapping) else []
-    if not isinstance(raw_ids, list):
-        return GiveawayState(giveaway_ids=frozenset())
+def _normalize_ids(values: object) -> frozenset[int]:
+    if not isinstance(values, list):
+        return frozenset()
 
     normalized_ids: set[int] = set()
-    for value in raw_ids:
+    for value in values:
         if isinstance(value, bool):
             continue
         try:
@@ -183,13 +178,80 @@ def load_state(path: Path) -> GiveawayState:
             continue
         if giveaway_id > 0:
             normalized_ids.add(giveaway_id)
-    return GiveawayState(giveaway_ids=frozenset(normalized_ids))
+    return frozenset(normalized_ids)
 
 
-def write_state(path: Path, giveaway_ids: Iterable[int]) -> None:
+def load_state(path: Path) -> DailyGiveawayState:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return DailyGiveawayState(None, frozenset(), (), False)
+    except (OSError, json.JSONDecodeError):
+        return DailyGiveawayState(None, frozenset(), (), False)
+
+    if not isinstance(payload, Mapping):
+        return DailyGiveawayState(None, frozenset(), (), False)
+
+    report_date = payload.get("report_date")
+    normalized_report_date = report_date.strip() if isinstance(report_date, str) else None
+    snapshot_ids = _normalize_ids(payload.get("snapshot_ids", payload.get("giveaway_ids", [])))
+    raw_todays_giveaways = payload.get("todays_giveaways", [])
+    todays_giveaways = (
+        tuple(
+            giveaway
+            for giveaway in (_coerce_giveaway(raw) for raw in raw_todays_giveaways)
+            if giveaway is not None
+        )
+        if isinstance(raw_todays_giveaways, list)
+        else ()
+    )
+    return DailyGiveawayState(
+        normalized_report_date or None,
+        snapshot_ids,
+        todays_giveaways,
+        bool(payload.get("notification_sent", False)),
+    )
+
+
+def build_daily_report(
+    giveaways: Iterable[Giveaway],
+    *,
+    previous_state: DailyGiveawayState,
+    report_date: str,
+) -> DailyGiveawayState:
+    if previous_state.report_date == report_date:
+        return previous_state
+
+    current_giveaways = tuple(giveaways)
+    return DailyGiveawayState(
+        report_date=report_date,
+        snapshot_ids=frozenset(giveaway.id for giveaway in current_giveaways),
+        todays_giveaways=tuple(
+            select_new_giveaways(current_giveaways, previous_state.snapshot_ids)
+        ),
+        notification_sent=False,
+    )
+
+
+def _giveaway_to_payload(giveaway: Giveaway) -> dict[str, object]:
+    return {
+        "id": giveaway.id,
+        "title": giveaway.title,
+        "shop": {"name": giveaway.shop_name},
+        "url": giveaway.url,
+        "publish": giveaway.publish,
+        "expiry": giveaway.expiry,
+        "games": [{"title": title} for title in giveaway.games],
+    }
+
+
+def write_state(path: Path, state: DailyGiveawayState) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "giveaway_ids": sorted({int(giveaway_id) for giveaway_id in giveaway_ids}),
+        "report_date": state.report_date,
+        "snapshot_ids": sorted(state.snapshot_ids),
+        "todays_giveaways": [_giveaway_to_payload(giveaway) for giveaway in state.todays_giveaways],
+        "notification_sent": state.notification_sent,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     descriptor, temporary_name = tempfile.mkstemp(
@@ -208,6 +270,17 @@ def write_state(path: Path, giveaway_ids: Iterable[int]) -> None:
             Path(temporary_name).unlink(missing_ok=True)
         finally:
             raise
+
+
+def mark_notification_sent(path: Path, state: DailyGiveawayState) -> DailyGiveawayState:
+    notified_state = DailyGiveawayState(
+        report_date=state.report_date,
+        snapshot_ids=state.snapshot_ids,
+        todays_giveaways=state.todays_giveaways,
+        notification_sent=True,
+    )
+    write_state(path, notified_state)
+    return notified_state
 
 
 def format_giveaway_messages(
