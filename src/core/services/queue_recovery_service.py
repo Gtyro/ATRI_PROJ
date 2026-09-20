@@ -49,12 +49,15 @@ class QueueRecoveryService:
     @staticmethod
     def _normalize_message(conv_id: str, item: Dict[str, Any]) -> Dict[str, Any] | None:
         content = str(item.get("content") or "").strip()
-        if not content:
-            return None
-
         metadata = item.get("metadata")
         if not isinstance(metadata, dict):
             metadata = {}
+        onebot_metadata = metadata.get("onebot")
+        has_reply_context = isinstance(onebot_metadata, dict) and isinstance(
+            onebot_metadata.get("reply"), dict
+        )
+        if not content and not has_reply_context:
+            return None
 
         normalized: Dict[str, Any] = {
             "conv_id": conv_id,

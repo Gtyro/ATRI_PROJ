@@ -20,6 +20,7 @@ from nonebot_plugin_apscheduler import scheduler
 from src.infra.db.tortoise.plugin_models import GroupPluginConfig, PluginModuleMetricEvent
 from src.adapters.nonebot import assemble_persona_engine
 from src.adapters.nonebot.command_registry import register_auto_feature
+from src.adapters.nonebot.message_metadata import extract_onebot_sent_message_ids
 from src.core.domain import PersonaConfig
 from src.core.events import Event, MESSAGE_RECEIVED
 from src.core.facade.persona_facade import PersonaFacade
@@ -46,13 +47,14 @@ register_auto_feature(
 )
 
 
-async def persona_callback(conv_id: str, message_dict: dict) -> None:
+async def persona_callback(conv_id: str, message_dict: dict) -> list[str]:
     """人格系统自动回复回调函数
 
     Args:
         conv_id: 对话ID（如"group_123456"）
         message_dict: 消息数据，包含回复内容
     """
+    sent_message_ids: list[str] = []
     try:
         target = Target(id=conv_id.split("_")[1])
         if message_dict:
@@ -64,17 +66,20 @@ async def persona_callback(conv_id: str, message_dict: dict) -> None:
                     reply = str(reply).strip()
                     if not reply:
                         continue
-                    await UniMessage(reply).send(target)
+                    receipt = await UniMessage(reply).send(target)
+                    sent_message_ids.extend(extract_onebot_sent_message_ids(receipt))
                     # 多条消息之间添加随机间隔，模拟真人打字速度
                     sleep_time = random.uniform(0.5*len(reply), 1*len(reply))
                     await asyncio.sleep(sleep_time)
             else:
                 reply_content = str(reply_content).strip()
                 if not reply_content:
-                    return
-                await UniMessage(reply_content).send(target)
+                    return sent_message_ids
+                receipt = await UniMessage(reply_content).send(target)
+                sent_message_ids.extend(extract_onebot_sent_message_ids(receipt))
     except Exception as e:
         logging.error(f"生成自动回复失败: {e}", exc_info=True)
+    return list(dict.fromkeys(sent_message_ids))
 
 
 async def _handle_message_event(event: Event) -> None:

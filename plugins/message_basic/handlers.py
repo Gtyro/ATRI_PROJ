@@ -7,6 +7,11 @@ from .models import BasicMessage
 import logging
 
 from src.adapters.nonebot.command_registry import register_auto_feature, register_command
+from src.adapters.nonebot.message_metadata import (
+    build_onebot_metadata,
+    extract_onebot_event_message_context,
+    resolve_onebot_direct_reason,
+)
 
 message_handler = on_message(priority=10, block=False)
 register_auto_feature(
@@ -19,23 +24,37 @@ register_auto_feature(
 async def handle_basic_message(bot: Bot, event: Event):
     try:
         user_id = event.get_user_id()
-        message = event.get_plaintext()
-        if not message.strip():
+        message_context = extract_onebot_event_message_context(event, self_id=bot.self_id)
+        message = str(message_context["content"] or "").strip()
+        reply = message_context["reply"]
+        if not message and not reply:
             return
         is_group = isinstance(event, GroupMessageEvent)
         conv_type = "group" if is_group else "private"
         conv_id = f"{conv_type}_{event.group_id if is_group else user_id}"
         user_name = getattr(event.sender, 'card', None) or getattr(event.sender, 'nickname', None) or user_id
-        is_direct = event.is_tome() or not is_group
+        direct_reason = resolve_onebot_direct_reason(
+            is_group=is_group,
+            event_is_tome=event.is_tome(),
+            mentions=message_context["mentions"],
+            reply=reply,
+        )
         await BasicMessage.create(
             conv_id=conv_id,
             user_id=user_id,
             user_name=user_name,
             content=message,
-            is_direct=is_direct,
+            is_direct=bool(direct_reason),
             is_bot=False,
             is_processed=False,
-            metadata={}
+            metadata=build_onebot_metadata(
+                self_id=bot.self_id,
+                message_id=getattr(event, "message_id", None),
+                images=message_context["images"],
+                mentions=message_context["mentions"],
+                reply=reply,
+                direct_reason=direct_reason,
+            ),
         )
     except Exception as e:
         logging.error(f"基础消息记录异常: {e}")

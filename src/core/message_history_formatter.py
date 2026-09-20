@@ -15,11 +15,16 @@ def format_message_history_entry(message: Dict[str, Any]) -> str:
         return _join_sender_and_content(sender, "说", content)
 
     mentioned_self, normalized_content = _normalize_direct_mention_content(message, content)
+    reply_context = _format_reply_context(message)
+    display_content = _join_reply_context_and_content(reply_context, normalized_content)
     if mentioned_self:
-        return _join_sender_and_content(sender, "@了你", normalized_content)
+        return _join_sender_and_content(sender, "@了你", display_content)
+    if _is_reply_to_self(message):
+        action = "回复了你" if message.get("is_direct", False) else "引用了你的消息"
+        return _join_sender_and_content(sender, action, display_content)
     if message.get("is_direct", False):
-        return _join_sender_and_content(sender, "对你说", content)
-    return _join_sender_and_content(sender, "说", content)
+        return _join_sender_and_content(sender, "对你说", display_content)
+    return _join_sender_and_content(sender, "说", display_content)
 
 
 def _join_sender_and_content(sender: str, action: str, content: str) -> str:
@@ -31,7 +36,7 @@ def _join_sender_and_content(sender: str, action: str, content: str) -> str:
 
 def _normalize_direct_mention_content(message: Dict[str, Any], content: str) -> tuple[bool, str]:
     if not content or not message.get("is_direct", False):
-        return False, content
+        return _has_self_mention_metadata(message), content
     conv_id = str(message.get("conv_id") or "").strip()
     if not conv_id.startswith("group_"):
         return False, content
@@ -39,6 +44,13 @@ def _normalize_direct_mention_content(message: Dict[str, Any], content: str) -> 
     normalized = _strip_leading_self_mentions_from_metadata(message, content)
     if normalized != content:
         return True, normalized
+
+    if _has_self_mention_metadata(message):
+        return True, content
+
+    # 有明确 @ 元数据时，不能把 @ 其他成员误判为 @ 机器人。
+    if _has_mention_metadata(message):
+        return False, content
 
     fallback = _LEADING_MENTION_PATTERN.sub("", content, count=1).strip()
     if fallback != content:
@@ -79,3 +91,59 @@ def _extract_self_mention_texts(message: Dict[str, Any]) -> List[str]:
         seen.add(text)
         texts.append(text)
     return texts
+
+
+def _has_self_mention_metadata(message: Dict[str, Any]) -> bool:
+    return bool(_extract_self_mention_texts(message))
+
+
+def _has_mention_metadata(message: Dict[str, Any]) -> bool:
+    metadata = message.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    onebot = metadata.get("onebot")
+    if not isinstance(onebot, dict):
+        return False
+    return isinstance(onebot.get("mentions"), list)
+
+
+def _is_reply_to_self(message: Dict[str, Any]) -> bool:
+    reply = _extract_reply_metadata(message)
+    return bool(reply and reply.get("is_self") is True)
+
+
+def _format_reply_context(message: Dict[str, Any]) -> str:
+    reply = _extract_reply_metadata(message)
+    if not reply:
+        return ""
+
+    sender = reply.get("sender")
+    sender_name = ""
+    if isinstance(sender, dict):
+        sender_name = str(sender.get("name") or sender.get("user_id") or "").strip()
+    if reply.get("is_self") is True:
+        sender_name = "你"
+    if not sender_name:
+        sender_name = "对方"
+
+    content = str(reply.get("content") or "").strip()
+    if content:
+        return f"【引用 {sender_name}说: {content}】"
+    return f"【引用 {sender_name}的消息】"
+
+
+def _extract_reply_metadata(message: Dict[str, Any]) -> Dict[str, Any] | None:
+    metadata = message.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    onebot = metadata.get("onebot")
+    if not isinstance(onebot, dict):
+        return None
+    reply = onebot.get("reply")
+    return reply if isinstance(reply, dict) else None
+
+
+def _join_reply_context_and_content(reply_context: str, content: str) -> str:
+    if reply_context and content:
+        return f"{reply_context} {content}"
+    return reply_context or content

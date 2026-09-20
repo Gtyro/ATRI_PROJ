@@ -14,9 +14,8 @@ from src.adapters.nonebot.command_args import normalize_alconna_tokens
 from src.adapters.nonebot.command_registry import register_alconna, register_auto_feature
 from src.adapters.nonebot.message_metadata import (
     build_onebot_metadata,
-    extract_onebot_image_metadata,
-    extract_onebot_mention_metadata,
-    normalize_content_for_storage,
+    extract_onebot_event_message_context,
+    resolve_onebot_direct_reason,
 )
 
 
@@ -47,18 +46,14 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         return
 
     user_id = event.get_user_id()
-    plain_text = event.get_plaintext()
-    message_segments = event.get_message()
-    images = extract_onebot_image_metadata(message_segments)
-    mentions = extract_onebot_mention_metadata(message_segments, self_id=bot.self_id)
-    message = normalize_content_for_storage(
-        plain_text,
-        images,
-        message_segments=message_segments,
-    )
+    message_context = extract_onebot_event_message_context(event, self_id=bot.self_id)
+    images = message_context["images"]
+    mentions = message_context["mentions"]
+    reply = message_context["reply"]
+    message = message_context["content"]
 
-    # 忽略既无文本也无图片的消息
-    if not message:
+    # 引用本身也携带可供对话理解的上下文，不能因当前消息为空而丢弃。
+    if not message and not reply:
         return
 
     # 正确区分群聊和私聊
@@ -87,10 +82,14 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         except Exception as e:
             logging.error(f"群组策略检查失败: {e}")
 
-    # 判断直接交互（@机器人或私聊）
-    is_direct = False
-    if event.is_tome() or not is_group:
-        is_direct = True
+    # 保留直接交互的来源，区分 @ 机器人和回复机器人。
+    direct_reason = resolve_onebot_direct_reason(
+        is_group=is_group,
+        event_is_tome=event.is_tome(),
+        mentions=mentions,
+        reply=reply,
+    )
+    is_direct = bool(direct_reason)
 
     # 构建消息数据
     metadata = build_onebot_metadata(
@@ -98,6 +97,8 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         message_id=getattr(event, "message_id", None),
         images=images,
         mentions=mentions,
+        reply=reply,
+        direct_reason=direct_reason,
     )
 
     message_data = { # 此处有8个字段+自动生成的id和created_at

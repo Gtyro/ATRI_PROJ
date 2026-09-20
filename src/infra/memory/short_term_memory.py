@@ -41,7 +41,7 @@ class ShortTermMemory:
         """
         await self.message_repo.add_message(message_data)
 
-    async def add_bot_message(self, conv_id: str, content: str) -> None:
+    async def add_bot_message(self, conv_id: str, content: str) -> Any:
         """添加机器人自己的消息到历史
 
         Args:
@@ -58,7 +58,7 @@ class ShortTermMemory:
             "is_processed": True,
             "metadata": {},
         }
-        await self.message_repo.add_message(message_data)
+        return await self.message_repo.add_message(message_data)
 
     async def get_unprocessed_messages(self, conv_id: str, limit: int = 20) -> List[Dict]:
         """获取未处理的消息

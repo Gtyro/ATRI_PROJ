@@ -26,8 +26,8 @@ class ShortTermMemoryAdapter(ShortTermMemoryPort):
     async def get_recent_messages(self, conv_id: str, limit: int) -> List[Dict[str, Any]]:
         return await self._impl.get_recent_messages(conv_id, limit)
 
-    async def add_bot_message(self, conv_id: str, content: str) -> None:
-        await self._impl.add_bot_message(conv_id, content)
+    async def add_bot_message(self, conv_id: str, content: str) -> Any:
+        return await self._impl.add_bot_message(conv_id, content)
 
     async def clear_messages(self, conv_id: str) -> int:
         return await self._impl.clear_messages(conv_id)

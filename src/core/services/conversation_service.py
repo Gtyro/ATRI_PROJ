@@ -252,6 +252,50 @@ class ConversationService:
         gpconfig.plugin_config = plugin_config
         await gpconfig.save()
 
+    @staticmethod
+    def _normalize_onebot_message_ids(value: Any) -> List[str]:
+        if isinstance(value, str):
+            candidates = [value]
+        elif isinstance(value, (list, tuple, set)):
+            candidates = value
+        else:
+            return []
+
+        message_ids: List[str] = []
+        seen = set()
+        for candidate in candidates:
+            message_id = str(candidate or "").strip()
+            if message_id and message_id not in seen:
+                seen.add(message_id)
+                message_ids.append(message_id)
+        return message_ids
+
+    async def _store_outbound_onebot_message_ids(
+        self,
+        bot_message: Any,
+        message_ids: List[str],
+    ) -> None:
+        local_message_id = getattr(bot_message, "id", None)
+        updater = getattr(self.message_repo, "update_message_metadata", None)
+        if not isinstance(local_message_id, int) or not callable(updater) or not message_ids:
+            return
+        try:
+            updated = await updater(
+                local_message_id,
+                {"onebot": {"message_ids": message_ids}},
+            )
+            if not updated:
+                logging.warning(
+                    "机器人消息平台 ID 回写失败: local_message_id=%s",
+                    local_message_id,
+                )
+        except Exception as exc:
+            logging.warning(
+                "机器人消息平台 ID 回写异常: local_message_id=%s error=%s",
+                local_message_id,
+                exc,
+            )
+
     async def process_message(self, message_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理新消息并按需触发会话处理。"""
         try:
@@ -509,8 +553,9 @@ class ConversationService:
         logging.info(f"会话 {conv_id} 生成回复完成")
         logging.info(f"会话 {conv_id} 回复内容: {reply_content}")
 
+        bot_message = None
         if reply_content:
-            await self.short_term.add_bot_message(conv_id, reply_content)
+            bot_message = await self.short_term.add_bot_message(conv_id, reply_content)
             logging.info(f"会话 {conv_id} 添加机器人自己的消息到历史完成")
 
         split_replies = self._split_reply_content(reply_content)
@@ -519,7 +564,9 @@ class ConversationService:
             "user_id": user_id,
         }
         if reply_content and self.reply_callback:
-            await self.reply_callback(conv_id, reply_dict)
+            callback_result = await self.reply_callback(conv_id, reply_dict)
+            message_ids = self._normalize_onebot_message_ids(callback_result)
+            await self._store_outbound_onebot_message_ids(bot_message, message_ids)
 
         if reply_content and explicit_selected_memory_ids:
             await self.msgprocessor.reinforce_memory_selection(

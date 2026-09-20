@@ -107,3 +107,42 @@ def test_rebuild_queue_from_basic_messages_skips_empty_payload_and_keeps_existin
     }
     assert short_term.clear_calls == []
     assert short_term.added == []
+
+
+def test_rebuild_queue_from_basic_messages_keeps_reply_only_context():
+    async def _loader(conv_id, limit):
+        return [
+            {
+                "user_id": "u1",
+                "user_name": "Alice",
+                "content": "",
+                "is_direct": False,
+                "is_bot": False,
+                "metadata": {
+                    "onebot": {
+                        "reply": {
+                            "message_id": "9001",
+                            "is_self": True,
+                            "content": "机器人上一条消息",
+                        }
+                    }
+                },
+            }
+        ]
+
+    short_term = _ShortTermStub(cleared=1)
+    service = QueueRecoveryService(
+        short_term=short_term,
+        queue_history_size=40,
+        recent_loader=_loader,
+    )
+
+    result = asyncio.run(service.rebuild_from_basic_messages("group_1"))
+
+    assert result == {
+        "source_count": 1,
+        "cleared": 1,
+        "restored": 1,
+    }
+    assert short_term.added[0]["content"] == ""
+    assert short_term.added[0]["metadata"]["onebot"]["reply"]["is_self"] is True

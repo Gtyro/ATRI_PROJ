@@ -16,7 +16,7 @@ class ShortTermMemoryPort(Protocol):
     async def get_recent_messages(self, conv_id: str, limit: int) -> List[Dict[str, Any]]:
         ...
 
-    async def add_bot_message(self, conv_id: str, content: str) -> None:
+    async def add_bot_message(self, conv_id: str, content: str) -> Any:
         ...
 
     async def clear_messages(self, conv_id: str) -> int:
