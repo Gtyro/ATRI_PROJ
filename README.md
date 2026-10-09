@@ -21,7 +21,7 @@
 poetry install
 ```
 
-### 三步极速启动
+### 配置与统一启动
 
 1. **配置密钥**
    修改 `data/persona/persona.yaml` 填入你的 [OpenAI API Key](https://platform.openai.com/)
@@ -31,16 +31,83 @@ poetry install
    ```
 
 2. **设置管理员**
-   在 `.env.prod` 中添加你的QQ号：
+   沿用服务器已有的 `.env.dev` / `.env.prod` 配置（统一入口会按运行模式选择）：
 
    ```
-   SUPERUSERS=["123456789"]  # 替换为你的QQ号
+   SUPERUSERS=["沿用服务器现有安全配置"]
    ```
 
 3. **启动！**
    ```bash
-   poetry run python bot.py
+   .venv/bin/python scripts/manage_processes.py dev
    ```
+
+统一进程管理器在仓库根目录管理 `napcat` 和 `atri_bot` 两个长期 screen 会话。
+NapCat 使用 `xvfb-run -a qq --no-sandbox -q`，账号只在内存中从现有安装的
+唯一一份账号 OneBot 配置及配套 NapCat 配置确定；不使用管理员账号推断登录账号。
+多账号、缺失配置或同名非受管会话会导致启动失败，不会猜测或接管。
+bot 固定通过本项目 `.venv/bin/python` 运行原有 `bot.py`，工作目录固定为仓库根目录；
+开发模式选择 `.env.dev`，正式模式选择 `.env.prod`。
+不会启动独立 WebUI、前端、容器或系统服务，也不会更改现有访问地址、账号或机器人配置。
+
+### 服务器运行依赖与运维
+
+需要 GNU screen、Bash、Xvfb（`xvfb-run`）、`xauth`、已安装并完成登录的
+QQ/NapCat，以及项目 `.venv` 中的依赖。Python 依赖仍用已有 Poetry 流程安装到
+项目 `.venv`；运行和测试不激活或回退到系统 Python。
+非集成测试需要现有开发依赖 pytest；lint 另需 `.venv/bin/ruff`
+（与现有后端 CI 相同的 `0.15.0` 版本）。
+现有 `.env.dev`、`.env.prod`、`data/` 下的私有配置与 QQ/NapCat 配置继续由服务器维护，
+不要把账号、密钥、配置内容或带鉴权参数的 URL 放进命令参数、仓库或日志。
+QQ 所需的 `-q` 参数由管理程序内部传入；本机进程命令行仍可能由同权限用户读取，
+因此不要对外分享 `ps` 的完整参数或 screen 中的原始输出。
+
+```bash
+cd /home/ubuntu/ATRI_PROJ
+.venv/bin/python scripts/manage_processes.py dev        # 开发模式
+.venv/bin/python scripts/manage_processes.py start      # 正式模式
+.venv/bin/python scripts/manage_processes.py status     # 检查服务健康状态
+.venv/bin/python scripts/manage_processes.py stop       # 停止受管服务
+.venv/bin/pytest -q tests -m 'not integration'        # 非集成测试
+.venv/bin/ruff check src tests scripts --select E4,E7,E9,F,W291,W293 # lint
+```
+
+`dev` 和 `start` 不是别名：两者都使用同一组 `screen` 会话和安全的生命周期管理，
+但开发模式选择 `.env.dev`（当前 `LOG_LEVEL=DEBUG`）并保留两个受管进程的普通输出；
+正式模式选择 `.env.prod`（当前 `LOG_LEVEL=INFO`），只把 warning/error/fatal/exception
+等重要输出写入 `logs/process-manager/`，减少长期运行时的管理日志噪声。`LOG_LEVEL` 由
+所选 `.env` 文件提供，入口不会另造或临时覆盖日志配置；若运维通过外部环境变量显式设置
+`LOG_LEVEL`，NoneBot 的标准环境变量优先级仍然有效。若另一模式已经在运行，切换
+命令会先验证归属并停止旧模式，再启动目标模式；同一模式重复执行保持幂等，不创建重复
+会话；运行入口不另设第三种语义，正式运行请使用语义明确的正式启动命令。
+
+启动后等待负载存活与 bot 监听；超时或中途退出会返回非零，并回滚本次新建的受管会话。
+不会回滚此前已经健康运行的受管会话。服务未就绪时状态命令返回非零；监听成功不代表
+QQ 登录、OneBot 握手或机器人业务服务均可用，仍需运维检查现有登录状态。
+后端不存在可用构建流程。
+
+状态和脱敏启动日志保存在 `logs/process-manager/`（目录权限 `0700`、文件 `0600`，
+已由现有 `logs/` 忽略规则排除）：`napcat.log`、`atri_bot.log`、两个服务的 `.json`
+归属记录及 `manager.lock`。日志按次追加；停止命令清理归属记录，保留日志供排查。
+bot 原有业务日志仍在 `logs/`；统一入口在输出格式化阶段脱敏配置值，不改变插件业务逻辑。
+归属记录只存项目路径、screen 完整 ID、PID、启动时间及随机归属标记，不存配置值。
+不要在运行期间删除归属记录；丢失或身份不匹配时停止会拒绝发送信号。
+同名非受管会话和其他 screen 会话不在本接口停止范围内。
+
+### NapCat 日志启动顺序
+
+2026-10-09 检查现有 NapCat 安装代码确认：它会先创建原始日志对象，随后在
+核心初始化阶段读取 `fileLog=false` 并关闭文件 transport。这是该版本 NapCat
+的正常启动顺序，因此不会因为这个顺序阻止开发模式启动。入口仍要求全局及账号配置
+都明确设置 `fileLog=false`，否则会在创建 screen 会话前拒绝启动；不会自动修改
+NapCat 安装或配置。入口自身捕获的 NapCat 输出仍会脱敏后写入项目日志目录。
+
+旧的 `scripts/restart/start_bot.sh` 是现有重启插件配置引用的内部依赖，
+本次保留原文件及引用，不为它增加额外兼容别名。
+它使用另一套会话管理，不要将其手动启动命令与本接口混用。
+现有自动重启插件仍可能按原配置启动 `atri` 会话；这种会话不由停止命令接管。
+本次未删除现有脚本接口。README 中原来的单进程 `poetry run python bot.py` 启动说明
+已替换为统一入口：弃置日期、最后访问日期均为 2026-10-09。
 
 ### 🔥 首次启动必看
 

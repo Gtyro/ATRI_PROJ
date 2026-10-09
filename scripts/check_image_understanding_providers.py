@@ -12,18 +12,20 @@ import asyncio
 import base64
 from pathlib import Path
 import sys
-from typing import Iterable
+from typing import Any, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.core.domain import PersonaConfig
-from src.infra.llm.providers.client import LLMClient
-from src.infra.llm.providers.image_understander import DEFAULT_OBSERVATION_SCHEMA
-from src.infra.llm.providers.types import LLMCallParams
-
 DEFAULT_SAMPLE_IMAGE = ROOT / "assets" / "dashboard.png"
+
+
+def _ensure_project_root() -> None:
+    """Make project imports work when called from any current directory."""
+    root = str(ROOT)
+    if root not in sys.path:
+        sys.path.insert(0, root)
 
 
 def _mask_key(api_key: str) -> str:
@@ -73,7 +75,7 @@ def _build_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _iter_selected_providers(config: PersonaConfig, selected_names: Iterable[str]):
+def _iter_selected_providers(config: Any, selected_names: Iterable[str]):
     selected = {name.strip() for name in selected_names if str(name).strip()}
     providers = list(config.image_understanding.providers)
     if not providers:
@@ -118,6 +120,11 @@ async def _check_provider(
     image_data_url: str,
     max_tokens: int,
 ) -> tuple[bool, str]:
+    _ensure_project_root()
+    from src.infra.llm.providers.client import LLMClient
+    from src.infra.llm.providers.image_understander import DEFAULT_OBSERVATION_SCHEMA
+    from src.infra.llm.providers.types import LLMCallParams
+
     if not str(getattr(provider, "api_key", "") or "").strip():
         return False, "api_key is empty"
     if not str(getattr(provider, "base_url", "") or "").strip():
@@ -163,6 +170,9 @@ async def _check_provider(
 
 
 async def _run(args: argparse.Namespace) -> int:
+    _ensure_project_root()
+    from src.core.domain import PersonaConfig
+
     config = PersonaConfig.load(config_path=args.config)
     image_data_url = _build_image_data_url(args.image)
     providers = list(_iter_selected_providers(config, args.provider))
