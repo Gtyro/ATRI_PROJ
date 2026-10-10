@@ -103,7 +103,6 @@ plugins/restart/              # 重启插件目录
 └── README.md               # 说明文档
 
 scripts/restart/             # 重启脚本目录
-├── restart.sh              # 重启系统主入口（推荐使用）
 ├── start_bot.sh           # 机器人启动脚本
 ├── test_restart.sh        # 环境检测脚本
 └── check_restart_plugin.sh  # 插件状态检查脚本
@@ -121,7 +120,6 @@ data/restart/              # 重启数据目录
 {
   "auto_restart_enabled": true,
   "restart_time": "04:00",
-  "startup_script_path": "scripts/restart/start_bot.sh",
   "max_restart_attempts": 3,
   "restart_delay": 5,
   "restart_notification_enabled": true
@@ -134,7 +132,6 @@ data/restart/              # 重启数据目录
 | ------------------------------ | ------ | -------------------------------- | ---------------------------- |
 | `auto_restart_enabled`         | bool   | `true`                           | 是否启用自动重启功能         |
 | `restart_time`                 | string | `"04:00"`                        | 每日自动重启时间（24小时制） |
-| `startup_script_path`          | string | `"scripts/restart/start_bot.sh"` | 机器人启动脚本路径           |
 | `max_restart_attempts`         | int    | `3`                              | 最大重启尝试次数             |
 | `restart_delay`                | int    | `5`                              | 重启延迟时间（秒）           |
 | `restart_notification_enabled` | bool   | `true`                           | 是否启用重启完成通知         |
@@ -167,16 +164,16 @@ data/restart/              # 重启数据目录
 
 ```bash
 # 检查环境和依赖
-./scripts/restart/restart.sh test
+./scripts/restart/test_restart.sh
 
 # 启动机器人
-./scripts/restart/restart.sh start
+.venv/bin/python scripts/manage_processes.py start
 
 # 检查插件状态
-./scripts/restart/restart.sh check
+./scripts/restart/check_restart_plugin.sh
 
 # 查看运行状态
-./scripts/restart/restart.sh status
+.venv/bin/python scripts/manage_processes.py status
 ```
 
 ### 2. 功能测试
@@ -253,7 +250,6 @@ cat /tmp/atri_restart.log
 ```bash
 # 添加执行权限
 chmod +x scripts/restart/start_bot.sh
-chmod +x scripts/restart/restart.sh
 ```
 
 ## 📝 重要说明

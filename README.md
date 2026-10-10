@@ -66,11 +66,15 @@ QQ 所需的 `-q` 参数由管理程序内部传入；本机进程命令行仍�
 cd /home/ubuntu/ATRI_PROJ
 .venv/bin/python scripts/manage_processes.py dev        # 开发模式
 .venv/bin/python scripts/manage_processes.py start      # 正式模式
+.venv/bin/python scripts/manage_processes.py restart_bot # 只重启受管 bot
 .venv/bin/python scripts/manage_processes.py status     # 检查服务健康状态
 .venv/bin/python scripts/manage_processes.py stop       # 停止受管服务
 .venv/bin/pytest -q tests -m 'not integration'        # 非集成测试
 .venv/bin/ruff check src tests scripts --select E4,E7,E9,F,W291,W293 # lint
 ```
+
+WebUI 地址为 `http://127.0.0.1:8080/webui`，NapCat 前端地址为
+`http://127.0.0.1:6099/`；浏览器可直接访问这些地址。
 
 `dev` 和 `start` 不是别名：两者都使用同一组 `screen` 会话和安全的生命周期管理，
 但开发模式选择 `.env.dev`（当前 `LOG_LEVEL=DEBUG`）并保留两个受管进程的普通输出；
@@ -79,12 +83,11 @@ cd /home/ubuntu/ATRI_PROJ
 所选 `.env` 文件提供，入口不会另造或临时覆盖日志配置；若运维通过外部环境变量显式设置
 `LOG_LEVEL`，NoneBot 的标准环境变量优先级仍然有效。若另一模式已经在运行，切换
 命令会先验证归属并停止旧模式，再启动目标模式；同一模式重复执行保持幂等，不创建重复
-会话；运行入口不另设第三种语义，正式运行请使用语义明确的正式启动命令。
+会话。
 
 启动后等待负载存活与 bot 监听；超时或中途退出会返回非零，并回滚本次新建的受管会话。
 不会回滚此前已经健康运行的受管会话。服务未就绪时状态命令返回非零；监听成功不代表
 QQ 登录、OneBot 握手或机器人业务服务均可用，仍需运维检查现有登录状态。
-后端不存在可用构建流程。
 
 状态和脱敏启动日志保存在 `logs/process-manager/`（目录权限 `0700`、文件 `0600`，
 已由现有 `logs/` 忽略规则排除）：`napcat.log`、`atri_bot.log`、两个服务的 `.json`
@@ -102,12 +105,9 @@ bot 原有业务日志仍在 `logs/`；统一入口在输出格式化阶段脱�
 都明确设置 `fileLog=false`，否则会在创建 screen 会话前拒绝启动；不会自动修改
 NapCat 安装或配置。入口自身捕获的 NapCat 输出仍会脱敏后写入项目日志目录。
 
-旧的 `scripts/restart/start_bot.sh` 是现有重启插件配置引用的内部依赖，
-本次保留原文件及引用，不为它增加额外兼容别名。
-它使用另一套会话管理，不要将其手动启动命令与本接口混用。
-现有自动重启插件仍可能按原配置启动 `atri` 会话；这种会话不由停止命令接管。
-本次未删除现有脚本接口。README 中原来的单进程 `poetry run python bot.py` 启动说明
-已替换为统一入口：弃置日期、最后访问日期均为 2026-10-09。
+`scripts/restart/start_bot.sh` 保留为兼容入口，但现在只调用本项目进程管理器；
+自动/手动重启也通过同一管理器重建 `atri_bot`，不再创建或接管旧的 `atri` 会话。
+重启沿用当前受管模式，并保留 NapCat 会话。
 
 ### 🔥 首次启动必看
 
@@ -135,7 +135,7 @@ NapCat 安装或配置。入口自身捕获的 NapCat 输出仍会脱敏后写�
 ### 🌐 WebUI 控制台（管理神器）
 
 ```bash
-访问地址：http://127.0.0.1:8080
+访问地址：http://127.0.0.1:8080/webui
 默认账号：admin/admin（首次登录后须修改！）
 ```
 

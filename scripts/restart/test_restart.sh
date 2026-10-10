@@ -105,7 +105,6 @@ cat > data/restart/test_config.json << 'EOF'
 {
   "auto_restart_enabled": true,
   "restart_time": "04:00",
-  "startup_script_path": "scripts/restart/start_bot.sh",
   "max_restart_attempts": 3,
   "restart_delay": 5
 }
@@ -156,9 +155,9 @@ echo -e "\n${GREEN}==============================="
 echo -e "环境检查完成！${NC}"
 echo ""
 echo -e "${BLUE}快速命令：${NC}"
-echo "• 启动机器人: ./scripts/restart/restart.sh start"
-echo "• 检查插件: ./scripts/restart/restart.sh check"
-echo "• 查看状态: ./scripts/restart/restart.sh status"
+echo "• 启动机器人: .venv/bin/python scripts/manage_processes.py start"
+echo "• 检查插件: ./scripts/restart/check_restart_plugin.sh"
+echo "• 查看状态: .venv/bin/python scripts/manage_processes.py status"
 echo ""
 echo -e "${YELLOW}QQ命令（需超级用户权限）：${NC}"
 echo "• @机器人 重启状态"

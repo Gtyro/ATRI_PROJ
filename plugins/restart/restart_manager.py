@@ -18,6 +18,7 @@ from typing import Dict, Any
 from nonebot import get_driver
 
 from .config import RestartConfig
+from scripts.restart_environment import detached_process_environment
 from src.infra.logging.restart_diagnostics import (
     collect_restart_log_diagnostics,
     summarize_issue_status,
@@ -77,11 +78,8 @@ class RestartManager:
     async def _execute_restart(self) -> None:
         """执行实际的重启逻辑"""
         try:
-            # 1. 准备启动脚本
-            startup_script = await self._prepare_startup_script()
-
-            # 2. 创建重启脚本
-            restart_script = await self._create_restart_script(startup_script)
+            # The process manager owns startup and restart behavior.
+            restart_script = await self._create_restart_script()
 
             # 3. 启动重启脚本
             await self._launch_restart_script(restart_script)
@@ -93,144 +91,49 @@ class RestartManager:
             logging.error(f"重启执行失败: {e}")
             raise
 
-    async def _prepare_startup_script(self) -> str:
-        """准备启动脚本"""
-        script_path = self.config.startup_script_path
-
-        # 如果脚本不存在，创建默认脚本
-        if not os.path.exists(script_path):
-            await self._create_default_startup_script(script_path)
-
-        # 确保脚本有执行权限
-        os.chmod(script_path, 0o755)
-
-        return os.path.abspath(script_path)
-
-    async def _create_default_startup_script(self, script_path: str) -> None:
-        """创建默认启动脚本"""
-        try:
-            # 确保scripts目录存在
-            os.makedirs(os.path.dirname(script_path), exist_ok=True)
-
-            # 获取当前工作目录和Python路径
-            current_dir = os.getcwd()
-            python_executable = sys.executable
-
-            # 根据用户提供的信息，检测是否使用虚拟环境
-            venv_path = os.path.join(current_dir, ".venv")
-            use_venv = os.path.exists(venv_path)
-
-            script_content = f"""#!/bin/bash
-
-# ATRI机器人自动重启脚本
-# 由重启系统自动生成
-
-set -e
-
-echo "开始启动ATRI机器人..."
-
-# 切换到项目目录
-cd "{current_dir}"
-
-"""
-
-            if use_venv:
-                script_content += f"""
-# 激活虚拟环境
-source .venv/bin/activate
-echo "虚拟环境已激活"
-
-"""
-
-            script_content += f"""
-# 检查是否有现有的screen会话并杀死
-if screen -list | grep -q "atri"; then
-    echo "发现现有的atri会话，正在关闭..."
-    screen -S atri -X quit || true
-    sleep 2
-fi
-
-# 启动新的screen会话
-echo "启动新的ATRI会话..."
-screen -dmS atri bash -c "{python_executable} bot.py"
-
-# 等待一下确保启动成功
-sleep 3
-
-# 检查是否成功启动
-if screen -list | grep -q "atri"; then
-    echo "ATRI机器人启动成功！"
-    echo "使用 'screen -r atri' 连接到会话"
-else
-    echo "警告：ATRI机器人可能启动失败"
-    exit 1
-fi
-"""
-
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(script_content)
-
-            logging.info(f"已创建默认启动脚本: {script_path}")
-
-        except Exception as e:
-            logging.error(f"创建启动脚本失败: {e}")
-            raise
-
-    async def _create_restart_script(self, startup_script: str) -> str:
+    async def _create_restart_script(self) -> str:
         """创建重启脚本"""
         restart_script_path = "scripts/restart/restart_bot.sh"
 
         try:
             os.makedirs(os.path.dirname(restart_script_path), exist_ok=True)
-
+            project_dir = os.path.abspath(os.getcwd())
+            manager_python = os.path.join(project_dir, ".venv", "bin", "python")
+            manager_script = os.path.join(project_dir, "scripts", "manage_processes.py")
+            restart_delay = max(0, int(self.config.restart_delay))
             script_content = f"""#!/bin/bash
+set -u
 
 # ATRI机器人重启脚本
 LOG_FILE="/tmp/atri_restart.log"
 
-echo "=== ATRI重启脚本开始 ===" > $LOG_FILE
-echo "时间: $(date)" >> $LOG_FILE
-echo "启动脚本: {startup_script}" >> $LOG_FILE
+echo "=== ATRI重启脚本开始 ===" > "$LOG_FILE"
+echo "时间: $(date)" >> "$LOG_FILE"
+echo "管理入口: {manager_script}" >> "$LOG_FILE"
 
 # 等待原进程完全退出
-sleep {self.config.restart_delay}
+sleep {restart_delay}
 
-# 检查并清理旧的screen会话
-if screen -list | grep -q "atri"; then
-    echo "关闭现有atri会话..." >> $LOG_FILE
-    screen -S atri -X quit || true
-    sleep 2
-fi
-
-# 切换到项目目录
-PROJECT_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
-cd "$PROJECT_DIR" || {{
-    echo "错误：无法切换到项目目录 $PROJECT_DIR" >> $LOG_FILE
-    exit 1
-}}
-
-# 执行启动脚本
-if [ -x "{startup_script}" ]; then
-    bash "{startup_script}" >> $LOG_FILE 2>&1
+# 让统一管理器负责停止旧的 atri_bot、清理归属记录并重新启动它。
+if [ -x "{manager_python}" ] && [ -f "{manager_script}" ]; then
+    "{manager_python}" "{manager_script}" restart_bot >> "$LOG_FILE" 2>&1
     EXIT_CODE=$?
-
-    # 检查是否启动成功
-    sleep 3
-    if screen -list | grep -q "atri"; then
-        echo "✅ ATRI机器人重启成功！" >> $LOG_FILE
-    else
-        echo "❌ ATRI机器人启动失败" >> $LOG_FILE
-    fi
 else
-    echo "错误：启动脚本不存在: {startup_script}" >> $LOG_FILE
-    exit 1
+    echo "错误：项目进程管理器不可用" >> "$LOG_FILE"
+    EXIT_CODE=1
 fi
 
-echo "=== 重启脚本完成 ===" >> $LOG_FILE
+if [ "$EXIT_CODE" -eq 0 ]; then
+    echo "✅ ATRI机器人（atri_bot）重启成功！" >> "$LOG_FILE"
+else
+    echo "❌ ATRI机器人（atri_bot）重启失败，退出码: $EXIT_CODE" >> "$LOG_FILE"
+fi
+echo "=== 重启脚本完成 ===" >> "$LOG_FILE"
 
 # 清理脚本
 sleep 5
 rm -f "{os.path.abspath(restart_script_path)}"
+exit "$EXIT_CODE"
 """
 
             with open(restart_script_path, 'w', encoding='utf-8') as f:
@@ -257,7 +160,7 @@ rm -f "{os.path.abspath(restart_script_path)}"
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
                 cwd=os.getcwd(),
-                env=os.environ.copy()
+                env=detached_process_environment()
             )
 
             logging.info(f"重启脚本已启动: {restart_script} (PID: {process.pid})")

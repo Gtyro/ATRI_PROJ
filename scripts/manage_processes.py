@@ -380,7 +380,7 @@ def stop_one(name: str) -> None:
 
 def ensure(mode: str) -> None:
     if mode not in MODES:
-        raise LifecycleError("未知运行模式；支持 dev、start、stop、status。")
+        raise LifecycleError("未知运行模式；支持 dev、start、restart_bot、stop、status。")
     current = sessions()
     records = {name: load_state(name) for name in SERVICES}
     for name, record in records.items():
@@ -462,25 +462,42 @@ def start() -> None:
     ensure("start")
 
 
+def restart_bot() -> None:
+    """Restart only the managed bot session, preserving NapCat."""
+    bot_record = load_state("atri_bot") or {}
+    napcat_record = load_state("napcat") or {}
+    mode = bot_record.get("mode", napcat_record.get("mode", "start"))
+    if mode not in MODES:
+        raise LifecycleError("受管运行模式不可识别；拒绝重启。")
+    # Validate dependencies before stopping a healthy bot.  ``ensure`` repeats
+    # this check after the old session has been removed, before creating it.
+    preflight(mode)
+    if load_state("atri_bot") is not None:
+        stop_one("atri_bot")
+    ensure(mode)
+
+
 def main() -> int:
     os.chdir(ROOT)
     os.umask(0o077)
     if len(sys.argv) < 2:
-        raise LifecycleError("缺少入口；支持 dev、start、stop、status。")
+        raise LifecycleError("缺少入口；支持 dev、start、restart_bot、stop、status。")
     action = sys.argv[1]
     if action == "_bot":
         run_bot()
         return 0
     if action == "_run" and len(sys.argv) == 5 and sys.argv[2] in SERVICES:
         return supervise(sys.argv[2], sys.argv[3], sys.argv[4])
-    if action not in {"dev", "start", "stop", "status"}:
-        raise LifecycleError("未知入口；支持 dev、start、stop、status。")
+    if action not in {"dev", "start", "restart_bot", "stop", "status"}:
+        raise LifecycleError("未知入口；支持 dev、start、restart_bot、stop、status。")
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     STATE.chmod(0o700)
     with (STATE / "manager.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if action in MODES:
             ensure(action)
+        elif action == "restart_bot":
+            restart_bot()
         elif action == "stop":
             errors = []
             for name in reversed(SERVICES):

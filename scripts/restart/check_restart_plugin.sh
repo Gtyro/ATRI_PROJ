@@ -16,11 +16,11 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_DIR"
 
 # 检查是否有机器人进程在运行
-if screen -list 2>/dev/null | grep -q "atri"; then
-    echo -e "✅ 发现机器人会话 'atri'"
+if screen -list 2>/dev/null | grep -Eq '^[[:space:]]*[0-9]+\.atri_bot[[:space:]]'; then
+    echo -e "✅ 发现受管机器人会话 'atri_bot'"
 else
     echo -e "❌ 未发现机器人会话"
-    echo -e "${YELLOW}请先启动机器人: ./scripts/restart/start_bot.sh${NC}"
+    echo -e "${YELLOW}请先启动机器人: .venv/bin/python scripts/manage_processes.py start${NC}"
     exit 1
 fi
 
@@ -104,5 +104,5 @@ echo -e "检查完成！${NC}"
 echo ""
 echo -e "${YELLOW}如果发现问题：${NC}"
 echo "1. 查看完整日志: tail -f $LATEST_LOG"
-echo "2. 重启机器人: screen -S atri -X quit && ./scripts/restart/start_bot.sh"
+echo "2. 重启机器人: .venv/bin/python scripts/manage_processes.py restart_bot"
 echo "3. 检查依赖: ./scripts/restart/test_restart.sh" 

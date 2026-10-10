@@ -6,7 +6,6 @@ ATRI 自动重启插件
 3. 安全的重启流程管理
 """
 
-import asyncio
 import logging
 from datetime import datetime
 
@@ -182,7 +181,7 @@ async def handle_restart_status(bot: Bot, event: MessageEvent):
 ------------------------
 🔹 自动重启: {'✅ 已启用' if restart_config.auto_restart_enabled else '❌ 已禁用'}
 🔹 重启时间: {restart_config.restart_time}
-🔹 启动脚本: {restart_config.startup_script_path}
+🔹 启动入口: 受管进程管理器（沿用当前运行模式）
 🔹 重启通知: {'✅ 已启用' if restart_config.restart_notification_enabled else '❌ 已禁用'}
 
 📊 运行状态
@@ -255,7 +254,7 @@ async def handle_restart_config(bot: Bot, event: MessageEvent, arp: Arparma):
 ------------------------
 🔹 自动重启: {restart_config.auto_restart_enabled}
 🔹 重启时间: {restart_config.restart_time}
-🔹 启动脚本: {restart_config.startup_script_path}
+🔹 启动入口: 受管进程管理器（沿用当前运行模式）
 
 📖 使用方法：
 • 重启配置 启用/禁用 - 开启/关闭自动重启

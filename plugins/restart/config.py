@@ -12,7 +12,6 @@ import yaml
 DEFAULT_RESTART_CONFIG: Dict[str, Any] = {
     "auto_restart_enabled": True,
     "restart_time": "04:00",
-    "startup_script_path": "scripts/restart/start_bot.sh",
     "max_restart_attempts": 3,
     "restart_delay": 5,
     "restart_notification_enabled": True,

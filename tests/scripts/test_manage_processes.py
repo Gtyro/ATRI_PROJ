@@ -8,11 +8,26 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import manage_processes as manager
+from scripts.restart_environment import detached_process_environment
 
 
 class PrivateEnvironment(dict):
     def __repr__(self):
         return "<private test environment>"
+
+
+def test_detached_restart_environment_drops_parent_ownership_markers():
+    inherited = {
+        "PATH": "/synthetic/bin",
+        "ATRI_PAYLOAD_OWNER": "synthetic-payload-owner",
+        "ATRI_SCREEN_OWNER": "synthetic-screen-owner",
+        "ATRI_SCREEN_ROOT": "/synthetic/project",
+    }
+
+    detached = detached_process_environment(inherited)
+
+    assert detached == {"PATH": "/synthetic/bin"}
+    assert inherited["ATRI_PAYLOAD_OWNER"] == "synthetic-payload-owner"
 
 
 @pytest.fixture
@@ -53,6 +68,19 @@ def test_repeated_dev_does_not_start_another_screen(runtime, monkeypatch):
     monkeypatch.setattr(manager, "preflight", lambda mode="dev": pytest.fail("already running"))
     monkeypatch.setattr(manager, "command", lambda *a, **kw: pytest.fail("duplicate start"))
     manager.dev()
+
+
+def test_restart_bot_preserves_managed_mode_and_targets_only_bot(runtime, monkeypatch):
+    manager.save_state("napcat", {"mode": "dev"})
+    manager.save_state("atri_bot", {"mode": "dev"})
+    calls = []
+    monkeypatch.setattr(manager, "preflight", lambda mode: calls.append(("preflight", mode)))
+    monkeypatch.setattr(manager, "stop_one", calls.append)
+    monkeypatch.setattr(manager, "ensure", lambda mode: calls.append(("ensure", mode)))
+
+    manager.restart_bot()
+
+    assert calls == [("preflight", "dev"), "atri_bot", ("ensure", "dev")]
 
 
 def test_napcat_normal_startup_order_is_allowed(runtime):
@@ -268,6 +296,13 @@ def test_real_screen_lifecycle_preserves_foreign_session(isolated_screen):
         json.loads((state / f"{name}.json").read_text())["mode"] == "start"
         for name in manager.SERVICES
     )
+    napcat_screen = json.loads((state / "napcat.json").read_text())["screen_pid"]
+    old_bot_screen = json.loads((state / "atri_bot.json").read_text())["screen_pid"]
+    restarted = execute("restart_bot")
+    assert restarted.returncode == 0, restarted.stdout + restarted.stderr
+    assert json.loads((state / "napcat.json").read_text())["screen_pid"] == napcat_screen
+    assert json.loads((state / "atri_bot.json").read_text())["screen_pid"] != old_bot_screen
+    assert execute("status").returncode == 0
     child_pid = int((root / "child.pid").read_text())
     child_created = manager.psutil.Process(child_pid).create_time()
     assert execute("stop").returncode == 0
