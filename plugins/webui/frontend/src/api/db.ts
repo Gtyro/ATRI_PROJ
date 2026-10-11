@@ -19,8 +19,13 @@ export interface CypherQueryPayload {
   [key: string]: unknown;
 }
 
+export interface MemoryConversation {
+  id: string;
+  name: string;
+}
+
 export interface ConversationRowsPayload {
-  rows: string[];
+  rows: MemoryConversation[];
   [key: string]: unknown;
 }
 

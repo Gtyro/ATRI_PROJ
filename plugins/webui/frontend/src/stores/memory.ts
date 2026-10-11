@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 
+import type { MemoryConversation } from "@/api/db";
 import {
   getConversations,
   getMemoryDetail,
@@ -15,7 +16,7 @@ interface TimeRange {
 
 interface MemoryState {
   timelineData: MemoryTimelineItem[];
-  conversations: string[];
+  conversations: MemoryConversation[];
   currentConvId: string;
   memoryStats: Record<string, unknown>;
   selectedMemory: Record<string, unknown> | null;
@@ -96,7 +97,7 @@ export const useMemoryStore = defineStore("memory", {
       this.currentConvId = convId;
     },
 
-    async fetchConversations(): Promise<string[]> {
+    async fetchConversations(): Promise<MemoryConversation[]> {
       this.isLoading = true;
       this.error = null;
 

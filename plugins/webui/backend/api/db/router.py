@@ -1,5 +1,7 @@
 import re
+from typing import Any, Dict, Iterable
 
+import nonebot
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from ..audit.service import is_mutating_cypher, record_operation_audit
@@ -41,6 +43,122 @@ router = APIRouter(
     dependencies=[Depends(get_current_active_user)],
     responses={401: {"description": "未经授权"}},
 )
+
+
+def _get_value(item: Any, key: str) -> Any:
+    """Read a field from either an API dict or a typed adapter object."""
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
+async def _load_conversation_names(rows: Iterable[Dict[str, Any]]) -> Dict[str, str]:
+    """Resolve conversation IDs to current group names or private nicknames."""
+    group_ids: set[str] = set()
+    private_ids: set[str] = set()
+    for row in rows:
+        conv_id = str(_get_value(row, "id") or "")
+        kind, separator, identifier = conv_id.partition("_")
+        if not separator or not identifier:
+            continue
+        if kind == "group":
+            group_ids.add(identifier)
+        elif kind == "private":
+            private_ids.add(identifier)
+
+    if not group_ids and not private_ids:
+        return {}
+
+    names: Dict[str, str] = {}
+    try:
+        bots = nonebot.get_bots().values()
+    except Exception:
+        bots = ()
+
+    for bot in bots:
+        if group_ids:
+            try:
+                groups = await bot.get_group_list()
+            except Exception:
+                groups = []
+            for group in groups or []:
+                group_id = str(
+                    _get_value(group, "group_id")
+                    or _get_value(group, "gid")
+                    or ""
+                )
+                group_name = str(
+                    _get_value(group, "group_name")
+                    or _get_value(group, "name")
+                    or ""
+                ).strip()
+                if group_id in group_ids and group_name:
+                    names[f"group_{group_id}"] = group_name
+
+            # Some adapters do not expose names in their group list. Fill in
+            # those entries from the per-group info endpoint when available.
+            get_group_info = getattr(bot, "get_group_info", None)
+            if get_group_info is not None:
+                for group_id in group_ids:
+                    conv_id = f"group_{group_id}"
+                    if conv_id in names:
+                        continue
+                    try:
+                        group = await get_group_info(group_id=int(group_id))
+                    except Exception:
+                        continue
+                    group_name = str(
+                        _get_value(group, "group_name")
+                        or _get_value(group, "name")
+                        or ""
+                    ).strip()
+                    if group_name:
+                        names[conv_id] = group_name
+
+        if not private_ids:
+            continue
+
+        # Friend lists avoid one network request per private conversation.
+        try:
+            friends = await bot.get_friend_list()
+        except Exception:
+            friends = []
+        for friend in friends or []:
+            user_id = str(
+                _get_value(friend, "user_id")
+                or _get_value(friend, "uid")
+                or ""
+            )
+            nickname = str(
+                _get_value(friend, "nickname")
+                or _get_value(friend, "remark")
+                or ""
+            ).strip()
+            if user_id in private_ids and nickname:
+                names[f"private_{user_id}"] = nickname
+
+        # A private contact need not be in the bot's friend list. Query the
+        # adapter for the remaining IDs so the dropdown can still show a name.
+        get_stranger_info = getattr(bot, "get_stranger_info", None)
+        if get_stranger_info is None:
+            continue
+        for user_id in private_ids:
+            conv_id = f"private_{user_id}"
+            if conv_id in names:
+                continue
+            try:
+                stranger = await get_stranger_info(user_id=int(user_id))
+            except Exception:
+                continue
+            nickname = str(
+                _get_value(stranger, "nickname")
+                or _get_value(stranger, "remark")
+                or ""
+            ).strip()
+            if nickname:
+                names[conv_id] = nickname
+
+    return names
 
 # === SQL/ORM 相关接口 ===
 
@@ -470,4 +588,19 @@ async def delete_memory_association(
 @router.get("/memory/conversations")
 async def get_memory_conversations(current_user: User = Depends(get_current_active_user)):
     """获取所有可用的会话ID"""
-    return await get_conversations()
+    payload = await get_conversations()
+    rows = payload.get("rows", []) if isinstance(payload, dict) else []
+    names = await _load_conversation_names(rows)
+
+    # Keep the conversation ID as the option value, while exposing the
+    # human-readable group name/nickname to the frontend as ``name``.
+    normalized_rows = []
+    for row in rows:
+        normalized = dict(row)
+        conv_id = str(normalized.get("id") or "")
+        normalized["name"] = names.get(conv_id) or normalized.get("name") or conv_id
+        normalized_rows.append(normalized)
+
+    if isinstance(payload, dict):
+        return {**payload, "rows": normalized_rows}
+    return {"rows": normalized_rows}
