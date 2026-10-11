@@ -200,19 +200,23 @@ class ConversationService:
 
     @staticmethod
     def _split_reply_content(reply_content: Optional[str]) -> List[str]:
-        """按短句切分回复，保留括号旁白为独立片段并过滤空消息。"""
+        """按短句切分回复；括号旁白独立成段，引号外省略号后切分。"""
         if not reply_content:
             return []
+
+        # Treat quoted spans as one token so punctuation inside quoted text does not split it.
+        quoted_text = r"“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』"
+        text_unit = rf"(?:{quoted_text}|[^，。！？（）()\s…])"
 
         # Keep spaces inside English multi-word phrases such as "TOGENASHI TOGEARI".
         en_multi_word = (
             r"[A-Za-z0-9][A-Za-z0-9'._+-]*"
             r"(?:\s+[A-Za-z0-9][A-Za-z0-9'._+-]*)+"
-            r"(?:[^，。！？（）()\s]+)?"
+            rf"{text_unit}*"
         )
         token_pattern = re.compile(
-            rf"\(.*?\)|（.*?）|{en_multi_word}\.+|{en_multi_word}|"
-            r"[^，。！？（）()\s]+\.+|[^，。！？（）()\s]+"
+            rf"\(.*?\)|（.*?）|{en_multi_word}…+|{en_multi_word}|"
+            rf"{text_unit}+…+|{text_unit}+\.+|{text_unit}+"
         )
         split_replies = [
             match.group(0).strip()

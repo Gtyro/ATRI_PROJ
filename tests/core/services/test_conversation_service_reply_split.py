@@ -80,3 +80,23 @@ def test_split_reply_content_never_returns_blank_segments():
 
     assert result == ["（旁白）", "啊啦", "这个问题..."]
     assert all(item.strip() for item in result)
+
+
+@pytest.mark.parametrize(
+    ("opening", "closing"),
+    [("“", "”"), ("‘", "’"), ("「", "」"), ("『", "』")],
+)
+def test_split_reply_content_keeps_punctuation_inside_quoted_spans(opening, closing):
+    content = f"A，B{opening}C，D。E！F？{closing}G，H"
+
+    assert ConversationService._split_reply_content(content) == [
+        "A",
+        f"B{opening}C，D。E！F？{closing}G",
+        "H",
+    ]
+
+
+def test_split_reply_content_splits_after_ellipsis_outside_quotes():
+    content = "A“B，C……D”……E"
+
+    assert ConversationService._split_reply_content(content) == ["A“B，C……D”……", "E"]
