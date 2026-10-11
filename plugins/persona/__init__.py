@@ -1,5 +1,4 @@
 import inspect
-import os
 import sys
 
 from nonebot.plugin import PluginMetadata
@@ -11,6 +10,7 @@ from src.core.services.persona_policy_flags import (
     LLM_PASSIVE_REPLY_ENABLED_KEY,
     LLM_TOPIC_EXTRACT_ENABLED_KEY,
 )
+from src.core.persona_runtime_mode import should_use_script_mode
 
 # 确保短期记忆模型在db_core初始化时已注册
 register_model_module("models", "src.infra.db.tortoise.message_models")
@@ -19,23 +19,20 @@ register_model_module("models", "src.infra.db.tortoise.message_models")
 # 判断当前代码是否在脚本模式下执行
 def is_running_as_script():
     """检测代码是否在脚本模式下运行而非作为插件导入"""
-    # 获取调用栈
-    stack = inspect.stack()
     main_module = sys.modules['__main__']
     main_file = getattr(main_module, '__file__', '')
-
-    # 检查是否从scripts目录执行
-    if main_file and '/scripts/' in main_file:
-        return True
-
-    # 检查调用链是否来自script目录的模块
-    for frame in stack:
-        if '/scripts/' in frame.filename:
-            return True
-        if '/src/adapters/' in frame.filename:
-            return True
-
-    return False
+    stack = inspect.stack()
+    # 启动器可以位于 scripts/，但 runpy 执行的真正入口仍是 bot.py。
+    # 只把实际入口位于 scripts/ 的场景视为脚本导入；保留 adapter 调用栈保护。
+    return should_use_script_mode(
+        main_file,
+        (frame.filename for frame in stack),
+        (
+            frame.filename
+            for frame in stack
+            if frame.frame.f_globals.get('__name__') == '__main__'
+        ),
+    )
 
 # 只有在非脚本模式下才导入完整的插件功能
 if not is_running_as_script():
