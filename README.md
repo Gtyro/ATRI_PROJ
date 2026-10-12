@@ -24,11 +24,13 @@ poetry install
 ### 配置与统一启动
 
 1. **配置密钥**
-   修改 `data/persona/persona.yaml` 填入你的 [OpenAI API Key](https://platform.openai.com/)
+   将 `.env.example` 中需要的变量添加到现有 `.env.dev` 和/或 `.env.prod`，
+   填入你的 [OpenAI API Key](https://platform.openai.com/)。
+   它们还包含 NoneBot 和 OneBot 的运行配置。主模型使用 `OPENAI_API_KEY`；
+   图像理解、数据库和可选插件分别使用示例中的独立变量。模型名、API 地址、超时、
+   功能开关等非敏感设置放在 `data/` 下的 YAML 配置中。
 
-   ```yaml
-   api_key: "你的密钥"
-   ```
+   `.env.dev` 仅用于开发模式，`.env.prod` 仅用于正式模式。系统环境变量优先于所选
 
 2. **设置管理员**
    沿用服务器已有的 `.env.dev` / `.env.prod` 配置（统一入口会按运行模式选择）：
@@ -151,7 +153,7 @@ NapCat 安装或配置。入口自身捕获的 NapCat 输出仍会脱敏后写�
 
 1. 检查NapCatQQ是否正常连接
 2. 确认已正确设置 `SUPERUSERS`
-3. 查看 `data/persona/persona.yaml` 的API密钥配置
+3. 确认当前运行模式对应的 `.env.dev` 或 `.env.prod` 中设置了 `OPENAI_API_KEY`
 
 ### 💾 数据存储在哪？
 

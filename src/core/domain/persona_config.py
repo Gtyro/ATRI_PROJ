@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import os
+import logging
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+from .runtime_settings import get_runtime_setting
 
 DEFAULT_CONFIG_PATH = "data/persona/persona.yaml"
 
@@ -46,14 +48,14 @@ def _to_bool(value: Any, *, default: bool = False) -> bool:
 
 
 def _env_or_default(env_key: str, default: str) -> str:
-    value = os.environ.get(env_key)
+    value = get_runtime_setting(env_key)
     if value is None:
         return default
     return value.strip()
 
 
 def _parse_env_int(env_key: str, default: int) -> int:
-    value = os.environ.get(env_key)
+    value = get_runtime_setting(env_key)
     if value is None:
         return default
     try:
@@ -63,7 +65,7 @@ def _parse_env_int(env_key: str, default: int) -> int:
 
 
 def _parse_env_float(env_key: str, default: float) -> float:
-    value = os.environ.get(env_key)
+    value = get_runtime_setting(env_key)
     if value is None:
         return default
     try:
@@ -104,7 +106,6 @@ class ImageUnderstandingProviderConfig:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.name,
-            "api_key": self.api_key,
             "base_url": self.base_url,
             "model": self.model,
         }
@@ -180,7 +181,7 @@ class ImageUnderstandingConfig:
 
     @staticmethod
     def _parse_env_provider_list(env_key: str, default: List[ImageUnderstandingProviderConfig]) -> List[ImageUnderstandingProviderConfig]:
-        raw_value = os.environ.get(env_key)
+        raw_value = get_runtime_setting(env_key)
         if raw_value is None:
             return list(default)
         try:
@@ -271,27 +272,51 @@ class ImageUnderstandingConfig:
             "IMAGE_UNDERSTANDING_PROVIDERS",
             self.providers,
         )
-        if os.environ.get("IMAGE_UNDERSTANDING_PROVIDERS") is None:
+        if get_runtime_setting("IMAGE_UNDERSTANDING_PROVIDERS") is None:
+            if not providers and (self.base_url or self.model):
+                providers = [
+                    ImageUnderstandingProviderConfig(
+                        name="primary",
+                        base_url=self.base_url,
+                        model=self.model,
+                    )
+                ]
+            secured_providers = []
+            for index, provider in enumerate(providers):
+                suffix = "".join(
+                    char if char.isalnum() else "_"
+                    for char in (provider.name or f"provider_{index + 1}").upper()
+                ).strip("_")
+                setting_name = f"IMAGE_UNDERSTANDING_{suffix}_API_KEY"
+                configured_key = get_runtime_setting(setting_name)
+                if configured_key is None and index == 0:
+                    configured_key = get_runtime_setting("IMAGE_UNDERSTANDING_API_KEY", "")
+                configured_key = str(configured_key or "").strip()
+                if provider.api_key and not configured_key:
+                    logging.warning(
+                        "Image-understanding API key remains in persona YAML; move it to %s",
+                        setting_name,
+                    )
+                secured_providers.append(replace(provider, api_key=configured_key))
+            providers = secured_providers
+
             primary = providers[0] if providers else ImageUnderstandingProviderConfig(
                 name="primary",
-                api_key=self.api_key,
                 base_url=self.base_url,
                 model=self.model,
             )
             primary = replace(
                 primary,
-                api_key=_env_or_default("IMAGE_UNDERSTANDING_API_KEY", primary.api_key),
                 base_url=_env_or_default("IMAGE_UNDERSTANDING_BASE_URL", primary.base_url),
                 model=_env_or_default("IMAGE_UNDERSTANDING_MODEL", primary.model),
             )
-            if primary.api_key or primary.base_url or primary.model:
-                if providers:
-                    providers[0] = primary
-                else:
-                    providers = [primary]
+            if providers:
+                providers[0] = primary
+            elif primary.base_url or primary.model:
+                providers = [primary]
         primary = providers[0] if providers else ImageUnderstandingProviderConfig(
             name="primary",
-            api_key=_env_or_default("IMAGE_UNDERSTANDING_API_KEY", self.api_key),
+            api_key=_env_or_default("IMAGE_UNDERSTANDING_API_KEY", ""),
             base_url=_env_or_default("IMAGE_UNDERSTANDING_BASE_URL", self.base_url),
             model=_env_or_default("IMAGE_UNDERSTANDING_MODEL", self.model),
         )
@@ -299,7 +324,7 @@ class ImageUnderstandingConfig:
         return replace(
             self,
             enabled=_to_bool(
-                os.environ.get("IMAGE_UNDERSTANDING_ENABLED"),
+                get_runtime_setting("IMAGE_UNDERSTANDING_ENABLED"),
                 default=self.enabled,
             ),
             api_key=primary.api_key,
@@ -315,7 +340,7 @@ class ImageUnderstandingConfig:
             max_images_per_round=max_images_per_round,
             analyze_window_size=analyze_window_size,
             cache_enabled=_to_bool(
-                os.environ.get("IMAGE_UNDERSTANDING_CACHE_ENABLED"),
+                get_runtime_setting("IMAGE_UNDERSTANDING_CACHE_ENABLED"),
                 default=self.cache_enabled,
             ),
             retrieval_ab_mode=mode,
@@ -354,17 +379,17 @@ class Neo4jConfig:
         return cls(
             uri=str(_require_key(data, "uri", "neo4j_config.uri")),
             user=str(_require_key(data, "user", "neo4j_config.user")),
-            password=str(_require_key(data, "password", "neo4j_config.password")),
+            password=str(data.get("password", "")),
             liveness_check_timeout=liveness_check_timeout,
         )
 
     def apply_env_overrides(self) -> "Neo4jConfig":
         return replace(
             self,
-            uri=os.environ.get("NEO4J_URI", self.uri),
-            user=os.environ.get("NEO4J_USER", self.user),
-            password=os.environ.get("NEO4J_PASSWORD", self.password),
-            liveness_check_timeout=os.environ.get(
+            uri=_env_or_default("NEO4J_URI", self.uri),
+            user=_env_or_default("NEO4J_USER", self.user),
+            password=_env_or_default("NEO4J_PASSWORD", ""),
+            liveness_check_timeout=get_runtime_setting(
                 "NEO4J_LIVENESS_CHECK_TIMEOUT",
                 self.liveness_check_timeout,
             ),
@@ -374,7 +399,6 @@ class Neo4jConfig:
         return {
             "uri": self.uri,
             "user": self.user,
-            "password": self.password,
             "liveness_check_timeout": self.liveness_check_timeout,
         }
 
@@ -395,18 +419,18 @@ class PostgresConfig:
             host=str(_require_key(data, "host", "postgres_config.host")),
             port=int(_require_key(data, "port", "postgres_config.port")),
             user=str(_require_key(data, "user", "postgres_config.user")),
-            password=str(_require_key(data, "password", "postgres_config.password")),
+            password=str(data.get("password", "")),
             database=str(_require_key(data, "database", "postgres_config.database")),
         )
 
     def apply_env_overrides(self) -> "PostgresConfig":
         return replace(
             self,
-            host=os.environ.get("POSTGRES_HOST", self.host),
-            port=int(os.environ.get("POSTGRES_PORT", self.port)),
-            user=os.environ.get("POSTGRES_USER", self.user),
-            password=os.environ.get("POSTGRES_PASSWORD", self.password),
-            database=os.environ.get("POSTGRES_DB", self.database),
+            host=_env_or_default("POSTGRES_HOST", self.host),
+            port=int(_env_or_default("POSTGRES_PORT", str(self.port))),
+            user=_env_or_default("POSTGRES_USER", self.user),
+            password=_env_or_default("POSTGRES_PASSWORD", ""),
+            database=_env_or_default("POSTGRES_DB", self.database),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -414,7 +438,6 @@ class PostgresConfig:
             "host": self.host,
             "port": self.port,
             "user": self.user,
-            "password": self.password,
             "database": self.database,
         }
 
@@ -485,7 +508,7 @@ class PersonaConfig:
             raise ValueError("llm_flags_defaults 必须是字典")
         llm_flags_defaults = {str(k): bool(v) for k, v in llm_flags_defaults.items()}
         return cls(
-            api_key=str(_require_key(data, "api_key")),
+            api_key=str(data.get("api_key", "")),
             base_url=str(_require_key(data, "base_url")),
             model=str(_require_key(data, "model")),
             use_postgres=bool(_require_key(data, "use_postgres")),
@@ -521,7 +544,7 @@ class PersonaConfig:
     def apply_env_overrides(self) -> "PersonaConfig":
         use_postgres = self.use_postgres
         postgres_config = self.postgres_config
-        if os.environ.get("USE_POSTGRES", "").lower() == "true":
+        if str(get_runtime_setting("USE_POSTGRES", "")).lower() == "true":
             use_postgres = True
             if postgres_config is None:
                 raise ValueError("启用 USE_POSTGRES 时需要提供 postgres_config")
@@ -529,13 +552,17 @@ class PersonaConfig:
         elif postgres_config:
             postgres_config = postgres_config.apply_env_overrides()
 
+        api_key = _env_or_default("OPENAI_API_KEY", "")
+        if self.api_key and not api_key:
+            logging.warning("OPENAI_API_KEY is unset; move the LLM key from persona YAML into .env.dev/.env.prod")
+
         return replace(
             self,
-            api_key=self.api_key,
-            base_url=self.base_url,
-            model=self.model,
-            db_path=self.db_path,
-            db_url=self.db_url,
+            api_key=api_key,
+            base_url=_env_or_default("OPENAI_BASE_URL", self.base_url),
+            model=_env_or_default("OPENAI_MODEL", self.model),
+            db_path=_env_or_default("DB_PATH", self.db_path),
+            db_url=_env_or_default("DATABASE_URL", self.db_url),
             batch_interval=self.batch_interval,
             node_decay_rate=self.node_decay_rate,
             queue_history_size=self.queue_history_size,
@@ -559,7 +586,6 @@ class PersonaConfig:
 
     def to_dict(self) -> Dict[str, Any]:
         data = {
-            "api_key": self.api_key,
             "base_url": self.base_url,
             "model": self.model,
             "use_postgres": self.use_postgres,

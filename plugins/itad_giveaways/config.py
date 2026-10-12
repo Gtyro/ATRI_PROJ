@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Tuple
 
 import yaml
+
+from src.core.domain.runtime_settings import get_runtime_setting
 
 
 DEFAULT_API_URL = "https://api.isthereanydeal.com/giveaways/v1"
@@ -66,9 +67,9 @@ class ItadGiveawaysConfig:
         except (TypeError, ValueError):
             timeout_seconds = 15.0
 
-        configured_key = str(data.get("api_key", "")).strip()
+        configured_key = str(get_runtime_setting("ITAD_API_KEY", "") or "").strip()
         return cls(
-            api_key=os.getenv("ITAD_API_KEY", configured_key).strip(),
+            api_key=configured_key,
             api_url=str(data.get("api_url", DEFAULT_API_URL)).strip() or DEFAULT_API_URL,
             auto_enabled=_as_bool(data.get("auto_enabled", True), True),
             schedule_time=str(data.get("schedule_time", "09:00")).strip() or "09:00",

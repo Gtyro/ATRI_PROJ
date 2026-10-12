@@ -57,6 +57,7 @@ def _configured_log_level(config_path: Path) -> int:
 
 _environment = _runtime_environment()
 _config_path = _config_path(_environment)
+os.environ.setdefault("ENVIRONMENT", _environment)
 
 
 # 初始化日志系统

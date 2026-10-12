@@ -51,6 +51,6 @@ def check_config(config_path: str = CONFIG_PATH) -> bool:
     """检查配置是否正确。"""
     config = _ensure_config(config_path)
     if not config.api_key:
-        logging.warning("API密钥未设置，请在配置文件中设置api_key")
+        logging.warning("API密钥未设置，请在当前环境配置中设置 OPENAI_API_KEY")
         return False
     return True

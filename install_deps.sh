@@ -27,9 +27,9 @@ fi
 
 echo ""
 echo -e "${BLUE}依赖安装完成!${NC}"
-echo -e "${GREEN}请确保在data/memory_config.yaml中设置了正确的API密钥和端点.${NC}"
-echo -e "${GREEN}当前API端点: $(grep -o '"api_base": "[^"]*"' data/memory_config.yaml | cut -d'"' -f4)${NC}"
+echo -e "${GREEN}请将 OPENAI_API_KEY 配置在 .env.dev 或 .env.prod 中。${NC}"
+echo -e "${GREEN}模型、API端点及其他非敏感设置仍由 data/persona/persona.yaml 管理。${NC}"
 echo ""
 echo -e "${BLUE}下一步:${NC}"
-echo "1. 编辑 data/memory_config.yaml 设置你的API密钥"
-echo "2. 运行 poetry run python bot.py 启动机器人" 
+echo "1. 将所需密钥添加到当前运行模式对应的 .env 文件（可参考 .env.example）"
+echo "2. 运行 poetry run python scripts/manage_processes.py dev 启动机器人"

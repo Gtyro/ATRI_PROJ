@@ -89,7 +89,7 @@ def test_image_understanding_env_can_override_full_provider_list(monkeypatch):
     assert cfg.providers[1].api_key == "env-backup"
 
 
-def test_image_understanding_to_dict_only_serializes_providers():
+def test_image_understanding_to_dict_does_not_serialize_provider_secrets():
     cfg = ImageUnderstandingConfig.from_dict(
         {
             "providers": [
@@ -108,7 +108,31 @@ def test_image_understanding_to_dict_only_serializes_providers():
     assert "api_key" not in payload
     assert "base_url" not in payload
     assert "model" not in payload
-    assert payload["providers"][0]["api_key"] == "primary-key"
+    assert "api_key" not in payload["providers"][0]
+
+
+def test_image_understanding_loads_named_provider_keys_from_environment(monkeypatch):
+    monkeypatch.setenv("IMAGE_UNDERSTANDING_PRIMARY_API_KEY", "primary-env-key")
+    monkeypatch.setenv("IMAGE_UNDERSTANDING_BACKUP_API_KEY", "backup-env-key")
+    monkeypatch.delenv("IMAGE_UNDERSTANDING_API_KEY", raising=False)
+
+    cfg = ImageUnderstandingConfig.from_dict(
+        {
+            "providers": [
+                {"name": "primary", "api_key": "legacy-primary", "base_url": "https://p.example/v1"},
+                {"name": "backup", "api_key": "legacy-backup", "base_url": "https://b.example/v1"},
+            ]
+        }
+    ).apply_env_overrides()
+
+    assert [provider.api_key for provider in cfg.providers] == [
+        "primary-env-key",
+        "backup-env-key",
+    ]
+    assert cfg.to_dict()["providers"] == [
+        {"name": "primary", "base_url": "https://p.example/v1", "model": "gpt-5.4"},
+        {"name": "backup", "base_url": "https://b.example/v1", "model": "gpt-5.4"},
+    ]
 
 
 @pytest.mark.parametrize("mode", ["ab_split", "unknown"])

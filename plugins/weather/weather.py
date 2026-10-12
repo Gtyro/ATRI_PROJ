@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import (Bot, GroupMessageEvent, Message,
                                          MessageEvent, MessageSegment)
 from nonebot.params import CommandArg
 from src.adapters.nonebot.command_registry import register_command
+from src.core.domain.runtime_settings import get_runtime_setting
 
 
 # 加载配置文件
@@ -22,7 +23,7 @@ def load_config():
         return {}
 
 config = load_config()
-api_key = config.get('amap_weather_api_key', '')
+api_key = get_runtime_setting("AMAP_WEATHER_API_KEY", "") or ""
 
 # 检查API密钥
 if not api_key:

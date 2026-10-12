@@ -85,6 +85,12 @@ async def _load_recent_basic_messages(conv_id: str, limit: int) -> list[dict]:
     ]
 
 
+def _image_provider_runtime_payload(provider: Any) -> dict:
+    payload = provider.to_dict()
+    payload["api_key"] = getattr(provider, "api_key", payload.get("api_key", ""))
+    return payload
+
+
 async def assemble_persona_engine(
     config: PersonaConfig,
     group_config: Any,
@@ -176,7 +182,10 @@ async def assemble_persona_engine(
         timeout_seconds=image_cfg.timeout_seconds,
         max_tokens=image_cfg.max_tokens,
         detail=image_cfg.detail,
-        providers=[provider.to_dict() for provider in getattr(image_cfg, "providers", [])],
+        providers=[
+            _image_provider_runtime_payload(provider)
+            for provider in getattr(image_cfg, "providers", [])
+        ],
     )
     image_understander.set_usage_event_callback(_persist_module_metric_event)
     image_context_service = ImageContextService(

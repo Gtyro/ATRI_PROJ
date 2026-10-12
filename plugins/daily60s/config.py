@@ -7,6 +7,8 @@ from typing import Any, Dict
 
 import yaml
 
+from src.core.domain.runtime_settings import get_runtime_setting
+
 
 @dataclass(frozen=True)
 class Daily60sConfig:
@@ -32,7 +34,7 @@ class Daily60sConfig:
             logging.warning("daily60s config not found at %s", path)
 
         return cls(
-            alapi_key=str(data.get("alapi_key", "")).strip(),
+            alapi_key=str(get_runtime_setting("ALAPI_API_KEY", "") or "").strip(),
             api_url=str(data.get("api_url", "https://v3.alapi.cn/api/zaobao")).strip(),
             image_format=str(data.get("format", "image")).strip() or "image",
             auto_enabled=bool(data.get("auto_enabled", True)),

@@ -8,6 +8,7 @@ from .persona_config import (
     PostgresConfig,
 )
 from .plugin_policy import PluginPolicy
+from .runtime_settings import get_runtime_setting
 
 __all__ = [
     "PersonaConfig",
@@ -16,4 +17,5 @@ __all__ = [
     "ImageUnderstandingConfig",
     "ImageUnderstandingProviderConfig",
     "PluginPolicy",
+    "get_runtime_setting",
 ]

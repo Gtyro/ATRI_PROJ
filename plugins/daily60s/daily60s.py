@@ -304,7 +304,7 @@ def setup_scheduler() -> None:
 @daily60s_cmd.handle()
 async def handle_daily60s(event: MessageEvent):
     if not config.alapi_key:
-        await daily60s_cmd.finish("未配置 alapi key，请在 data/daily60s.yaml 中设置 alapi_key")
+        await daily60s_cmd.finish("未配置 ALAPI API key，请在当前环境配置中设置 ALAPI_API_KEY")
         return
 
     try:
