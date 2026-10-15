@@ -2,7 +2,7 @@
 
 基于 NoneBot2 + OpenAI + NapCatQQ 构建，具备类人记忆和自主对话能力的智能机器人
 
-[![NoneBot2](https://img.shields.io/badge/NoneBot2-2.0.0rc1-green.svg)](https://nonebot.dev/) [![License](https://img.shields.io/badge/license-AGPL3.0-FE7D37)](LICENSE) [![OneBot-v11](https://img.shields.io/badge/OneBot-v11-black)](https://onebot.dev/)
+[![NoneBot2](https://img.shields.io/badge/NoneBot2-2.0.0rc1-green.svg)](https://nonebot.dev/) ![License](https://img.shields.io/badge/license-AGPL3.0-FE7D37) [![OneBot-v11](https://img.shields.io/badge/OneBot-v11-black)](https://onebot.dev/)
 
 ## 🌟 核心功能
 
@@ -164,9 +164,10 @@ NapCat 安装或配置。入口自身捕获的 NapCat 输出仍会脱敏后写�
 
 | 主题          | 文档链接                                     |
 | ------------- | -------------------------------------------- |
-| 人格系统配置  | [persona模块文档](plugins/persona/README.md) |
+| 人格系统设计  | [系统设计文档](docs/design.md)               |
 | WebUI使用指南 | [WebUI文档](plugins/webui/README.md)         |
-| 前端质量进展  | [前端简历亮点与扩展](docs/frontend_resume_highlights.md) |
+| 前端开发说明  | [前端开发文档](plugins/webui/frontend/docs/DEVELOP.md) |
+| 方法弃用记录  | [按需查阅弃用台账](docs/DEPRECATIONS.md)     |
 
 ## 后台管理
 
