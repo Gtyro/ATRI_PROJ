@@ -226,7 +226,8 @@ def get_viewer_role(event: Event) -> Role:
     except Exception:
         user_id = ""
     superusers = get_driver().config.superusers or set()
-    if user_id and user_id in {str(value) for value in superusers}:
+    # Match the OneBot-specific and legacy IDs accepted by SUPERUSER.
+    if user_id and {user_id, f"onebot:{user_id}"} & {str(value) for value in superusers}:
         return "superuser"
     if isinstance(event, GroupMessageEvent):
         role = getattr(getattr(event, "sender", None), "role", None)
@@ -283,10 +284,13 @@ async def _resolve_plugin_status(
     if plugin not in policy_plugins:
         return True, "enabled"
 
-    # In private contexts, management commands/features for manageable plugins
-    # are determined by the target group rather than the current chat itself.
-    if not gid and viewer_role == "superuser" and required_role in {"admin", "superuser"}:
-        return True, "contextual"
+    if viewer_role == "superuser":
+        # Superusers can use every registered feature regardless of a group's
+        # enable switch. In a private chat, commands that manage a group's
+        # policy still depend on the selected target group.
+        if not gid and required_role in {"admin", "superuser"}:
+            return True, "contextual"
+        return True, "enabled"
 
     enabled = await _is_plugin_enabled(
         plugin,
@@ -347,6 +351,7 @@ async def list_commands_for_role(
     *,
     include_hidden: bool = False,
 ) -> List[CommandDisplay]:
+    viewer_role = get_viewer_role(event)
     gid = _get_group_id(event)
     policy_plugins = set(get_policy_plugins())
 
@@ -365,7 +370,7 @@ async def list_commands_for_role(
             enabled, status = await _resolve_plugin_status(
                 spec.plugin,
                 gid,
-                viewer_role=target_role,
+                viewer_role=viewer_role,
                 required_role=spec.role,
                 policy_plugins=policy_plugins,
             )
@@ -373,7 +378,7 @@ async def list_commands_for_role(
         else:
             status = "enabled" if plugin_enabled_cache[spec.plugin] else "disabled"
         enabled = plugin_enabled_cache[spec.plugin]
-        if enabled and target_role == "superuser" and not gid and spec.role in {"admin", "superuser"} and spec.plugin in policy_plugins:
+        if enabled and viewer_role == "superuser" and not gid and spec.role in {"admin", "superuser"} and spec.plugin in policy_plugins:
             status = "contextual"
 
         if enabled or target_role == "superuser":
@@ -483,6 +488,7 @@ async def list_auto_features_for_role(
     *,
     include_hidden: bool = False,
 ) -> List[AutoFeatureDisplay]:
+    viewer_role = get_viewer_role(event)
     gid = _get_group_id(event)
     policy_plugins = set(get_policy_plugins())
 
@@ -499,7 +505,7 @@ async def list_auto_features_for_role(
             enabled, status = await _resolve_plugin_status(
                 spec.plugin,
                 gid,
-                viewer_role=target_role,
+                viewer_role=viewer_role,
                 required_role=spec.role,
                 policy_plugins=policy_plugins,
             )
@@ -507,7 +513,7 @@ async def list_auto_features_for_role(
         else:
             status = "enabled" if plugin_enabled_cache[spec.plugin] else "disabled"
         enabled = plugin_enabled_cache[spec.plugin]
-        if enabled and target_role == "superuser" and not gid and spec.role in {"admin", "superuser"} and spec.plugin in policy_plugins:
+        if enabled and viewer_role == "superuser" and not gid and spec.role in {"admin", "superuser"} and spec.plugin in policy_plugins:
             status = "contextual"
 
         if enabled or target_role == "superuser":
