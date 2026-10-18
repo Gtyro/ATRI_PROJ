@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Protocol
 
+from .image_generation import ImageGenerationCallback
+
 
 class LLMProvider(Protocol):
     async def extract_topics(self, conv_id: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -21,6 +23,7 @@ class LLMProvider(Protocol):
         temperature: float = 0.7,
         long_memory_prompt: str = "",
         tool_choice: str = "required",
+        image_generation_callback: ImageGenerationCallback | None = None,
     ) -> str:
         ...
 

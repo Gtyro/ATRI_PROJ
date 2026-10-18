@@ -6,9 +6,13 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from ..domain import PersonaConfig
+from ..domain.image_generation_error import image_generation_failure_reply
 from ..ports import LongTermMemoryPort, ShortTermMemoryPort
+from ..ports.image_generation import ImageGeneratorPort
+from .image_generation_service import ImageGenerationTurn
 from .persona_policy_flags import (
     LLM_ACTIVE_REPLY_ENABLED_KEY,
+    LLM_KEYWORD_EXTRACT_ENABLED_KEY,
     LLM_PASSIVE_REPLY_ENABLED_KEY,
     LLM_TOPIC_EXTRACT_ENABLED_KEY,
     resolve_llm_flags,
@@ -33,6 +37,7 @@ class ConversationService:
         reply_callback: Optional[Callable] = None,
         plugin_policy_service: Optional[PluginPolicyService] = None,
         image_context_service: Optional[Any] = None,
+        image_generator: Optional[ImageGeneratorPort] = None,
     ) -> None:
         self.short_term = short_term
         self.long_term = long_term
@@ -44,6 +49,7 @@ class ConversationService:
         self.reply_callback = reply_callback
         self.plugin_policy_service = plugin_policy_service
         self.image_context_service = image_context_service
+        self.image_generator = image_generator
 
     def _queue_history_size(self) -> int:
         if isinstance(self.config, PersonaConfig):
@@ -549,19 +555,30 @@ class ConversationService:
             logging.error(f"会话 {conv_id} 调整下次处理时间失败: {e}")
             raise e
 
+        image_turn = None
+        reply_kwargs = {}
+        if self.image_generator is not None and self.reply_callback is not None:
+            image_turn = ImageGenerationTurn(self.image_generator, conv_id)
+            reply_kwargs["image_generation_callback"] = image_turn.generate
         reply_content = await self.msgprocessor.generate_reply(
             conv_id,
             recent_messages,
             temperature=0.7,
             long_memory_prompt=long_memory_prompt,
             tool_choice=tool_choice,
+            **reply_kwargs,
         )
+        images = image_turn.images if image_turn is not None else []
+        if image_turn is not None and image_turn.result is not None:
+            if image_turn.result["status"] == "error":
+                reply_content = image_generation_failure_reply(image_turn.result["error_code"])
         logging.info(f"会话 {conv_id} 生成回复完成")
         logging.info(f"会话 {conv_id} 回复内容: {reply_content}")
 
         bot_message = None
-        if reply_content:
-            bot_message = await self.short_term.add_bot_message(conv_id, reply_content)
+        if reply_content or images:
+            history_content = reply_content + (" [图片]" if images else "")
+            bot_message = await self.short_term.add_bot_message(conv_id, history_content.strip())
             logging.info(f"会话 {conv_id} 添加机器人自己的消息到历史完成")
 
         split_replies = self._split_reply_content(reply_content)
@@ -569,7 +586,9 @@ class ConversationService:
             "reply_content": split_replies,
             "user_id": user_id,
         }
-        if reply_content and self.reply_callback:
+        if images:
+            reply_dict["images"] = images
+        if (reply_content or images) and self.reply_callback:
             callback_result = await self.reply_callback(conv_id, reply_dict)
             message_ids = self._normalize_onebot_message_ids(callback_result)
             await self._store_outbound_onebot_message_ids(bot_message, message_ids)

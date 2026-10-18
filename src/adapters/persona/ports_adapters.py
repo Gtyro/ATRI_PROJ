@@ -3,6 +3,7 @@
 from typing import Any, Dict, List
 
 from src.core.ports import LLMProvider, LongTermMemoryPort, ShortTermMemoryPort
+from src.core.ports.image_generation import ImageGenerationCallback
 
 
 class ShortTermMemoryAdapter(ShortTermMemoryPort):
@@ -72,13 +73,18 @@ class LLMProviderAdapter(LLMProvider):
         temperature: float = 0.7,
         long_memory_prompt: str = "",
         tool_choice: str = "required",
+        image_generation_callback: ImageGenerationCallback | None = None,
     ) -> str:
+        kwargs = {}
+        if image_generation_callback is not None:
+            kwargs["image_generation_callback"] = image_generation_callback
         return await self._impl.generate_response(
             conv_id=conv_id,
             messages=messages,
             temperature=temperature,
             long_memory_prompt=long_memory_prompt,
             tool_choice=tool_choice,
+            **kwargs,
         )
 
     async def select_memory_candidates(

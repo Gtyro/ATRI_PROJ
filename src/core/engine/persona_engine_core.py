@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ..domain import PersonaConfig
+from ..ports.image_generation import ImageGeneratorPort
 from ..services.conversation_service import ConversationService
 from ..services.memory_service import MemoryService
 from ..services.maintenance_service import MaintenanceService
@@ -38,6 +39,7 @@ class PersonaEngineCore:
         plugin_policy_service: Optional[PluginPolicyService] = None,
         image_context_service: Optional[Any] = None,
         basic_message_loader: Optional[Any] = None,
+        image_generator: Optional[ImageGeneratorPort] = None,
     ) -> None:
         self.config = config
         self.plugin_name = plugin_name
@@ -67,6 +69,7 @@ class PersonaEngineCore:
             reply_callback=self.reply_callback,
             plugin_policy_service=self.plugin_policy_service,
             image_context_service=self.image_context_service,
+            image_generator=image_generator,
         )
         self.reply_service = ReplyService(
             self.short_term,

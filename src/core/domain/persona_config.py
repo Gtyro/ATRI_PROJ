@@ -74,6 +74,29 @@ def _parse_env_float(env_key: str, default: float) -> float:
         raise ValueError(f"{env_key} 必须是数字") from exc
 
 
+def _parse_string_list(value: Any, *, source: str) -> List[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"{source} 必须是字符串数组")
+    items: List[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{source} 只能包含非空字符串")
+        items.append(item.strip())
+    return items
+
+
+def _parse_env_string_list(env_key: str, default: List[str]) -> List[str]:
+    raw_value = get_runtime_setting(env_key)
+    if raw_value is None:
+        return list(default)
+    try:
+        return _parse_string_list(yaml.safe_load(raw_value), source=env_key)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{env_key} 必须是有效的 YAML/JSON 字符串数组") from exc
+
+
 @dataclass
 class ImageUnderstandingProviderConfig:
     name: str = ""
@@ -363,6 +386,100 @@ class ImageUnderstandingConfig:
 
 
 @dataclass
+class ImageGenerationConfig:
+    """Configuration for text-to-image generation.
+
+    Provider credentials intentionally come from runtime environment settings;
+    the YAML file only carries safe defaults such as endpoint and model.
+    """
+
+    enabled: bool = True
+    api_key: str = ""
+    base_url: str = "https://openrouter.ai/api/v1"
+    model: str = "qwen/qwen-image-3-pro"
+    timeout_seconds: float = 120.0
+    endpoint_path: str = "/images/generations"
+    reference_endpoint_path: str = "/images/edits"
+    reference_images: List[str] = field(default_factory=list)
+    max_retries: int = 1
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]] = None) -> "ImageGenerationConfig":
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            raise ValueError("image_generation 必须是字典")
+        return cls(
+            enabled=_to_bool(data.get("enabled"), default=True),
+            api_key=str(data.get("api_key", "") or "").strip(),
+            base_url=str(data.get("base_url", "https://openrouter.ai/api/v1") or "").strip(),
+            model=str(data.get("model", "qwen/qwen-image-3-pro") or "").strip(),
+            timeout_seconds=float(data.get("timeout_seconds", 120.0)),
+            endpoint_path=str(data.get("endpoint_path", "/images/generations") or "").strip(),
+            reference_endpoint_path=str(
+                data.get("reference_endpoint_path", "/images/edits") or ""
+            ).strip(),
+            reference_images=_parse_string_list(
+                data.get("reference_images"),
+                source="image_generation.reference_images",
+            ),
+            max_retries=max(0, int(data.get("max_retries", 1))),
+        )
+
+    def apply_env_overrides(self) -> "ImageGenerationConfig":
+        # Keep a separate generation key when supplied, while allowing an
+        # existing image-understanding key to be reused for a frictionless
+        # setup when both services share credentials.
+        configured_key = get_runtime_setting("IMAGE_GENERATION_API_KEY")
+        if configured_key is None:
+            configured_key = get_runtime_setting("IMAGE_UNDERSTANDING_API_KEY")
+        if configured_key is None:
+            configured_key = get_runtime_setting("IMAGE_UNDERSTANDING_PRIMARY_API_KEY")
+        api_key = str(configured_key or "").strip()
+        if self.api_key and not api_key:
+            logging.warning(
+                "IMAGE_GENERATION_API_KEY is unset; move the image generation key "
+                "from persona YAML into .env.dev/.env.prod"
+            )
+        return replace(
+            self,
+            enabled=_to_bool(
+                get_runtime_setting("IMAGE_GENERATION_ENABLED"),
+                default=self.enabled,
+            ),
+            api_key=api_key,
+            base_url=_env_or_default("IMAGE_GENERATION_BASE_URL", self.base_url),
+            model=_env_or_default("IMAGE_GENERATION_MODEL", self.model),
+            timeout_seconds=_parse_env_float(
+                "IMAGE_GENERATION_TIMEOUT_SECONDS",
+                self.timeout_seconds,
+            ),
+            endpoint_path=_env_or_default("IMAGE_GENERATION_ENDPOINT_PATH", self.endpoint_path),
+            reference_endpoint_path=_env_or_default(
+                "IMAGE_GENERATION_REFERENCE_ENDPOINT_PATH",
+                self.reference_endpoint_path,
+            ),
+            reference_images=_parse_env_string_list(
+                "IMAGE_GENERATION_REFERENCE_IMAGES",
+                self.reference_images,
+            ),
+            max_retries=max(0, _parse_env_int("IMAGE_GENERATION_MAX_RETRIES", self.max_retries)),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "base_url": self.base_url,
+            "model": self.model,
+            "timeout_seconds": self.timeout_seconds,
+            "endpoint_path": self.endpoint_path,
+            "reference_endpoint_path": self.reference_endpoint_path,
+            "reference_images": list(self.reference_images),
+            "max_retries": self.max_retries,
+        }
+
+
+@dataclass
 class Neo4jConfig:
     uri: str
     user: str
@@ -460,6 +577,7 @@ class PersonaConfig:
     neo4j_config: Neo4jConfig
     llm_flags_defaults: Dict[str, bool]
     image_understanding: ImageUnderstandingConfig = field(default_factory=ImageUnderstandingConfig)
+    image_generation: ImageGenerationConfig = field(default_factory=ImageGenerationConfig)
     postgres_config: Optional[PostgresConfig] = None
     extras: Dict[str, Any] = field(default_factory=dict)
 
@@ -498,11 +616,13 @@ class PersonaConfig:
             "postgres_config",
             "llm_flags_defaults",
             "image_understanding",
+            "image_generation",
         }}
         postgres_config = None
         if "postgres_config" in data and data.get("postgres_config") is not None:
             postgres_config = PostgresConfig.from_dict(data.get("postgres_config"))
         image_understanding = ImageUnderstandingConfig.from_dict(data.get("image_understanding"))
+        image_generation = ImageGenerationConfig.from_dict(data.get("image_generation"))
         llm_flags_defaults = data.get("llm_flags_defaults")
         if not isinstance(llm_flags_defaults, dict):
             raise ValueError("llm_flags_defaults 必须是字典")
@@ -524,6 +644,7 @@ class PersonaConfig:
             neo4j_config=Neo4jConfig.from_dict(_require_key(data, "neo4j_config")),
             llm_flags_defaults=llm_flags_defaults,
             image_understanding=image_understanding,
+            image_generation=image_generation,
             postgres_config=postgres_config,
             extras=extras,
         )
@@ -575,6 +696,7 @@ class PersonaConfig:
             postgres_config=postgres_config,
             llm_flags_defaults=self.llm_flags_defaults,
             image_understanding=self.image_understanding.apply_env_overrides(),
+            image_generation=self.image_generation.apply_env_overrides(),
             extras=self.extras,
         )
 
@@ -601,6 +723,7 @@ class PersonaConfig:
             "neo4j_config": self.neo4j_config.to_dict(),
             "llm_flags_defaults": self.llm_flags_defaults,
             "image_understanding": self.image_understanding.to_dict(),
+            "image_generation": self.image_generation.to_dict(),
         }
         if self.postgres_config:
             data["postgres_config"] = self.postgres_config.to_dict()

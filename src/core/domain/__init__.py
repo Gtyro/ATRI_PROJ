@@ -3,6 +3,7 @@
 from .persona_config import (
     ImageUnderstandingConfig,
     ImageUnderstandingProviderConfig,
+    ImageGenerationConfig,
     Neo4jConfig,
     PersonaConfig,
     PostgresConfig,
@@ -16,6 +17,7 @@ __all__ = [
     "Neo4jConfig",
     "ImageUnderstandingConfig",
     "ImageUnderstandingProviderConfig",
+    "ImageGenerationConfig",
     "PluginPolicy",
     "get_runtime_setting",
 ]

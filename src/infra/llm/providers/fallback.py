@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from src.core.ports.image_generation import ImageGenerationCallback
+
 
 class FallbackLLMProvider:
     """按顺序尝试多个LLM Provider的回退实现。"""
@@ -64,7 +66,11 @@ class FallbackLLMProvider:
         temperature: float = 0.7,
         long_memory_prompt: str = "",
         tool_choice: str = "required",
+        image_generation_callback: ImageGenerationCallback | None = None,
     ) -> str:
+        kwargs = {}
+        if image_generation_callback is not None:
+            kwargs["image_generation_callback"] = image_generation_callback
         return await self._call_with_fallback(
             "generate_response",
             "",
@@ -73,6 +79,7 @@ class FallbackLLMProvider:
             temperature=temperature,
             long_memory_prompt=long_memory_prompt,
             tool_choice=tool_choice,
+            **kwargs,
         )
 
     async def select_memory_candidates(

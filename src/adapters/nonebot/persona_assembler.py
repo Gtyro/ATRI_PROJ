@@ -19,6 +19,7 @@ from src.infra.db.neo4j.unavailable import (
 from src.infra.db.tortoise.message_repository import MessageRepository
 from src.infra.db.tortoise.module_metrics_event_writer import ModuleMetricEventWriter
 from src.infra.llm.providers import get_llm_provider_registry
+from src.infra.llm.providers.image_generator import ImageGenerator
 from src.infra.llm.providers.image_understander import ImageUnderstander
 from src.infra.memory import (
     DecayManager,
@@ -196,6 +197,26 @@ async def assemble_persona_engine(
         module_metric_event_callback=_persist_module_metric_event,
     )
 
+    generation_cfg = config.image_generation
+    image_generator = (
+        ImageGenerator(
+            api_key=generation_cfg.api_key,
+            base_url=generation_cfg.base_url,
+            model=generation_cfg.model,
+            timeout_seconds=generation_cfg.timeout_seconds,
+            endpoint_path=getattr(generation_cfg, "endpoint_path", "/images/generations"),
+            reference_endpoint_path=getattr(
+                generation_cfg,
+                "reference_endpoint_path",
+                "/images/edits",
+            ),
+            reference_image_paths=getattr(generation_cfg, "reference_images", ()),
+            max_retries=getattr(generation_cfg, "max_retries", 1),
+        )
+        if generation_cfg.enabled
+        else None
+    )
+
     neo4j_available = is_memory_repo_available(memory_repo)
     if neo4j_available:
         long_term_impl = LongTermMemory(memory_repo, config)
@@ -234,6 +255,7 @@ async def assemble_persona_engine(
         plugin_policy_service=plugin_policy_service,
         image_context_service=image_context_service,
         basic_message_loader=_load_recent_basic_messages,
+        image_generator=image_generator,
     )
     if hasattr(llm_impl, "set_memory_retrieval_callback"):
         llm_impl.set_memory_retrieval_callback(engine.retrieve_memory_payload)

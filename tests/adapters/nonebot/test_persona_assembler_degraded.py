@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from src.adapters.nonebot import persona_assembler
 from src.infra.db.neo4j.unavailable import UnavailableMemoryRepository
 
@@ -68,7 +70,8 @@ class _ImageUnderstanderStub:
         self.callback = callback
 
 
-def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monkeypatch):
+@pytest.mark.parametrize("generation_enabled", [False, True])
+def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monkeypatch, generation_enabled):
     registry = _RegistryStub()
 
     async def _fake_initialize_neo4j(config, allow_unavailable=False):
@@ -92,6 +95,17 @@ def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monke
         api_key="test-key",
         extras={},
         node_decay_rate=0.1,
+        image_generation=SimpleNamespace(
+            enabled=generation_enabled,
+            api_key="generation-test-key",
+            base_url="https://generation.test/v1",
+            model="generation-test-model",
+            timeout_seconds=45.0,
+            endpoint_path="/images/generations",
+            reference_endpoint_path="/images/edits",
+            reference_images=["data/persona/references/character.png"],
+            max_retries=1,
+        ),
         image_understanding=SimpleNamespace(
             api_key="ik",
             base_url="https://img.example.com",
@@ -128,3 +142,15 @@ def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monke
     assert "降级模式" in status_reply
     assert registry.provider.memory_retrieval_callback is not None
     assert engine.image_context_service is not None
+    generator = engine.conversation_service.image_generator
+    if generation_enabled:
+        assert generator.api_key == "generation-test-key"
+        assert generator.base_url == "https://generation.test/v1"
+        assert generator.model == "generation-test-model"
+        assert generator.timeout_seconds == 45.0
+        assert generator.endpoint_path == "/images/generations"
+        assert generator.reference_endpoint_path == "/images/edits"
+        assert generator.reference_image_paths == ("data/persona/references/character.png",)
+        assert generator.max_retries == 1
+    else:
+        assert generator is None

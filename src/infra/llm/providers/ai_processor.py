@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from src.core.message_history_formatter import format_message_history_entry
+from src.core.domain.image_generation_error import ImageGenerationError, image_generation_failure_reply
+from src.core.ports.image_generation import ImageGenerationCallback
 from ..prompts import (
     MEMORY_SELECTION_PROMPT,
     REPLY_HISTORY_KEYWORDS_PROMPT,
@@ -372,6 +374,32 @@ class AIProcessor:
                 raise
             return []
 
+    async def _retrieve_tool_memory(self, query: str, conv_id: str) -> str:
+        logging.info(f"检索记忆: {query}")
+        if not self.memory_retrieval_callback:
+            return "没有可用的记忆检索服务"
+        retrieval_payload = self._normalize_memory_payload(
+            await self.memory_retrieval_callback(query, user_id=None, conv_id=conv_id)
+        )
+        memory_context = retrieval_payload["memory_context"]
+        candidates = retrieval_payload["candidates"]
+        if candidates:
+            selected_ids = await self.select_memory_candidates(query=query, candidates=candidates)
+            if selected_ids:
+                selected_payload = self._normalize_memory_payload(
+                    await self.memory_retrieval_callback(
+                        query,
+                        user_id=None,
+                        conv_id=conv_id,
+                        selected_ids=selected_ids,
+                        reinforce_selected=True,
+                    )
+                )
+                if selected_payload["memory_context"]:
+                    memory_context = selected_payload["memory_context"]
+        logging.info(f"记忆文本: {memory_context}")
+        return memory_context or "没有检索到相关记忆"
+
     async def generate_response(
         self,
         conv_id: str,
@@ -379,6 +407,7 @@ class AIProcessor:
         temperature: float = 0.7,
         long_memory_prompt: str = "",
         tool_choice: str = "required",
+        image_generation_callback: ImageGenerationCallback | None = None,
     ) -> str:
         """生成回复
 
@@ -431,6 +460,23 @@ class AIProcessor:
             system_prompt = fallback_system_prompt
         if long_memory_prompt:
             system_prompt += f"\n{long_memory_prompt}"
+        if image_generation_callback is not None:
+            system_prompt += (
+                "\n用户在当前这一轮明确要求画图、照片或自拍时，必须调用 generate_image，"
+                "不能只口头答应，也不能只检索记忆。根据角色设定和当前上下文写完整绘图描述；"
+                "自拍必须从当前角色提示文件中提取并逐项展开固定视觉特征（发色、瞳色、发型、"
+                "服装和标志性配饰），不能只写角色名、昵称或‘按设定’；不要描述年龄、未成年/成年身份、"
+                "学生身份或 JK；还要包含场景和自拍构图。"
+                "角色姓名只是可选的辅助身份标签；即使提供中文名、日文名或罗马字，也绝不能替代具体外观描述。"
+                "当图片主体是当前角色本人（例如自拍、自画像）时，必须将 use_character_reference 设为 true；"
+                "用户要求画其他人、物品或场景时设为 false，不能混用当前角色的参考图。"
+                "不要把其他人格文件或群友身份混入描述。每轮最多生成一张图片。"
+                "工具成功后图片会随最终回复自动发送，只说简短自然的话；"
+                "不要说正在生成，不要在工具成功前声称已经画好或发出，"
+                "工具失败必须如实说明。不要因为历史消息的绘图请求再次生成。\n"
+            )
+        else:
+            system_prompt += "\n当前会话不能生成或发送新图片，不要承诺画图、拍照或发送图片。\n"
 
         if self._llm_client is None:
             self._init_client()
@@ -454,6 +500,34 @@ class AIProcessor:
                 },
             },
         ]
+        if normalized_tool_choice == "none":
+            tools = []
+        if image_generation_callback is not None:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "generate_image",
+                    "description": "为当前用户请求生成一张图片并附在最终回复中；自拍需遵循角色外貌设定。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "prompt": {
+                                "type": "string",
+                                "description": (
+                                    "完整绘图描述，包含主体外貌、服装、场景、构图和画风；不要描述年龄、"
+                                    "未成年/成年身份、学生身份或 JK。"
+                                    "角色姓名只能作为辅助身份标签，不能替代具体外观描述。"
+                                ),
+                            },
+                            "use_character_reference": {
+                                "type": "boolean",
+                                "description": "图片主体是当前角色本人时为 true；其他主体为 false。",
+                            },
+                        },
+                        "required": ["prompt", "use_character_reference"],
+                    },
+                },
+            })
 
         # 将消息转换为API格式（不包含system，交由LLMClient统一注入）
         api_messages = []
@@ -466,7 +540,7 @@ class AIProcessor:
         try:
             final_params = LLMCallParams(temperature=temperature, max_tokens=1200)
 
-            if normalized_tool_choice == "none":
+            if not tools:
                 content = await self._llm_client.chat(
                     api_messages,
                     params=final_params,
@@ -475,82 +549,96 @@ class AIProcessor:
                 )
             else:
                 tool_params = LLMCallParams(temperature=0.2, max_tokens=1200)
-                tool_response = await self._llm_client.chat_with_tools(
-                    api_messages,
-                    tools=tools,
-                    params=tool_params,
-                    tool_choice=normalized_tool_choice,
-                    system_prompt=system_prompt,
-                    operation="memory_tool_call",
-                )
                 final_messages = api_messages.copy()
-                memory_context = ""
-                if tool_response.tool_calls:
+                content = ""
+                had_tool_calls = False
+                image_called = False
+                image_failed = False
+                image_error_code = "unknown"
+                allowed_tools = {tool["function"]["name"] for tool in tools}
+                # Keep image tools available after a memory lookup, but bound the loop.
+                rounds = 3 if image_generation_callback is not None else 1
+                for round_index in range(rounds):
+                    choice = normalized_tool_choice if round_index == 0 else "auto"
+                    if choice == "none":
+                        choice = "auto"  # Hybrid disables memory tools, not image generation.
+                    tool_response = await self._llm_client.chat_with_tools(
+                        final_messages,
+                        tools=tools,
+                        params=tool_params,
+                        tool_choice=choice,
+                        system_prompt=system_prompt,
+                        operation=(
+                            "persona_tool_call" if image_generation_callback is not None
+                            else "memory_tool_call"
+                        ),
+                    )
+                    if not tool_response.tool_calls:
+                        if image_generation_callback is not None:
+                            content = str(tool_response.message.get("content") or "")
+                        break
+                    had_tool_calls = True
                     final_messages.append(tool_response.message)
                     for tool_call in tool_response.tool_calls:
-                        if tool_call.name != "retrieve_memories":
-                            continue
                         try:
+                            if tool_call.name not in allowed_tools:
+                                if tool_call.name == "generate_image":
+                                    raise ImageGenerationError("绘图工具未在当前会话授权", code="tool_unavailable")
+                                raise ValueError("工具未在当前会话授权")
                             function_args = json.loads(tool_call.arguments)
-                            query = function_args.get("query", "")
-                            logging.info(f"检索记忆: {query}")
-
-                            if self.memory_retrieval_callback:
-                                retrieval_payload = self._normalize_memory_payload(
-                                    await self.memory_retrieval_callback(
-                                        query,
-                                        user_id=None,
-                                        conv_id=conv_id,
-                                    )
+                            if not isinstance(function_args, dict):
+                                raise ValueError("工具参数必须是对象")
+                            if tool_call.name == "retrieve_memories":
+                                result = await self._retrieve_tool_memory(
+                                    function_args.get("query", ""), conv_id,
                                 )
-                                memory_context = retrieval_payload["memory_context"]
-                                candidates = retrieval_payload["candidates"]
-                                if candidates:
-                                    selected_ids = await self.select_memory_candidates(
-                                        query=query,
-                                        candidates=candidates,
-                                    )
-                                    if selected_ids:
-                                        selected_payload = self._normalize_memory_payload(
-                                            await self.memory_retrieval_callback(
-                                                query,
-                                                user_id=None,
-                                                conv_id=conv_id,
-                                                selected_ids=selected_ids,
-                                                reinforce_selected=True,
-                                            )
-                                        )
-                                        if selected_payload["memory_context"]:
-                                            memory_context = selected_payload["memory_context"]
+                            else:
+                                image_called = True
+                                prompt = function_args.get("prompt")
+                                if not isinstance(prompt, str) or not prompt.strip():
+                                    raise ImageGenerationError("绘图描述不能为空", code="tool_arguments")
+                                use_character_reference = bool(
+                                    function_args.get("use_character_reference", False)
+                                )
+                                image_result = await image_generation_callback(
+                                    prompt,
+                                    use_character_reference,
+                                )
+                                image_failed = image_result.get("status") != "ok"
+                                if image_failed:
+                                    image_error_code = image_result.get("error_code", "unknown")
+                                result = json.dumps(image_result, ensure_ascii=False)
+                        except Exception as exc:
+                            logging.warning(
+                                "Persona 工具执行失败: conv_id=%s tool=%s error=%s",
+                                conv_id, tool_call.name, type(exc).__name__,
+                            )
+                            if tool_call.name == "generate_image":
+                                image_failed = True
+                                if isinstance(exc, ImageGenerationError):
+                                    image_error_code = exc.code
+                                    logging.warning("Persona 绘图工具失败: %s", exc.diagnostic_summary())
+                                elif isinstance(exc, (ValueError, TypeError, AttributeError)):
+                                    image_error_code = "tool_arguments"
+                                else:
+                                    image_error_code = "internal_error"
+                            result = "工具执行失败，未完成请求，不得声称成功"
+                        final_messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": result,
+                        })
+                    if image_called or image_failed:
+                        break
 
-                                logging.info(f"记忆文本: {memory_context}")
-                                final_messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": memory_context,
-                                })
-                        except Exception as e:
-                            logging.error(f"处理记忆检索工具调用失败: {e}")
-                            final_messages.append({
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": "记忆检索失败",
-                            })
-
-                if memory_context:
+                if image_failed:
+                    content = image_generation_failure_reply(image_error_code)
+                elif not content:
                     content = await self._llm_client.chat(
                         final_messages,
                         params=final_params,
                         system_prompt=system_prompt,
-                        operation="final_response",
-                    )
-                else:
-                    logging.warning("没有记忆上下文，function calling失败")
-                    content = await self._llm_client.chat(
-                        api_messages,
-                        params=final_params,
-                        system_prompt=system_prompt,
-                        operation="fallback_response",
+                        operation="final_response" if had_tool_calls else "fallback_response",
                     )
 
             # 对回复内容进行处理

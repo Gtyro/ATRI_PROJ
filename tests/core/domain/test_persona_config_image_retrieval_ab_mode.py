@@ -1,6 +1,13 @@
 import pytest
 
-from src.core.domain.persona_config import ImageUnderstandingConfig
+import src.core.domain.runtime_settings as runtime_settings
+from src.core.domain.persona_config import ImageGenerationConfig, ImageUnderstandingConfig
+
+
+def _use_empty_runtime_env(monkeypatch, tmp_path):
+    (tmp_path / ".env.prod").write_text("", encoding="utf-8")
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setattr(runtime_settings, "PROJECT_ROOT", tmp_path)
 
 
 def test_image_understanding_accepts_hybrid_mode():
@@ -150,3 +157,44 @@ def test_image_understanding_rejects_unsupported_detail(detail):
 def test_image_understanding_rejects_invalid_providers_shape():
     with pytest.raises(ValueError):
         ImageUnderstandingConfig.from_dict({"providers": {"name": "primary"}})
+
+
+def test_image_generation_uses_yaml_defaults_and_runtime_overrides(monkeypatch, tmp_path):
+    _use_empty_runtime_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("IMAGE_GENERATION_API_KEY", "generation-key")
+    monkeypatch.setenv("IMAGE_GENERATION_MODEL", "provider/image-model")
+    monkeypatch.setenv("IMAGE_GENERATION_TIMEOUT_SECONDS", "90")
+    monkeypatch.setenv("IMAGE_GENERATION_ENDPOINT_PATH", "/images")
+    monkeypatch.setenv("IMAGE_GENERATION_REFERENCE_ENDPOINT_PATH", "/images/edits-v2")
+    monkeypatch.setenv("IMAGE_GENERATION_REFERENCE_IMAGES", '["data/references/one.png"]')
+    monkeypatch.setenv("IMAGE_GENERATION_MAX_RETRIES", "2")
+
+    config = ImageGenerationConfig.from_dict(
+        {
+            "enabled": True,
+            "base_url": "https://yaml.example/v1",
+            "model": "yaml-model",
+            "timeout_seconds": 120,
+        }
+    ).apply_env_overrides()
+
+    assert config.enabled is True
+    assert config.api_key == "generation-key"
+    assert config.base_url == "https://yaml.example/v1"
+    assert config.model == "provider/image-model"
+    assert config.timeout_seconds == 90
+    assert config.endpoint_path == "/images"
+    assert config.reference_endpoint_path == "/images/edits-v2"
+    assert config.reference_images == ["data/references/one.png"]
+    assert config.max_retries == 2
+    assert "api_key" not in config.to_dict()
+
+
+def test_image_generation_can_reuse_image_understanding_key(monkeypatch, tmp_path):
+    _use_empty_runtime_env(monkeypatch, tmp_path)
+    monkeypatch.delenv("IMAGE_GENERATION_API_KEY", raising=False)
+    monkeypatch.setenv("IMAGE_UNDERSTANDING_API_KEY", "openrouter-key")
+
+    config = ImageGenerationConfig.from_dict({}).apply_env_overrides()
+
+    assert config.api_key == "openrouter-key"
