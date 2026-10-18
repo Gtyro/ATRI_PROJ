@@ -2,6 +2,8 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from src.core.services.conversation_service import ConversationService
+from src.core.events import InMemoryEventBus, MESSAGE_RECEIVED
+from src.core.services.message_ingestor import MessageIngestor
 from src.core.services.message_processor import MessageProcessor
 from src.infra.llm.providers.fallback import FallbackLLMProvider
 
@@ -13,6 +15,9 @@ class _ShortTermStub:
 
     async def get_unprocessed_messages(self, conv_id: str, limit: int) -> List[Dict[str, Any]]:
         return list(self._messages)
+
+    async def add_message(self, message: Dict[str, Any]) -> None:
+        self._messages.append(dict(message))
 
     async def mark_processed(self, conv_id: str, topics: List[Dict[str, Any]]) -> int:
         return 0
@@ -57,14 +62,22 @@ class _Policy:
 
 
 class _PolicyServiceStub:
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        *,
+        enabled: bool = True,
+        ingest_enabled: bool = True,
+    ):
         self._policy = _Policy(config)
+        self.enabled = enabled
+        self.ingest_enabled = ingest_enabled
 
     async def is_enabled(self, group_id: str, plugin_name: str) -> bool:
-        return True
+        return self.enabled
 
     async def is_ingest_enabled(self, group_id: str, plugin_name: str) -> bool:
-        return True
+        return self.ingest_enabled
 
     async def get_policy(self, group_id: str, plugin_name: str) -> _Policy:
         return self._policy
@@ -134,6 +147,9 @@ def _build_service(
     *,
     primary: _ProviderStub,
     secondary: _ProviderStub,
+    policy_config: Optional[Dict[str, Any]] = None,
+    group_enabled: bool = True,
+    ingest_enabled: bool = True,
 ) -> tuple[ConversationService, FallbackLLMProvider]:
     fallback_provider = FallbackLLMProvider([primary, secondary])
     msgprocessor = MessageProcessor(
@@ -166,11 +182,14 @@ def _build_service(
             },
         },
         plugin_policy_service=_PolicyServiceStub(
-            {
+            policy_config
+            or {
                 "llm_topic_extract_enabled": False,
                 "llm_active_reply_enabled": False,
                 "llm_passive_reply_enabled": True,
-            }
+            },
+            enabled=group_enabled,
+            ingest_enabled=ingest_enabled,
         ),
         image_context_service=None,
     )
@@ -179,6 +198,116 @@ def _build_service(
 
 def _resolve_reply_provider(primary: _ProviderStub, secondary: _ProviderStub) -> _ProviderStub:
     return primary if primary.generate_calls > 0 else secondary
+
+
+def test_superuser_private_message_bypasses_passive_reply_switch():
+    primary = _ProviderStub(name="primary")
+    secondary = _ProviderStub(name="secondary")
+    service, _ = _build_service(
+        primary=primary,
+        secondary=secondary,
+        policy_config={
+            "llm_topic_extract_enabled": False,
+            "llm_active_reply_enabled": False,
+            "llm_passive_reply_enabled": False,
+        },
+    )
+
+    ordinary_result = asyncio.run(
+        service.process_conversation("private_10001", user_id="10001", is_direct=True)
+    )
+    superuser_result = asyncio.run(
+        service.process_conversation(
+            "private_10001",
+            user_id="10001",
+            is_direct=True,
+            is_superuser=True,
+        )
+    )
+
+    assert ordinary_result is None
+    assert superuser_result is not None
+    assert superuser_result["reply_content"] == ["收到"]
+
+
+def test_superuser_marker_survives_message_ingestor_path():
+    primary = _ProviderStub(name="primary")
+    secondary = _ProviderStub(name="secondary")
+    service, _ = _build_service(
+        primary=primary,
+        secondary=secondary,
+        policy_config={
+            "llm_topic_extract_enabled": False,
+            "llm_active_reply_enabled": False,
+            "llm_passive_reply_enabled": False,
+        },
+        group_enabled=False,
+        ingest_enabled=False,
+    )
+
+    event_bus = InMemoryEventBus()
+    ingestor = MessageIngestor(event_bus, source="nonebot")
+    results = []
+
+    async def handle_event(event):
+        payload = event.payload
+        results.append(await service.process_message({
+            "conv_id": payload.conv_id,
+            "user_id": payload.user_id,
+            "is_direct": payload.is_direct,
+            "is_superuser": payload.is_superuser,
+            "metadata": payload.metadata,
+        }))
+
+    event_bus.subscribe(MESSAGE_RECEIVED, handle_event)
+    asyncio.run(
+        ingestor.ingest(
+            {
+                "conv_id": "group_20001",
+                "user_id": "10001",
+                "is_direct": True,
+                "is_superuser": False,
+            }
+        )
+    )
+    asyncio.run(
+        ingestor.ingest(
+            {
+                "conv_id": "group_20001",
+                "user_id": "10001",
+                "is_direct": True,
+                "is_superuser": True,
+            }
+        )
+    )
+
+    assert results[0] is None
+    assert results[1] is not None
+    assert all("is_superuser" not in message for message in service.short_term._messages)
+
+
+def test_ordinary_private_message_never_replies_when_default_flags_are_enabled(monkeypatch):
+    primary = _ProviderStub(name="primary")
+    secondary = _ProviderStub(name="secondary")
+    service, _ = _build_service(primary=primary, secondary=secondary)
+    monkeypatch.setattr(
+        "src.core.services.conversation_service.resolve_llm_flags",
+        lambda config: {
+            "llm_topic_extract_enabled": True,
+            "llm_active_reply_enabled": True,
+            "llm_passive_reply_enabled": True,
+        },
+    )
+
+    result = asyncio.run(service.process_message({
+        "conv_id": "private_10001",
+        "user_id": "10001",
+        "is_direct": True,
+        "metadata": {"onebot": {"is_superuser": True}},
+    }))
+
+    assert result is None
+    assert primary.generate_calls == secondary.generate_calls == 0
 
 
 def test_keyword_chain_provider_fallback_keeps_hybrid_memory_injection():

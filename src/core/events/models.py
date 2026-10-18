@@ -32,3 +32,4 @@ class MessagePayload:
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: Optional[datetime] = None
     raw_event: Optional[Any] = None
+    is_superuser: bool = False

@@ -44,6 +44,7 @@ class MessageIngestor:
             is_direct=bool(message_data.get("is_direct", False)),
             is_bot=bool(message_data.get("is_bot", False)),
             is_processed=bool(message_data.get("is_processed", False)),
+            is_superuser=message_data.get("is_superuser") is True,
             metadata=metadata,
             created_at=created_at,
             raw_event=raw_event,

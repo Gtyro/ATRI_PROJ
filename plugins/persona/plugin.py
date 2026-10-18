@@ -59,6 +59,7 @@ async def _handle_message_event(event: Event) -> None:
         "is_direct": payload.is_direct,
         "is_bot": payload.is_bot,
         "is_processed": payload.is_processed,
+        "is_superuser": payload.is_superuser,
         "metadata": payload.metadata,
     }
     if payload.created_at:

@@ -46,6 +46,8 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         return
 
     user_id = event.get_user_id()
+    # 在应用群策略前校验发送者权限，超级用户可使用 Persona 的全部能力。
+    is_superuser = await SUPERUSER(bot, event)
     message_context = extract_onebot_event_message_context(event, self_id=bot.self_id)
     images = message_context["images"]
     mentions = message_context["mentions"]
@@ -71,11 +73,14 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
             logging.warning(f"获取群组名称失败: {e}")
 
         try:
-            ingest_enabled = await psstate.plugin_policy_service.is_ingest_enabled(
-                str(event.group_id),
-                "persona",
-                group_name=group_name,
-            )
+            if is_superuser:
+                ingest_enabled = True
+            else:
+                ingest_enabled = await psstate.plugin_policy_service.is_ingest_enabled(
+                    str(event.group_id),
+                    "persona",
+                    group_name=group_name,
+                )
             if not ingest_enabled:
                 logging.info(f"群组 {event.group_id} 的 persona 入库已关闭，跳过处理")
                 return
@@ -100,8 +105,8 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         reply=reply,
         direct_reason=direct_reason,
     )
-
-    message_data = { # 此处有8个字段+自动生成的id和created_at
+    # is_superuser 仅沿当前事件传递，存储前由会话服务剔除。
+    message_data = {
         "conv_id": conv_id,
         "user_id": user_id,
         "user_name": uname,
@@ -109,6 +114,7 @@ async def handle_message(bot: Bot, event: Event, uname: str = UserName()):
         "is_direct": is_direct,
         "is_bot": False,
         "is_processed": False,
+        "is_superuser": is_superuser,
         "metadata": metadata,
     }
 

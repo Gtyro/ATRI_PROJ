@@ -235,19 +235,27 @@ class ConversationService:
 
         return split_replies
 
-    async def _is_group_ingest_enabled(self, conv_id: str) -> bool:
-        if not self.plugin_policy_service or not conv_id.startswith("group_"):
+    async def _is_group_ingest_enabled(self, conv_id: str, *, is_superuser: bool = False) -> bool:
+        if is_superuser or not self.plugin_policy_service or not conv_id.startswith("group_"):
             return True
         group_id = conv_id.split("_", 1)[1]
         return await self.plugin_policy_service.is_ingest_enabled(group_id, self.plugin_name)
 
-    async def _is_group_enabled(self, conv_id: str) -> bool:
-        if not self.plugin_policy_service or not conv_id.startswith("group_"):
+    async def _is_group_enabled(self, conv_id: str, *, is_superuser: bool = False) -> bool:
+        if is_superuser or not self.plugin_policy_service or not conv_id.startswith("group_"):
             return True
         group_id = conv_id.split("_", 1)[1]
         return await self.plugin_policy_service.is_enabled(group_id, self.plugin_name)
 
-    async def _get_llm_flags(self, conv_id: str) -> Dict[str, bool]:
+    async def _get_llm_flags(self, conv_id: str, *, is_superuser: bool = False) -> Dict[str, bool]:
+        if is_superuser:
+            # 超级用户当前事件使用完整能力，不改写普通用户的群策略。
+            return {
+                LLM_TOPIC_EXTRACT_ENABLED_KEY: True,
+                LLM_KEYWORD_EXTRACT_ENABLED_KEY: True,
+                LLM_PASSIVE_REPLY_ENABLED_KEY: True,
+                LLM_ACTIVE_REPLY_ENABLED_KEY: True,
+            }
         if not self.plugin_policy_service or not conv_id.startswith("group_"):
             return resolve_llm_flags({})
         group_id = conv_id.split("_", 1)[1]
@@ -310,12 +318,15 @@ class ConversationService:
 
     async def process_message(self, message_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """处理新消息并按需触发会话处理。"""
+        is_superuser = message_data.get("is_superuser") is True
         try:
             conv_id = message_data.get("conv_id", "")
-            if not await self._is_group_ingest_enabled(conv_id):
+            if not await self._is_group_ingest_enabled(conv_id, is_superuser=is_superuser):
                 logging.info(f"会话 {conv_id} 已关闭入库，跳过处理")
                 return None
-            await self.short_term.add_message(message_data)
+            stored_message = dict(message_data)
+            stored_message.pop("is_superuser", None)
+            await self.short_term.add_message(stored_message)
         except Exception as e:
             logging.error(f"persona_system.process_message:添加消息到短期记忆失败: {e}")
             raise e
@@ -326,6 +337,7 @@ class ConversationService:
                     message_data["conv_id"],
                     message_data["user_id"],
                     message_data["is_direct"],
+                    is_superuser=is_superuser,
                 )
         except Exception as e:
             logging.error(f"persona_system.process_message:处理消息失败: {e}")
@@ -338,13 +350,18 @@ class ConversationService:
         conv_id: str,
         user_id: str,
         is_direct: bool = False,
+        *,
+        is_superuser: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """处理特定会话的消息。"""
         try:
-            if not await self._is_group_enabled(conv_id):
+            if conv_id.startswith("private_") and not is_superuser:
+                logging.info(f"会话 {conv_id} 非超级用户私聊，跳过处理")
+                return None
+            if not await self._is_group_enabled(conv_id, is_superuser=is_superuser):
                 logging.info(f"会话 {conv_id} 插件已禁用，跳过处理")
                 return None
-            llm_flags = await self._get_llm_flags(conv_id)
+            llm_flags = await self._get_llm_flags(conv_id, is_superuser=is_superuser)
             pending_threshold = self._queue_history_size()
             if conv_id.startswith("group_") and not is_direct:
                 pending_messages = await self.short_term.get_unprocessed_messages(
