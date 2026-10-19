@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1 --port 5188 --strictPort",
     "build": "vite build --mode production",
     "build:preview": "vite build --mode preview",
     "preview": "npm run build:preview && vite preview --mode preview --host 127.0.0.1 --port 8081 --outDir .preview-dist --base /",

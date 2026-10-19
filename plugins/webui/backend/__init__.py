@@ -1,49 +1,44 @@
+import os
 import nonebot
 from fastapi import FastAPI
 from nonebot import get_driver
 from nonebot.log import logger
-from nonebot.plugin import PluginMetadata
-from nonebot.plugin.manager import PluginManager
 
-# 全局驱动器
-driver = get_driver()
+STANDALONE_WEBUI = os.getenv("ATRI_WEBUI_STANDALONE") == "1"
 
-# 导入webui运行模块
-try:
-    from .api import create_app, configure_app
-    from .api.core.database import initialize_database_system, close_database
-except ImportError as e:
-    logger.error(f"无法导入WebUI模块: {e}")
-    raise
-
-@driver.on_startup
-async def start_webui():
-    """启动WebUI服务"""
-    logger.info("正在启动WebUI管理面板...")
+if not STANDALONE_WEBUI:
+    driver = get_driver()
 
     try:
-        # 获取nonebot应用实例
-        nonebot_app: FastAPI = nonebot.get_app()
-        logger.info("nonebot_app is {}".format(nonebot_app))
+        from .api import WEBUI_BROWSER_URL, configure_app
+        from .api.core.database import close_database, initialize_database_system
+    except ImportError as error:
+        logger.error(f"无法导入WebUI模块: {error}")
+        raise
 
-        # 配置应用（使用统一配置函数）
-        configure_app(nonebot_app, is_nonebot_app=True)
+    @driver.on_startup
+    async def start_webui():
+        """Mount the WebUI routes on the ATRI host."""
+        logger.info("正在启动WebUI管理面板...")
 
-        # 初始化数据库
-        neo4j_ready = await initialize_database_system()
-        if neo4j_ready:
-            logger.success("WebUI管理面板已启动，访问 http://127.0.0.1:8080/webui")
-        else:
-            logger.warning("WebUI管理面板已启动，但 Neo4j 当前不可用，相关功能暂时降级")
-    except Exception as e:
-        logger.error(f"启动WebUI失败: {e}")
+        try:
+            nonebot_app: FastAPI = nonebot.get_app()
+            logger.info("nonebot_app is {}".format(nonebot_app))
+            configure_app(nonebot_app, is_nonebot_app=True)
 
-@driver.on_shutdown
-async def stop_webui():
-    """关闭WebUI服务"""
-    try:
-        # 关闭数据库连接
-        await close_database()
-        logger.success("WebUI数据库连接已关闭")
-    except Exception as e:
-        logger.error(f"关闭WebUI数据库连接失败: {e}")
+            neo4j_ready = await initialize_database_system()
+            if neo4j_ready:
+                logger.success(f"WebUI管理面板已启动，访问 {WEBUI_BROWSER_URL}")
+            else:
+                logger.warning("WebUI管理面板已启动，但 Neo4j 当前不可用，相关功能暂时降级")
+        except Exception as error:
+            logger.error(f"启动WebUI失败: {error}")
+
+    @driver.on_shutdown
+    async def stop_webui():
+        """Close WebUI resources mounted on the ATRI host."""
+        try:
+            await close_database()
+            logger.success("WebUI数据库连接已关闭")
+        except Exception as error:
+            logger.error(f"关闭WebUI数据库连接失败: {error}")

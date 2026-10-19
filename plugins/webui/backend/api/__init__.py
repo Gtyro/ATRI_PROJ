@@ -20,6 +20,10 @@ from .plugin_policy import router as plugin_policy_router
 from .core.config import settings
 from .core.database import close_database, initialize_database_system
 
+WEBUI_HOST = os.getenv("WEBUI_HOST", "127.0.0.1")
+WEBUI_PORT = int(os.getenv("WEBUI_PORT", "8188"))
+WEBUI_BROWSER_URL = f"http://{WEBUI_HOST}:{WEBUI_PORT}/webui"
+
 def configure_app(app: FastAPI, is_nonebot_app: bool = False):
     """
     统一配置应用的函数，可用于独立FastAPI应用或NoneBot应用
@@ -41,8 +45,14 @@ def configure_app(app: FastAPI, is_nonebot_app: bool = False):
     # 获取静态文件路径
     static_webui_path = (Path(__file__).parent.parent.parent / "static" / "webui").resolve()
 
-    # 挂载静态文件
-    app.mount("/webui", StaticFiles(directory=static_webui_path, html=True), name="webui")
+    # The ATRI host stays on its internal port; the standalone WebUI host serves assets.
+    if is_nonebot_app:
+        @app.get("/webui", include_in_schema=False)
+        @app.get("/webui/", include_in_schema=False)
+        async def redirect_webui_browser():
+            return RedirectResponse(url=WEBUI_BROWSER_URL)
+    else:
+        app.mount("/webui", StaticFiles(directory=static_webui_path, html=True), name="webui")
 
     # 添加所有路由
     app.include_router(auth_router)
@@ -54,10 +64,14 @@ def configure_app(app: FastAPI, is_nonebot_app: bool = False):
     app.include_router(audit_router)
     app.include_router(module_metrics_router)
 
+    @app.get("/health", include_in_schema=False)
+    async def health_check():
+        return {"status": "ok"}
+
     # 注册主页重定向
     @app.get("/")
     async def redirect_to_webui():
-        return RedirectResponse(url="/webui")
+        return RedirectResponse(url=WEBUI_BROWSER_URL if is_nonebot_app else "/webui")
 
     # 返回配置好的应用
     return app

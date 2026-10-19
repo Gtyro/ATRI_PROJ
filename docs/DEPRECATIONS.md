@@ -57,3 +57,12 @@
 - **适用范围**：本项目运行时密钥和密码；不改变非敏感模型、地址、超时和功能开关的 YAML 配置方式。
 - **弃用日期**：2026-10-12
 - **最后有使用记录的日期**：2026-10-11
+
+### 7. 将 WebUI 浏览器入口嵌入 ATRI 共享的 `8080` 宿主
+
+- **对象**：由 ATRI/NoneBot 的共享 `127.0.0.1:8080` 宿主同时提供 WebUI 静态页面和浏览器入口 `/webui` 的部署方式。
+- **弃用原因及依据**：`8080` 同时承载 ATRI 的其它内部功能，迁移 WebUI 浏览器入口时不能整体迁移或中断该宿主；2026-10-19 的端口迁移将 WebUI 页面和 WebUI API 固定到独立的 `127.0.0.1:8188`，保留 `8080` 作为 ATRI 内部宿主及 Vite 开发代理上游。
+- **当前替代方法**：由 `atri-webui.service` 运行独立 WebUI 浏览器端点；服务模板见 [`plugins/webui/deploy/systemd/atri-webui.service.example`](../plugins/webui/deploy/systemd/atri-webui.service.example)，健康检查为 [`plugins/webui/backend/healthcheck.py`](../plugins/webui/backend/healthcheck.py)。主宿主加载新版本后，旧 `/webui` 路由重定向到 `8188`。
+- **适用范围**：仅限 WebUI 的浏览器页面、静态资源和 WebUI API 入口；ATRI/NoneBot 的其它内部 `8080` 路由及 WebUI 开发代理上游不受影响。
+- **弃用日期**：2026-10-19
+- **最后有使用记录的日期**：2026-10-19

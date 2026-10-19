@@ -1,0 +1,23 @@
+[Unit]
+Description=ATRI WebUI browser endpoint
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/ATRI_PROJ
+Environment=PYTHONPATH=/home/ubuntu/ATRI_PROJ
+Environment=ATRI_WEBUI_STANDALONE=1
+Environment=WEBUI_HOST=127.0.0.1
+Environment=WEBUI_PORT=8188
+Environment=WEBUI_UPSTREAM=http://127.0.0.1:8080
+ExecStart=/home/ubuntu/ATRI_PROJ/.venv/bin/python -m plugins.webui.browser_entry
+ExecStartPost=/home/ubuntu/ATRI_PROJ/.venv/bin/python /home/ubuntu/ATRI_PROJ/plugins/webui/backend/healthcheck.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

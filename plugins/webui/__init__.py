@@ -1,20 +1,22 @@
 import logging
+import os
 from datetime import datetime, timedelta
 
 from nonebot import require
 from nonebot.plugin import PluginMetadata
 
-# 在入口点引入数据库依赖
-require("db_core")
+STANDALONE_WEBUI = os.getenv("ATRI_WEBUI_STANDALONE") == "1"
 
-# Import backend to ensure its lifecycle hooks are registered
-from . import backend
+# 在插件入口点引入数据库依赖，并注册 NoneBot 生命周期钩子。
+if not STANDALONE_WEBUI:
+    require("db_core")
+    from . import backend
 
 # 插件元数据
 __plugin_meta__ = PluginMetadata(
     name="WebUI管理面板",
     description="提供可视化的方式管理和监控您的数据库",
-    usage="启动后访问 http://127.0.0.1:8080/webui",
+    usage="启动后访问 http://127.0.0.1:8188/webui",
     type="application",
     homepage="https://github.com/yourusername/nonebot-plugin-webui",
     config=None,
@@ -31,7 +33,7 @@ try:
 except Exception:
     scheduler = None
 
-if scheduler is not None:
+if scheduler is not None and not STANDALONE_WEBUI:
     from .backend.api.audit.cleanup import cleanup_expired_operation_audit_logs
     from .backend.api.core.config import settings
 

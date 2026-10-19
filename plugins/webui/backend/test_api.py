@@ -5,7 +5,7 @@ import requests
 
 def test_api():
     """测试API功能是否正常工作"""
-    base_url = "http://127.0.0.1:8080"
+    base_url = "http://127.0.0.1:8188"
 
     # 1. 测试登录
     print("测试登录 API...")

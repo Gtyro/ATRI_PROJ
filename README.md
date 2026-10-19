@@ -50,7 +50,8 @@ NapCat 使用 `xvfb-run -a qq --no-sandbox -q`，账号只在内存中从现有�
 多账号、缺失配置或同名非受管会话会导致启动失败，不会猜测或接管。
 bot 固定通过本项目 `.venv/bin/python` 运行原有 `bot.py`，工作目录固定为仓库根目录；
 开发模式选择 `.env.dev`，正式模式选择 `.env.prod`。
-不会启动独立 WebUI、前端、容器或系统服务，也不会更改现有访问地址、账号或机器人配置。
+不会启动独立 WebUI、前端、容器或系统服务。WebUI 浏览器入口由独立的
+`atri-webui.service` 管理，不会更改机器人主服务、账号或其它 ATRI 配置。
 
 ### 服务器运行依赖与运维
 
@@ -75,8 +76,9 @@ cd /home/ubuntu/ATRI_PROJ
 .venv/bin/ruff check src tests scripts --select E4,E7,E9,F,W291,W293 # lint
 ```
 
-WebUI 地址为 `http://127.0.0.1:8080/webui`，NapCat 前端地址为
-`http://127.0.0.1:6099/`；浏览器可直接访问这些地址。
+WebUI 浏览器地址为 `http://127.0.0.1:8188/webui`，NapCat 前端地址为
+`http://127.0.0.1:6099/`。ATRI/NoneBot 的 `127.0.0.1:8080` 为内部宿主和
+WebUI 开发代理上游。
 
 `dev` 和 `start` 不是别名：两者都使用同一组 `screen` 会话和安全的生命周期管理，
 但开发模式选择 `.env.dev`（当前 `LOG_LEVEL=DEBUG`）并保留两个受管进程的普通输出；
@@ -137,7 +139,7 @@ NapCat 安装或配置。入口自身捕获的 NapCat 输出仍会脱敏后写�
 ### 🌐 WebUI 控制台（管理神器）
 
 ```bash
-访问地址：http://127.0.0.1:8080/webui
+访问地址：http://127.0.0.1:8188/webui
 默认账号：admin/admin（首次登录后须修改！）
 ```
 

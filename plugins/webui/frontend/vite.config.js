@@ -42,17 +42,20 @@ export default defineConfig(({ mode }) => {
 
     // 开发服务器配置
     server: {
+      host: "127.0.0.1",
+      port: 5188,
+      strictPort: true,
       proxy: {
         "/auth": {
-          target: "http://localhost:8080", // 后端API地址
+          target: "http://127.0.0.1:8080", // ATRI 内部 API 上游
           changeOrigin: true,
         },
         "/db": {
-          target: "http://localhost:8080", // 后端API地址
+          target: "http://127.0.0.1:8080", // ATRI 内部 API 上游
           changeOrigin: true,
         },
         "/api": {
-          target: "http://localhost:8080", // 后端API地址
+          target: "http://127.0.0.1:8080", // ATRI 内部 API 上游
           changeOrigin: true,
         },
       },

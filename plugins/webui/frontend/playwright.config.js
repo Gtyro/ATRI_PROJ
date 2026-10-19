@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const isCI = Boolean(process.env.CI);
 const useWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER !== "1";
-const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:4173";
+const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:5188";
 const parsedBaseUrl = new URL(baseUrl);
 const serverHost = parsedBaseUrl.hostname || "127.0.0.1";
 const serverPort =

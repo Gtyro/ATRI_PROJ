@@ -30,18 +30,28 @@ poetry install
 直接运行启动脚本：
 
 ```bash
-python run.py
+cd /home/ubuntu/ATRI_PROJ
+ATRI_WEBUI_STANDALONE=1 .venv/bin/python -m plugins.webui.backend.run
 ```
 
 ## 使用方法
 
 1. 启动程序
 2. 在浏览器中访问 `http://your-host:port/webui`
-   - 默认为 `http://127.0.0.1:8080/webui`
+   - 默认入口为 `http://127.0.0.1:8188/webui`
 3. 使用默认管理员账户登录:
    - 用户名: `admin`
    - 密码: `admin`
 4. 首次登录后，请立即修改默认密码(todo)
+
+ATRI/NoneBot 使用 `127.0.0.1:8080` 作为内部宿主和 WebUI API 上游；浏览器
+WebUI 由独立进程监听 `127.0.0.1:8188`，并将相对 API 请求代理到该内部地址。Vite
+开发代理也使用同一上游。部署可使用
+`deploy/systemd/atri-webui.service.example`，健康检查为：
+
+```bash
+.venv/bin/python plugins/webui/backend/healthcheck.py
+```
 
 ## 安全提示
 
