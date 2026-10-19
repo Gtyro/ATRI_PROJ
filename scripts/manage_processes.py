@@ -148,8 +148,19 @@ def preflight(mode: str = "dev") -> None:
             raise LifecycleError(f"缺少运行依赖：{executable}。")
     if not PYTHON.is_file() or not (ROOT / "bot.py").is_file():
         raise LifecycleError("缺少项目 .venv/bin/python 或 bot.py。")
-    if not (ROOT / f".env.{environment}").is_file():
+    env_path = ROOT / f".env.{environment}"
+    if not env_path.is_file():
         raise LifecycleError(f"缺少 .env.{environment}；拒绝使用默认配置启动。")
+    try:
+        # python-dotenv treats some open failures as an empty file. Check the
+        # selected file directly so a permissions issue cannot silently start
+        # the bot with incomplete settings.
+        with env_path.open("r", encoding="utf-8") as env_file:
+            env_file.read(0)
+    except OSError:
+        raise LifecycleError(
+            f"无法读取 .env.{environment}；请检查文件归属和权限，未创建任何会话。"
+        ) from None
     base, account = napcat_source()
     check_napcat_logging(base, account)
 
@@ -167,7 +178,7 @@ def redact(text: str, values: set[str]) -> str:
     )
 
 
-def sensitive_values() -> set[str]:
+def sensitive_values(environment: str | None = None) -> set[str]:
     values: set[str] = set()
 
     def collect(obj):
@@ -180,8 +191,14 @@ def sensitive_values() -> set[str]:
         elif isinstance(obj, str) and len(obj) >= 4:
             values.add(obj)
 
-    for name in (".env.dev", ".env.prod"):
-        collect(dict(dotenv_values(ROOT / name)))
+    selected_environment = environment or os.environ.get("ENVIRONMENT", "dev").strip().lower()
+    if selected_environment in CONFIG_ENVIRONMENTS.values():
+        try:
+            collect(dict(dotenv_values(ROOT / f".env.{selected_environment}")))
+        except OSError:
+            # Startup preflight reports unreadable env files. Redaction should
+            # not make a supervisor disappear before it can report that error.
+            pass
     base, account = napcat_source()
     values.add(account)
     for path in (base / "config").glob("*.json"):
@@ -197,7 +214,10 @@ def sensitive_values() -> set[str]:
 
 
 def run_bot() -> None:
-    values = sensitive_values()
+    environment = os.environ.get("ENVIRONMENT", "dev").strip().lower()
+    if environment not in CONFIG_ENVIRONMENTS.values():
+        raise LifecycleError("未知运行环境；拒绝启动机器人负载。")
+    values = sensitive_values(environment)
     original = logging.Formatter.format
 
     def safe_format(self, record):

@@ -122,6 +122,43 @@ def test_dev_keeps_diagnostic_lines_while_start_filters_them():
     assert manager.should_record("ERROR connection failed", "start")
 
 
+def test_sensitive_values_reads_only_selected_environment(runtime, monkeypatch):
+    (runtime / ".env.dev").write_text("DEV_SECRET=dev-only-value\n")
+    (runtime / ".env.prod").write_text("PROD_SECRET=prod-only-value\n")
+    monkeypatch.setattr(manager, "napcat_source", lambda: (runtime, "00000000"))
+    (runtime / "config").mkdir()
+    for name in ("napcat.json", "napcat_00000000.json"):
+        (runtime / "config" / name).write_text("{}")
+
+    values = manager.sensitive_values("dev")
+
+    assert "dev-only-value" in values
+    assert "prod-only-value" not in values
+
+
+def test_preflight_rejects_unreadable_selected_environment(runtime, monkeypatch):
+    env_path = runtime / ".env.dev"
+    env_path.write_text("OPENAI_API_KEY=secret\n")
+    (runtime / ".venv/bin").mkdir(parents=True)
+    python_path = runtime / ".venv/bin/python"
+    python_path.touch()
+    (runtime / "bot.py").touch()
+    monkeypatch.setattr(manager, "PYTHON", python_path)
+    monkeypatch.setattr(manager.shutil, "which", lambda _: "/fixture/bin/dependency")
+    monkeypatch.setattr(manager, "napcat_source", lambda: pytest.fail("must stop at env validation"))
+    original_open = manager.Path.open
+
+    def reject_selected_env(path, *args, **kwargs):
+        if path == env_path:
+            raise PermissionError
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(manager.Path, "open", reject_selected_env)
+
+    with pytest.raises(manager.LifecycleError, match="无法读取 .env.dev"):
+        manager.preflight("dev")
+
+
 def test_mode_is_recorded_and_is_not_an_alias():
     assert manager.MODES == {"dev", "start"}
     assert manager.CONFIG_ENVIRONMENTS == {"dev": "dev", "start": "prod"}
