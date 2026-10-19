@@ -1,6 +1,16 @@
 import pytest
+from pathlib import Path
 
+import src.core.domain.runtime_settings as runtime_settings
 from src.core.domain import PersonaConfig, get_runtime_setting
+
+
+@pytest.mark.parametrize("filename", [".env.dev", ".env.prod"])
+def test_repository_dotenv_is_rejected_before_opening(filename):
+    project_root = Path(runtime_settings.__file__).resolve().parents[3]
+
+    with pytest.raises(AssertionError, match="tests must not read repository dotenv files"):
+        runtime_settings.dotenv_values(dotenv_path=project_root / filename)
 
 
 def test_runtime_setting_uses_selected_env_file_then_process_environment(tmp_path, monkeypatch):
@@ -31,7 +41,12 @@ def test_runtime_setting_rejects_unknown_environment_instead_of_falling_back_to_
         get_runtime_setting("SAMPLE_SECRET", project_root=tmp_path)
 
 
-def test_persona_config_reads_secrets_from_environment_and_never_serializes_them(monkeypatch):
+def test_persona_config_reads_secrets_from_environment_and_never_serializes_them(
+    monkeypatch,
+    tmp_path,
+):
+    (tmp_path / ".env.prod").write_text("", encoding="utf-8")
+    monkeypatch.setattr(runtime_settings, "PROJECT_ROOT", tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "env-llm-key")
     monkeypatch.setenv("NEO4J_PASSWORD", "env-neo4j-password")
     monkeypatch.setenv("POSTGRES_PASSWORD", "env-postgres-password")

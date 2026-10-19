@@ -73,7 +73,8 @@ def test_image_understanding_allows_blank_provider_api_keys():
     assert cfg.base_url == "https://api.openai.com/v1"
 
 
-def test_image_understanding_env_can_override_full_provider_list(monkeypatch):
+def test_image_understanding_env_can_override_full_provider_list(monkeypatch, tmp_path):
+    _use_empty_runtime_env(monkeypatch, tmp_path)
     monkeypatch.setenv(
         "IMAGE_UNDERSTANDING_PROVIDERS",
         """
@@ -118,7 +119,8 @@ def test_image_understanding_to_dict_does_not_serialize_provider_secrets():
     assert "api_key" not in payload["providers"][0]
 
 
-def test_image_understanding_loads_named_provider_keys_from_environment(monkeypatch):
+def test_image_understanding_loads_named_provider_keys_from_environment(monkeypatch, tmp_path):
+    _use_empty_runtime_env(monkeypatch, tmp_path)
     monkeypatch.setenv("IMAGE_UNDERSTANDING_PRIMARY_API_KEY", "primary-env-key")
     monkeypatch.setenv("IMAGE_UNDERSTANDING_BACKUP_API_KEY", "backup-env-key")
     monkeypatch.delenv("IMAGE_UNDERSTANDING_API_KEY", raising=False)
