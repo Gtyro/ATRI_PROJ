@@ -7,6 +7,7 @@ from pathlib import Path
 
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBot11Adapter
+from src.adapters.nonebot.onebot_v11_logging import install_onebot_v11_restart_log_filter
 from src.infra.logging import LoggingConfig, setup_logging
 from dotenv import dotenv_values
 
@@ -68,6 +69,7 @@ nonebot.init(_env_file=_config_path)
 
 # 注册适配器
 driver = nonebot.get_driver()
+install_onebot_v11_restart_log_filter()
 # OneBot V11 适配器选项
 onebot_config = {}  # V11 一般不需要特殊配置
 driver.register_adapter(OneBot11Adapter)
