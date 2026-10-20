@@ -22,6 +22,7 @@ from src.core.domain import PersonaConfig
 from src.core.events import Event, MESSAGE_RECEIVED
 from src.core.facade.persona_facade import PersonaFacade
 from src.infra.db.tortoise.module_metrics_cleanup import cleanup_expired_module_metric_events
+from src.infra.db.tortoise.registered_unit_usage import cleanup_expired_registered_unit_usage
 
 from . import psstate
 from .handlers import *
@@ -144,3 +145,9 @@ async def cleanup_module_metric_events() -> None:
         logging.info("模块指标定时清理完成: deleted=%s cutoff=%s", deleted_count, cutoff.isoformat())
     except Exception as exc:
         logging.error("模块指标定时清理异常: %s", exc, exc_info=True)
+
+    try:
+        deleted_count = await cleanup_expired_registered_unit_usage()
+        logging.info("注册单元使用事件定时清理完成: deleted=%s", deleted_count)
+    except Exception as exc:
+        logging.error("注册单元使用事件定时清理异常: %s", exc, exc_info=True)

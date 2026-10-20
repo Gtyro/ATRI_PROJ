@@ -6,6 +6,7 @@ import {
   validateModuleMetricModulesPayload,
   validateModuleMetricOptionsPayload,
   validateModuleMetricOverviewPayload,
+  validateRegisteredUnitUsagePayload,
 } from "./contracts/module_metrics";
 import type {
   ModuleMetricDetailPayload,
@@ -13,6 +14,7 @@ import type {
   ModuleMetricOptionsPayload,
   ModuleMetricOverviewPayload,
   ModuleMetricQueryParams,
+  RegisteredUnitUsagePayload,
 } from "@/types/module_metrics";
 
 type Validator<TPayload> = (payload: unknown) => TPayload;
@@ -82,3 +84,10 @@ export const fetchModuleMetricEvents = (
   params: ModuleMetricQueryParams = {},
 ): Promise<AxiosResponse<unknown>> =>
   request.get("/api/module-metrics/events", params);
+
+export const fetchRegisteredUnitUsage = (): Promise<AxiosResponse<RegisteredUnitUsagePayload>> =>
+  withContractValidation(
+    request.get("/api/module-metrics/registered-units"),
+    "/api/module-metrics/registered-units",
+    validateRegisteredUnitUsagePayload,
+  );

@@ -107,6 +107,21 @@ export const mockModuleMetricsApis = async (page) => {
   await page.route("**/api/module-metrics/**", async (route) => {
     const { pathname } = new URL(route.request().url());
 
+    if (pathname === "/api/module-metrics/registered-units") {
+      await jsonResponse(route, {
+        items: [
+          {
+            unit_id: "network.socks_proxy",
+            label: "SOCKS 代理请求",
+            window_days: 90,
+            usage_count: 3,
+            last_used_at: "2026-10-20T01:00:00+00:00",
+          },
+        ],
+      });
+      return;
+    }
+
     if (pathname === "/api/module-metrics/modules") {
       await jsonResponse(route, {
         items: [

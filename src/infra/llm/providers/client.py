@@ -42,11 +42,16 @@ class LLMClient:
 
     def _init_client(self, api_key: str, base_url: str) -> None:
         try:
-            from openai import AsyncOpenAI
+            from openai import AsyncOpenAI, DefaultAsyncHttpxClient
+            from src.infra.network.tracked_httpx import SocksUsageMixin
+
+            class TrackedOpenAIHttpClient(SocksUsageMixin, DefaultAsyncHttpxClient):
+                pass
 
             client_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
             if self.timeout is not None:
                 client_kwargs["timeout"] = self.timeout
+            client_kwargs["http_client"] = TrackedOpenAIHttpClient()
             self._client = AsyncOpenAI(**client_kwargs)
             logging.debug("LLM客户端初始化成功")
         except ImportError:

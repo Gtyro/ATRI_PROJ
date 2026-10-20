@@ -99,7 +99,9 @@ async def get_weather(adcode, extensions="base"):
     }
 
     try:
-        async with httpx.AsyncClient() as client:
+        from src.infra.network.tracked_httpx import TrackedAsyncClient
+
+        async with TrackedAsyncClient() as client:
             response = await client.get(url, params=params)
             data = response.json()
 

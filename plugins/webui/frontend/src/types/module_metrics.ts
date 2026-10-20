@@ -110,3 +110,16 @@ export interface ModuleMetricQueryParams {
   conv_id?: string;
   [key: string]: string | number | boolean | undefined;
 }
+
+export interface RegisteredUnitUsageItem {
+  unit_id: string;
+  label: string;
+  window_days: number;
+  usage_count: number;
+  last_used_at: string | null;
+}
+
+export interface RegisteredUnitUsagePayload {
+  items: RegisteredUnitUsageItem[];
+  [key: string]: unknown;
+}

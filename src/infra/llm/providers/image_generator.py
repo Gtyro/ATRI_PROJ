@@ -17,6 +17,7 @@ from src.core.domain.image_generation_error import (
     ImageGenerationError,
     sanitize_image_error_detail,
 )
+from src.infra.network.tracked_httpx import TrackedAsyncClient
 
 
 class ImageGenerator:
@@ -105,7 +106,7 @@ class ImageGenerator:
             )
 
         timeout = httpx.Timeout(self.timeout_seconds)
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with TrackedAsyncClient(timeout=timeout) as client:
             return await self._request_with_retries(
                 client, payload, headers, endpoint=endpoint, files=reference_files,
             )

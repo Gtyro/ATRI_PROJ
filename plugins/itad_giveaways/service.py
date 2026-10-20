@@ -10,6 +10,8 @@ from typing import Iterable, Mapping, Sequence, Set
 
 import httpx
 
+from src.infra.network.tracked_httpx import TrackedAsyncClient
+
 
 PAGE_SIZE = 50
 
@@ -153,7 +155,7 @@ async def fetch_active_giveaways(
         return await fetch_all(client)
 
     timeout = httpx.Timeout(timeout_seconds)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as owned_client:
+    async with TrackedAsyncClient(timeout=timeout, follow_redirects=True) as owned_client:
         return await fetch_all(owned_client)
 
 

@@ -5,6 +5,7 @@ import type {
   ModuleMetricModulesPayload,
   ModuleMetricOptionsPayload,
   ModuleMetricOverviewPayload,
+  RegisteredUnitUsagePayload,
 } from "@/types/module_metrics";
 
 const CONTRACT_PREFIX = "[module-metrics-contract]";
@@ -158,4 +159,27 @@ export const validateModuleMetricOptionsPayload = (
   ensureStringArray(root.operations, "payload.operations");
   ensureStringArray(root.conv_ids, "payload.conv_ids");
   return root as ModuleMetricOptionsPayload;
+};
+
+export const validateRegisteredUnitUsagePayload = (
+  payload: unknown,
+): RegisteredUnitUsagePayload => {
+  const root = ensureObject(payload, "payload");
+  const items = ensureArray(root.items, "payload.items");
+  items.forEach((item, index) => {
+    const path = `payload.items[${index}]`;
+    const node = ensureObject(item, path);
+    ensureString(node.unit_id, `${path}.unit_id`);
+    ensureString(node.label, `${path}.label`);
+    if (node.window_days !== 90) {
+      fail(`${path}.window_days`, "must be 90");
+    }
+    if (typeof node.usage_count !== "number" || !Number.isInteger(node.usage_count) || node.usage_count < 0) {
+      fail(`${path}.usage_count`, "must be a non-negative integer");
+    }
+    if (node.last_used_at !== null) {
+      ensureString(node.last_used_at, `${path}.last_used_at`);
+    }
+  });
+  return root as RegisteredUnitUsagePayload;
 };

@@ -4,6 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.core.services.module_metrics_service import build_default_module_metrics_service
+from src.infra.db.tortoise.registered_unit_usage import list_registered_unit_usage
 
 from ..auth.models import User
 from ..auth.utils import get_current_active_user
@@ -54,6 +55,13 @@ async def get_module_metric_modules(
     current_user: User = Depends(get_current_active_user),
 ):
     return {"items": module_metrics_service.list_provider_modules()}
+
+
+@router.get("/registered-units")
+async def get_registered_unit_usage(
+    current_user: User = Depends(get_current_active_user),
+):
+    return {"items": await list_registered_unit_usage()}
 
 
 @router.get("/overview")

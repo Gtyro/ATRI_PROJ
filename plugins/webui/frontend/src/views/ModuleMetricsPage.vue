@@ -132,6 +132,47 @@
       </el-collapse-transition>
     </el-card>
 
+    <section
+      v-if="mode === PAGE_MODE_OVERVIEW"
+      class="registered-usage-section"
+    >
+      <h4>注册单元使用</h4>
+      <AsyncStateBlock
+        :loading="loading.registered"
+        :error-text="errors.registered"
+        :empty="registeredUnits.length === 0"
+        empty-text="暂无注册单元"
+        loading-text="正在加载使用记录..."
+        @retry="loadRegisteredUnits"
+      >
+        <div class="registered-usage-scroll">
+          <table class="registered-usage-table">
+            <thead>
+              <tr>
+                <th scope="col">单元</th>
+                <th scope="col">近 90 天使用次数</th>
+                <th scope="col">最后使用时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="unit in registeredUnits"
+                :key="unit.unit_id"
+                :data-testid="`registered-unit-${unit.unit_id}`"
+              >
+                <td>
+                  <strong>{{ unit.label }}</strong
+                  ><small>{{ unit.unit_id }}</small>
+                </td>
+                <td>{{ unit.usage_count }}</td>
+                <td>{{ formatLastUsedAt(unit.last_used_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </AsyncStateBlock>
+    </section>
+
     <div v-if="mode === PAGE_MODE_OVERVIEW" class="overview-panel">
       <AsyncStateBlock
         :loading="loading.overview"
@@ -268,6 +309,7 @@ import {
   fetchModuleMetricModules,
   fetchModuleMetricOptions,
   fetchModuleMetricOverview,
+  fetchRegisteredUnitUsage,
 } from "@/api/module_metrics";
 import type {
   ModuleMetricChart,
@@ -277,6 +319,7 @@ import type {
   ModuleMetricOptionsPayload,
   ModuleMetricOverviewItem,
   ModuleMetricQueryParams,
+  RegisteredUnitUsageItem,
 } from "@/types/module_metrics";
 
 type DateRange = [Date, Date];
@@ -289,6 +332,7 @@ interface ModuleFilters {
 }
 
 interface LoadingState {
+  registered: boolean;
   modules: boolean;
   options: boolean;
   overview: boolean;
@@ -328,6 +372,7 @@ const options = reactive<ModuleMetricOptionsPayload>({
 });
 
 const loading = reactive<LoadingState>({
+  registered: false,
   modules: false,
   options: false,
   overview: false,
@@ -335,6 +380,7 @@ const loading = reactive<LoadingState>({
 });
 
 const errors = reactive<Record<keyof LoadingState, string>>({
+  registered: "",
   modules: "",
   options: "",
   overview: "",
@@ -342,6 +388,7 @@ const errors = reactive<Record<keyof LoadingState, string>>({
 });
 
 const moduleDefinitions = ref<ModuleMetricDefinition[]>([]);
+const registeredUnits = ref<RegisteredUnitUsageItem[]>([]);
 const overviewItems = ref<ModuleMetricOverviewItem[]>([]);
 
 const modeTagText = computed(() => {
@@ -350,9 +397,21 @@ const modeTagText = computed(() => {
 
 const isRefreshing = computed(() => {
   return (
-    loading.modules || loading.options || loading.overview || loading.detail
+    loading.registered ||
+    loading.modules ||
+    loading.options ||
+    loading.overview ||
+    loading.detail
   );
 });
+
+const formatLastUsedAt = (value: string | null): string => {
+  if (!value) return "未观测到使用";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "时间无效"
+    : date.toLocaleString("zh-CN");
+};
 
 const moduleDefinitionMap = computed(() => {
   const mapping: Record<string, ModuleMetricDefinition> = {};
@@ -587,6 +646,21 @@ const loadModules = async () => {
   }
 };
 
+const loadRegisteredUnits = async () => {
+  loading.registered = true;
+  errors.registered = "";
+  try {
+    const { data } = await fetchRegisteredUnitUsage();
+    registeredUnits.value = data.items;
+  } catch (error) {
+    registeredUnits.value = [];
+    errors.registered = "使用记录加载失败";
+    ElMessage.error("加载注册单元使用记录失败");
+  } finally {
+    loading.registered = false;
+  }
+};
+
 const loadOptions = async () => {
   loading.options = true;
   errors.options = "";
@@ -652,7 +726,12 @@ const loadFocusDetail = async () => {
 };
 
 const refreshPage = async () => {
-  const tasks = [loadModules(), loadOptions(), loadOverview()];
+  const tasks = [
+    loadRegisteredUnits(),
+    loadModules(),
+    loadOptions(),
+    loadOverview(),
+  ];
   if (mode.value === PAGE_MODE_FOCUS && focusedModuleId.value) {
     tasks.push(loadFocusDetail());
   }
@@ -708,6 +787,46 @@ onMounted(async () => {
 .toolbar-card {
   width: 100%;
   flex: 0 0 auto;
+}
+
+.registered-usage-section h4 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.registered-usage-scroll {
+  overflow-x: auto;
+}
+
+.registered-usage-table {
+  width: 100%;
+  min-width: 540px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
+}
+
+.registered-usage-table th,
+.registered-usage-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e4e7ed;
+  text-align: left;
+}
+
+.registered-usage-table th {
+  color: #606266;
+  font-weight: 500;
+  background: #f7f8fa;
+}
+
+.registered-usage-table td {
+  overflow-wrap: anywhere;
+}
+
+.registered-usage-table small {
+  display: block;
+  margin-top: 2px;
+  color: #909399;
 }
 
 .toolbar-card :deep(.el-card__body) {

@@ -190,7 +190,9 @@ async def _fetch_daily_image() -> DailyImageFetchResult:
     headers = {"token": config.alapi_key}
     params["token"] = config.alapi_key
 
-    async with httpx.AsyncClient(timeout=config.timeout_seconds, follow_redirects=True) as client:
+    from src.infra.network.tracked_httpx import TrackedAsyncClient
+
+    async with TrackedAsyncClient(timeout=config.timeout_seconds, follow_redirects=True) as client:
         response = await client.get(config.api_url, params=params, headers=headers)
         response.raise_for_status()
 

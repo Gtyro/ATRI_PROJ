@@ -48,6 +48,9 @@ smoke("@smoke 模块统计筛选与图表切换可用", async ({ page }) => {
 
   await expect(page.getByTestId("module-metrics-page")).toBeVisible();
   await expect(page.locator(".module-card")).toHaveCount(2);
+  await expect(
+    page.getByTestId("registered-unit-network.socks_proxy"),
+  ).toContainText("3");
 
   await page
     .getByPlaceholder("搜索模块（module_id / 标题 / 描述）")

@@ -9,6 +9,7 @@ import {
   fetchModuleMetricModules,
   fetchModuleMetricOptions,
   fetchModuleMetricOverview,
+  fetchRegisteredUnitUsage,
 } from "@/api/module_metrics";
 
 vi.mock("@/api/module_metrics", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/api/module_metrics", () => ({
   fetchModuleMetricModules: vi.fn(),
   fetchModuleMetricOptions: vi.fn(),
   fetchModuleMetricOverview: vi.fn(),
+  fetchRegisteredUnitUsage: vi.fn(),
 }));
 
 vi.mock("@/components/module-metrics/ChartRenderer.vue", () => ({
@@ -177,6 +179,17 @@ describe("ModuleMetricsPage", () => {
     fetchModuleMetricDetail.mockResolvedValue({
       data: DETAIL_PAYLOAD,
     });
+    fetchRegisteredUnitUsage.mockResolvedValue({
+      data: {
+        items: [{
+          unit_id: "network.socks_proxy",
+          label: "SOCKS 代理请求",
+          window_days: 90,
+          usage_count: 3,
+          last_used_at: "2026-10-20T01:00:00+00:00",
+        }],
+      },
+    });
   });
 
   it("loads and renders overview modules on mount", async () => {
@@ -186,7 +199,9 @@ describe("ModuleMetricsPage", () => {
     expect(fetchModuleMetricModules).toHaveBeenCalledTimes(1);
     expect(fetchModuleMetricOptions).toHaveBeenCalledTimes(1);
     expect(fetchModuleMetricOverview).toHaveBeenCalledTimes(1);
+    expect(fetchRegisteredUnitUsage).toHaveBeenCalledTimes(1);
     expect(wrapper.findAll(".module-card")).toHaveLength(2);
+    expect(wrapper.find('[data-testid="registered-unit-network.socks_proxy"]').text()).toContain("3");
     expect(wrapper.text()).toContain("图片理解");
     expect(wrapper.text()).toContain("图片拉取");
     expect(wrapper.findAll(".chart-renderer-stub")).toHaveLength(2);

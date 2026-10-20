@@ -244,7 +244,9 @@ class NapcatImageResolver:
             try:
                 import httpx
 
-                async with httpx.AsyncClient(timeout=budget.timeout_seconds, follow_redirects=True) as client:
+                from src.infra.network.tracked_httpx import TrackedAsyncClient
+
+                async with TrackedAsyncClient(timeout=budget.timeout_seconds, follow_redirects=True) as client:
                     response = await asyncio.wait_for(client.get(url), timeout=budget.timeout_seconds)
                 status_code = self._coerce_int(getattr(response, "status_code", None))
                 status_category = self._classify_http_status_code(status_code)

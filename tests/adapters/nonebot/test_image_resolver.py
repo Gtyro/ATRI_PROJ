@@ -1,8 +1,6 @@
 import asyncio
 import base64
 import logging
-import sys
-from types import SimpleNamespace
 
 from src.adapters.nonebot.image_resolver import NapcatImageResolver, ResolvedImage
 
@@ -434,7 +432,7 @@ def test_resolve_by_url_warning_message_no_longer_claims_followup_fallback(caplo
         async def get(self, url):
             return _FailingResponse()
 
-    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_FakeAsyncClient))
+    monkeypatch.setattr("src.infra.network.tracked_httpx.TrackedAsyncClient", _FakeAsyncClient)
     resolver = NapcatImageResolver(timeout_seconds=0.1)
 
     with caplog.at_level(logging.WARNING):
@@ -636,7 +634,7 @@ def test_resolve_telemetry_records_url_timeout_and_retry(monkeypatch):
                 raise TimeoutError("request timeout")
             return _OkResponse()
 
-    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_RetryAsyncClient))
+    monkeypatch.setattr("src.infra.network.tracked_httpx.TrackedAsyncClient", _RetryAsyncClient)
     resolver = NapcatImageResolver(timeout_seconds=0.1)
     telemetry = {}
 

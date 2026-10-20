@@ -6,6 +6,7 @@ import {
   fetchModuleMetricModules,
   fetchModuleMetricOptions,
   fetchModuleMetricOverview,
+  fetchRegisteredUnitUsage,
 } from "@/api/module_metrics";
 import { request } from "@/api/index";
 
@@ -103,5 +104,27 @@ describe("module_metrics contract validation", () => {
     await expect(fetchModuleMetricOptions()).rejects.toThrow(
       "contract mismatch",
     );
+  });
+
+  it("validates registered unit usage", async () => {
+    request.get.mockResolvedValue({ data: { items: [{
+      unit_id: "network.socks_proxy",
+      label: "SOCKS 代理请求",
+      window_days: 90,
+      usage_count: 2,
+      last_used_at: null,
+    }] } });
+    await expect(fetchRegisteredUnitUsage()).resolves.toMatchObject({
+      data: { items: [{ usage_count: 2 }] },
+    });
+
+    request.get.mockResolvedValue({ data: { items: [{
+      unit_id: "network.socks_proxy",
+      label: "SOCKS 代理请求",
+      window_days: 90,
+      usage_count: -1,
+      last_used_at: null,
+    }] } });
+    await expect(fetchRegisteredUnitUsage()).rejects.toThrow("contract mismatch");
   });
 });

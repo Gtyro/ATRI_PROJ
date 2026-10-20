@@ -144,5 +144,25 @@ class ModuleMetricEvent(Model):
         connection_name = "default"
 
 
+class RegisteredUnitUsageEvent(Model):
+    id = fields.IntField(primary_key=True)
+    unit_id = fields.CharField(max_length=160)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "registered_unit_usage_events"
+        indexes = (("unit_id", "created_at"),)
+        connection_name = "default"
+
+
+class RegisteredUnitUsageSummary(Model):
+    unit_id = fields.CharField(max_length=160, primary_key=True)
+    last_used_at = fields.DatetimeField()
+
+    class Meta:
+        table = "registered_unit_usage_summary"
+        connection_name = "default"
+
+
 # 兼容旧引用路径，后续可移除。
 PluginModuleMetricEvent = ModuleMetricEvent
