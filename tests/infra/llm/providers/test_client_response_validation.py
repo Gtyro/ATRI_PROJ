@@ -10,7 +10,7 @@ from src.infra.llm.providers.errors import LLMProviderError
 from src.infra.llm.providers.types import LLMCallParams
 
 
-class _FakeCompletions:
+class _FakeRequest:
     def __init__(self, response=None, error: Exception | None = None):
         self._response = response
         self._error = error
@@ -23,26 +23,24 @@ class _FakeCompletions:
         return self._response
 
 
-class _FakeOpenAIClient:
-    def __init__(self, response=None, error: Exception | None = None):
-        self.chat = SimpleNamespace(completions=_FakeCompletions(response, error=error))
-        self.responses = _FakeCompletions(response, error=error)
-
-
 def _build_client(
     response=None,
     *,
     error: Exception | None = None,
     usage_event_callback=None,
 ) -> LLMClient:
-    client = object.__new__(LLMClient)
-    client.provider_name = "test_provider"
-    client.base_url = "https://example.com"
-    client.model = "test-model"
-    client.supports_response_format = False
-    client.timeout = 30.0
-    client._usage_event_callback = usage_event_callback
-    client._client = _FakeOpenAIClient(response, error=error)
+    client = LLMClient(
+        api_key="test-key",
+        base_url="https://example.com",
+        model="test-model",
+        provider_name="test_provider",
+        timeout=30.0,
+        usage_event_callback=usage_event_callback,
+    )
+    fake_request = _FakeRequest(response, error=error)
+    client._create_chat = fake_request.create
+    client._create_response = fake_request.create
+    client._test_calls = fake_request.calls
     return client
 
 
@@ -294,7 +292,7 @@ def test_response_json_adds_message_type_for_responses_input():
     )
 
     assert result.data["summary"] == "ok"
-    call = client._client.responses.calls[0]
+    call = client._test_calls[0]
     assert call["input"][0]["type"] == "message"
     assert call["input"][0]["content"][1]["detail"] == "auto"
 

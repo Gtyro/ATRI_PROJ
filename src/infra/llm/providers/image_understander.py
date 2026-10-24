@@ -252,7 +252,10 @@ class ImageUnderstander:
         base_url: str,
         model: str,
     ) -> List[_ImageProviderRuntime]:
-        provider_specs = self._normalize_provider_specs(providers, api_key=api_key, base_url=base_url, model=model)
+        from .manager_bridge import enabled as manager_enabled, image_provider_specs
+
+        provider_specs = (image_provider_specs() if manager_enabled() else
+                          self._normalize_provider_specs(providers, api_key=api_key, base_url=base_url, model=model))
         runtimes: List[_ImageProviderRuntime] = []
         for index, spec in enumerate(provider_specs):
             if not (spec["api_key"] and spec["base_url"] and spec["model"]):
@@ -272,10 +275,13 @@ class ImageUnderstander:
                             model=str(spec["model"]),
                             provider_name=runtime_name,
                             timeout=self.timeout_seconds,
+                            manager_role="vision",
                         ),
                     )
                 )
             except Exception as exc:
+                if manager_enabled():
+                    raise
                 logger.warning("图片理解 Provider 初始化失败，跳过 provider=%s error=%s", runtime_name, exc)
         return runtimes
 

@@ -6,11 +6,25 @@ import json
 import logging
 import re
 import inspect
+import time
 import uuid
+from contextvars import ContextVar
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
+import httpx
+from llm_request_kit import Client as SharedLLMClient, LLMError as SharedLLMError
+
 from .errors import LLMOutputParseError, LLMProviderError
+from .manager_bridge import enabled as manager_enabled, provider_settings, record_request
 from .types import LLMCallParams, LLMStructuredOutput, LLMToolCall, LLMToolCallResponse
+
+
+_tracked_request_seen: ContextVar[bool] = ContextVar("tracked_llm_request_seen", default=False)
+
+
+async def _mark_tracked_request(_request: httpx.Request) -> None:
+    _tracked_request_seen.set(True)
 
 
 class LLMClient:
@@ -26,40 +40,186 @@ class LLMClient:
         supports_response_format: bool = False,
         timeout: Optional[float] = None,
         usage_event_callback: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        manager_role: str = "text",
     ) -> None:
+        max_attempts = 3
+        managed_provider_name = provider_name
+        if manager_enabled():
+            settings = provider_settings(provider_name, role=manager_role)
+            api_key = settings["api_key"]
+            base_url = settings["base_url"]
+            model = settings["model"]
+            timeout = settings.get("timeout", timeout)
+            max_attempts = settings.get("max_attempts", max_attempts)
+            managed_provider_name = settings["_manager_provider_id"]
         self.provider_name = provider_name
+        self.managed_provider_name = managed_provider_name
         self.base_url = base_url
         self.model = model
         self.supports_response_format = supports_response_format
         self.timeout = timeout
         self._usage_event_callback = usage_event_callback
-        self._client = None
-        self._init_client(api_key, base_url)
+        self._api_key = api_key
+        self._max_attempts = max_attempts
+        self._shared_clients: Dict[tuple[str, str], SharedLLMClient] = {}
 
     def set_usage_event_callback(self, callback: Optional[Callable[[Dict[str, Any]], Any]]) -> None:
         """设置 usage 事件回调。回调异常会被吞掉并记录 warning。"""
         self._usage_event_callback = callback
 
-    def _init_client(self, api_key: str, base_url: str) -> None:
+    async def _shared_client(self, api: str, model: str) -> SharedLLMClient:
+        key = (api, model)
+        if key not in self._shared_clients:
+            from src.infra.network.tracked_httpx import TrackedAsyncClient
+
+            client = SharedLLMClient(
+                api_key=self._api_key,
+                base_url=self.base_url,
+                model=model,
+                api=api,
+                provider=self.managed_provider_name,
+                timeout=self.timeout or 60,
+                max_attempts=self._max_attempts,
+            )
+            # Preserve this project's SOCKS request accounting inside the shared client.
+            original = getattr(client, "_async_client", None)
+            if not isinstance(original, httpx.AsyncClient):
+                logging.error("SOCKS 请求计数接入失败：共用库异步客户端接口已变化")
+                client.close()
+                raise RuntimeError("无法接入 SOCKS 请求计数")
+            await original.aclose()
+            tracked = TrackedAsyncClient(
+                timeout=self.timeout or 60,
+                event_hooks={"request": [_mark_tracked_request]},
+            )
+            try:
+                client._async_client = tracked
+                if client._async_client is not tracked:
+                    raise RuntimeError("共用库未使用指定的异步客户端")
+            except Exception:
+                logging.exception("SOCKS 请求计数接入失败：共用库异步客户端接口已变化")
+                await tracked.aclose()
+                client.close()
+                raise
+            client.close()
+            self._shared_clients[key] = client
+        return self._shared_clients[key]
+
+    async def _request_shared(self, shared: SharedLLMClient, *args: Any, **kwargs: Any) -> Any:
+        marker = _tracked_request_seen.set(False)
+        started = time.monotonic()
         try:
-            from openai import AsyncOpenAI, DefaultAsyncHttpxClient
-            from src.infra.network.tracked_httpx import SocksUsageMixin
-
-            class TrackedOpenAIHttpClient(SocksUsageMixin, DefaultAsyncHttpxClient):
-                pass
-
-            client_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
-            if self.timeout is not None:
-                client_kwargs["timeout"] = self.timeout
-            client_kwargs["http_client"] = TrackedOpenAIHttpClient()
-            self._client = AsyncOpenAI(**client_kwargs)
-            logging.debug("LLM客户端初始化成功")
-        except ImportError:
-            logging.error("未安装openai库，请使用pip install openai安装")
-            raise
+            result = await shared.arequest(*args, **kwargs)
+            if not _tracked_request_seen.get():
+                logging.error("SOCKS 请求计数接入失败：请求未经过计数客户端")
+                raise RuntimeError("LLM 请求未经过 SOCKS 计数客户端")
+            await record_request(self.managed_provider_name, shared.model, result=result,
+                                 elapsed_ms=round((time.monotonic() - started) * 1000))
+            return result
         except Exception as exc:
-            logging.error(f"LLM客户端初始化失败: {exc}")
-            raise ValueError(f"LLM客户端初始化失败: {exc}") from exc
+            await record_request(self.managed_provider_name, shared.model, error=exc,
+                                 elapsed_ms=round((time.monotonic() - started) * 1000))
+            raise
+        finally:
+            _tracked_request_seen.reset(marker)
+
+    async def _create_chat(self, **kwargs: Any) -> Any:
+        model = kwargs.get("model", self.model)
+        shared = await self._shared_client("responses", model)
+
+        body = dict(kwargs)
+        body.pop("model", None)
+        messages = body.pop("messages")
+        tools = body.pop("tools", None)
+        response_format = body.pop("response_format", None)
+        schema = None
+        if response_format:
+            if response_format["type"] == "json_schema":
+                schema = dict(response_format["json_schema"])
+                schema.setdefault("strict", False)
+            elif response_format["type"] == "json_object":
+                body["text"] = {"format": {"type": "json_object"}}
+            else:
+                raise ValueError("Unsupported response format")
+        options: Dict[str, Any] = {}
+        if "max_tokens" in body:
+            options["max_output_tokens"] = body.pop("max_tokens")
+        for key in ("temperature", "top_p", "tool_choice"):
+            if key in body:
+                options[key] = body.pop(key)
+        if body:
+            options["extra_body"] = body
+        result = await self._request_shared(shared,
+            self._responses_input_from_chat(messages),
+            tools=self._responses_tools_from_chat(tools),
+            schema=schema,
+            options=options,
+        )
+        if not result.text and not result.tool_calls:
+            raise ValueError("LLM returned no usable chat content")
+        tool_calls = [SimpleNamespace(id=call.id, function=SimpleNamespace(
+            name=call.name, arguments=call.arguments)) for call in result.tool_calls]
+        return SimpleNamespace(
+            id=result.response_id,
+            usage=SimpleNamespace(prompt_tokens=result.usage.input_tokens,
+                                  completion_tokens=result.usage.output_tokens,
+                                  total_tokens=result.usage.total_tokens),
+            choices=[SimpleNamespace(message=SimpleNamespace(
+                content=result.text, tool_calls=tool_calls))],
+        )
+
+    @staticmethod
+    def _responses_input_from_chat(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        for message in messages:
+            if message.get("role") == "tool":
+                items.append({"type": "function_call_output",
+                              "call_id": message["tool_call_id"],
+                              "output": message.get("content") or ""})
+            elif message.get("role") == "assistant" and message.get("tool_calls"):
+                if message.get("content"):
+                    items.append({"role": "assistant", "content": message["content"]})
+                for call in message["tool_calls"]:
+                    items.append({"type": "function_call", "call_id": call["id"],
+                                  "name": call["function"]["name"],
+                                  "arguments": call["function"]["arguments"]})
+            else:
+                items.append(message)
+        return items
+
+    @staticmethod
+    def _responses_tools_from_chat(tools: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
+        if tools is None:
+            return None
+        return [{"type": "function", **tool["function"]} if "function" in tool else tool
+                for tool in tools]
+
+    async def _create_response(self, **kwargs: Any) -> Any:
+        model = kwargs.get("model", self.model)
+        shared = await self._shared_client("responses", model)
+
+        body = dict(kwargs)
+        body.pop("model", None)
+        input_items = body.pop("input")
+        instructions = body.pop("instructions", None)
+        response_format = body.pop("text")["format"]
+        schema = {"name": response_format["name"], "schema": response_format["schema"],
+                  "strict": response_format.get("strict", True)}
+        options: Dict[str, Any] = {}
+        for key in ("max_output_tokens", "temperature", "top_p", "store", "reasoning"):
+            if key in body:
+                options[key] = body.pop(key)
+        if body:
+            options["extra_body"] = body
+        result = await self._request_shared(shared, input_items, instructions=instructions,
+                                            schema=schema, options=options)
+        return SimpleNamespace(
+            id=result.response_id, output_text=result.text, status=result.finish_reason,
+            incomplete_details=None,
+            usage=SimpleNamespace(input_tokens=result.usage.input_tokens,
+                                  output_tokens=result.usage.output_tokens,
+                                  total_tokens=result.usage.total_tokens),
+        )
 
     @staticmethod
     def _normalize_messages(messages: List[Dict[str, Any]], system_prompt: Optional[str]) -> List[Dict[str, Any]]:
@@ -414,13 +574,6 @@ class LLMClient:
         request_id: Optional[str] = None,
         usage_context: Optional[Dict[str, Any]] = None,
     ) -> LLMStructuredOutput:
-        if self._client is None:
-            raise LLMProviderError(
-                "LLM客户端未初始化",
-                provider=self.provider_name,
-                operation=operation,
-                request_id=request_id,
-            )
         request_id = request_id or uuid.uuid4().hex
         self._log_event(
             logging.INFO,
@@ -448,8 +601,17 @@ class LLMClient:
                     kwargs["instructions"] = instructions
                 if effective_detail:
                     effective_usage_context["detail"] = effective_detail
-                response = await self._client.responses.create(**kwargs)
+                response = await self._create_response(**kwargs)
             except Exception as exc:
+                if isinstance(exc, SharedLLMError) and exc.code in {"invalid_json", "invalid_schema"}:
+                    raise LLMOutputParseError(
+                        "LLM结构化输出解析失败",
+                        provider=self.provider_name,
+                        operation=operation,
+                        request_id=request_id,
+                        retryable=True,
+                        cause=exc,
+                    ) from exc
                 self._log_event(
                     logging.ERROR,
                     "request.error",
@@ -560,13 +722,6 @@ class LLMClient:
         request_id: Optional[str] = None,
         usage_context: Optional[Dict[str, Any]] = None,
     ) -> str:
-        if self._client is None:
-            raise LLMProviderError(
-                "LLM客户端未初始化",
-                provider=self.provider_name,
-                operation=operation,
-                request_id=request_id,
-            )
         request_id = request_id or uuid.uuid4().hex
         full_messages = self._normalize_messages(messages, system_prompt)
         self._log_event(
@@ -580,7 +735,7 @@ class LLMClient:
         try:
             try:
                 kwargs = params.to_openai_kwargs(self.model)
-                response = await self._client.chat.completions.create(
+                response = await self._create_chat(
                     messages=full_messages,
                     **kwargs,
                 )
@@ -648,13 +803,6 @@ class LLMClient:
         request_id: Optional[str] = None,
         usage_context: Optional[Dict[str, Any]] = None,
     ) -> LLMToolCallResponse:
-        if self._client is None:
-            raise LLMProviderError(
-                "LLM客户端未初始化",
-                provider=self.provider_name,
-                operation=operation,
-                request_id=request_id,
-            )
         request_id = request_id or uuid.uuid4().hex
         full_messages = self._normalize_messages(messages, system_prompt)
         self._log_event(
@@ -668,7 +816,7 @@ class LLMClient:
         try:
             try:
                 kwargs = params.to_openai_kwargs(self.model)
-                response = await self._client.chat.completions.create(
+                response = await self._create_chat(
                     messages=full_messages,
                     tools=tools,
                     tool_choice=tool_choice,
@@ -766,13 +914,6 @@ class LLMClient:
         strict: bool = True,
         usage_context: Optional[Dict[str, Any]] = None,
     ) -> LLMStructuredOutput:
-        if self._client is None:
-            raise LLMProviderError(
-                "LLM客户端未初始化",
-                provider=self.provider_name,
-                operation=operation,
-                request_id=request_id,
-            )
         request_id = request_id or uuid.uuid4().hex
         full_messages = self._normalize_messages(messages, system_prompt)
         self._log_event(
@@ -794,7 +935,7 @@ class LLMClient:
                         }
                     else:
                         kwargs["response_format"] = {"type": "json_object"}
-                response = await self._client.chat.completions.create(
+                response = await self._create_chat(
                     messages=full_messages,
                     **kwargs,
                 )

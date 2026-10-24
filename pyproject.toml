@@ -3,7 +3,7 @@ name = "ATRI_PROJ"
 version = "0.1.0"
 description = "ATRI_PROJ"
 readme = "README.md"
-requires-python = ">=3.10, <4.0"
+requires-python = ">=3.11, <4.0"
 
 [tool.poetry]
 name = "ATRI_PROJ"
@@ -24,7 +24,7 @@ plugin_dirs = []
 builtin_plugins = ["echo", "single_session"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = ">=3.11,<4.0"
 
 # NoneBot core
 nonebot2 = { extras = ["websockets"], version = ">=2.4.2,<3.0.0" }
@@ -39,7 +39,7 @@ fastapi = ">=0.100.0,<1.0.0"
 uvicorn = ">=0.23.0,<1.0.0"
 httpx = { extras = ["socks"], version = ">=0.24.1,<1.0.0" }
 websockets = ">=11.0.3,<16.0.0"
-openai = ">=1.0.0,<2.0.0"
+llm-request-kit = {path = "../llm-request-kit-6eceb36/dist/llm_request_kit-0.1.0-py3-none-any.whl"}
 python-dotenv = ">=0.21.0,<2.0.0"
 pyyaml = ">=6.0.1,<7.0.0"
 pandas = ">=2.0.3,<3.0.0"
@@ -66,7 +66,7 @@ jieba = ">=0.42.1,<1.0.0"
 neomodel = ">=5.0.0,<6.0.0"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 exclude = [
     ".git",
     "__pycache__",
