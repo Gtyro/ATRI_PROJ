@@ -478,3 +478,65 @@ def test_missing_key_is_configuration_error():
     with pytest.raises(ImageGenerationError) as caught:
         asyncio.run(generator.generate("a cat"))
     assert caught.value.code == "configuration"
+
+
+def test_managed_image_generation_records_one_result_with_actual_attempts(monkeypatch):
+    from src.infra.llm.providers import manager_bridge
+
+    monkeypatch.setenv("LLM_REQUEST_KIT_MANAGER", "1")
+    monkeypatch.delenv("LLM_REQUEST_KIT_SOCKET", raising=False)
+    events = []
+    monkeypatch.setattr(
+        manager_bridge, "record_usage",
+        lambda project, event: events.append((project, event)),
+    )
+    requests = []
+
+    def success_after_retry(request):
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(502, json={"error": "temporary failure"})
+        return httpx.Response(
+            200, json={"data": [{"b64_json": base64.b64encode(b"image").decode()}]},
+        )
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(success_after_retry)) as client:
+            generator = ImageGenerator(
+                api_key="test", base_url="https://images.test/v1", model="image-model",
+                manager_provider_name="draw_main", max_retries=1, client=client,
+            )
+            assert await generator.generate("a cat") == b"image"
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(401, json={"error": "invalid key"})
+            )
+        ) as client:
+            generator = ImageGenerator(
+                api_key="test", base_url="https://images.test/v1", model="image-model",
+                manager_provider_name="draw_main", max_retries=1, client=client,
+            )
+            with pytest.raises(ImageGenerationError):
+                await generator.generate("a cat")
+
+        generator = ImageGenerator(
+            api_key="", base_url="https://images.test/v1", model="image-model",
+            manager_provider_name="draw_main",
+        )
+        with pytest.raises(ImageGenerationError):
+            await generator.generate("a cat")
+
+    asyncio.run(run())
+    assert len(requests) == 2
+    assert len(events) == 2
+    assert all(project == "ATRI_PROJ" for project, _ in events)
+    success, failure = [event for _, event in events]
+    assert (success["provider"], success["model"], success["success"], success["attempts"]) == (
+        "draw_main", "image-model", True, 2,
+    )
+    assert "input_tokens" not in success and "output_tokens" not in success
+    assert success["elapsed_ms"] >= 0
+    assert (failure["success"], failure["attempts"], failure["error_code"]) == (
+        False, 1, "authentication",
+    )

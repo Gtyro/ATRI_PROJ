@@ -21,6 +21,7 @@ from src.infra.db.tortoise.module_metrics_event_writer import ModuleMetricEventW
 from src.infra.llm.providers import get_llm_provider_registry
 from src.infra.llm.providers.image_generator import ImageGenerator
 from src.infra.llm.providers.image_understander import ImageUnderstander
+from src.infra.llm.providers.manager_bridge import enabled as manager_enabled, image_generation_settings
 from src.infra.memory import (
     DecayManager,
     DisabledDecayManager,
@@ -198,12 +199,14 @@ async def assemble_persona_engine(
     )
 
     generation_cfg = config.image_generation
+    generation_settings = image_generation_settings() if generation_cfg.enabled and manager_enabled() else None
     image_generator = (
         ImageGenerator(
-            api_key=generation_cfg.api_key,
-            base_url=generation_cfg.base_url,
-            model=generation_cfg.model,
-            timeout_seconds=generation_cfg.timeout_seconds,
+            api_key=generation_settings["api_key"] if generation_settings else generation_cfg.api_key,
+            base_url=generation_settings["base_url"] if generation_settings else generation_cfg.base_url,
+            model=generation_settings["model"] if generation_settings else generation_cfg.model,
+            timeout_seconds=generation_settings.get("timeout", generation_cfg.timeout_seconds)
+            if generation_settings else generation_cfg.timeout_seconds,
             endpoint_path=getattr(generation_cfg, "endpoint_path", "/images/generations"),
             reference_endpoint_path=getattr(
                 generation_cfg,
@@ -211,7 +214,10 @@ async def assemble_persona_engine(
                 "/images/edits",
             ),
             reference_image_paths=getattr(generation_cfg, "reference_images", ()),
-            max_retries=getattr(generation_cfg, "max_retries", 1),
+            max_retries=max(0, generation_settings["max_attempts"] - 1)
+            if generation_settings and "max_attempts" in generation_settings
+            else getattr(generation_cfg, "max_retries", 1),
+            manager_provider_name=generation_settings["_manager_provider_id"] if generation_settings else None,
         )
         if generation_cfg.enabled
         else None

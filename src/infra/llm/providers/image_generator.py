@@ -8,6 +8,7 @@ import binascii
 import logging
 import mimetypes
 import re
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -18,6 +19,7 @@ from src.core.domain.image_generation_error import (
     sanitize_image_error_detail,
 )
 from src.infra.network.tracked_httpx import TrackedAsyncClient
+from .manager_bridge import record_request
 
 
 class ImageGenerator:
@@ -39,6 +41,7 @@ class ImageGenerator:
         reference_endpoint_path: str = "/images/edits",
         reference_image_paths: tuple[str, ...] | list[str] = (),
         max_retries: int = 1,
+        manager_provider_name: Optional[str] = None,
         client: Optional[httpx.AsyncClient] = None,
     ) -> None:
         self.api_key = str(api_key or "").strip()
@@ -49,6 +52,7 @@ class ImageGenerator:
         self.reference_endpoint_path = str(reference_endpoint_path or "/images/edits").strip()
         self.reference_image_paths = tuple(str(path).strip() for path in reference_image_paths if str(path).strip())
         self.max_retries = max(0, int(max_retries))
+        self.manager_provider_name = manager_provider_name
         self._client = client
 
     @property
@@ -173,11 +177,16 @@ class ImageGenerator:
         files: list[tuple[str, tuple[str, bytes, str]]],
     ) -> bytes:
         attempts = self.max_retries + 1
+        started = time.monotonic()
         for attempt in range(attempts):
             try:
-                return await self._request(client, payload, headers, endpoint=endpoint, files=files)
+                image_bytes = await self._request(client, payload, headers, endpoint=endpoint, files=files)
             except ImageGenerationError as exc:
                 if not exc.retryable or attempt >= self.max_retries:
+                    if self.manager_provider_name:
+                        await record_request(self.manager_provider_name, self.model, error=exc,
+                                             attempts=attempt + 1,
+                                             elapsed_ms=round((time.monotonic() - started) * 1000))
                     raise
                 delay = min(2.0, 0.5 * (2 ** attempt))
                 logging.warning(
@@ -185,6 +194,18 @@ class ImageGenerator:
                     attempt + 1, attempts, delay, exc.diagnostic_summary(),
                 )
                 await asyncio.sleep(delay)
+            except Exception as exc:
+                if self.manager_provider_name:
+                    await record_request(self.manager_provider_name, self.model, error=exc,
+                                         attempts=attempt + 1,
+                                         elapsed_ms=round((time.monotonic() - started) * 1000))
+                raise
+            else:
+                if self.manager_provider_name:
+                    await record_request(self.manager_provider_name, self.model,
+                                         attempts=attempt + 1,
+                                         elapsed_ms=round((time.monotonic() - started) * 1000))
+                return image_bytes
         raise AssertionError("image generation retry loop exited without a result")
 
     async def _request(

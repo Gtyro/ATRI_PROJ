@@ -71,7 +71,10 @@ class _ImageUnderstanderStub:
 
 
 @pytest.mark.parametrize("generation_enabled", [False, True])
-def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monkeypatch, generation_enabled):
+@pytest.mark.parametrize("managed_generation", [False, True])
+def test_assemble_persona_engine_degrades_when_neo4j_unavailable(
+    tmp_path, monkeypatch, generation_enabled, managed_generation,
+):
     registry = _RegistryStub()
 
     async def _fake_initialize_neo4j(config, allow_unavailable=False):
@@ -84,6 +87,12 @@ def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monke
     monkeypatch.setattr(persona_assembler, "NapcatImageResolver", lambda timeout_seconds: object())
     monkeypatch.setattr(persona_assembler, "ImageUnderstander", _ImageUnderstanderStub)
     monkeypatch.setattr(persona_assembler, "ImageContextService", lambda **kwargs: object())
+    monkeypatch.setattr(persona_assembler, "manager_enabled", lambda: managed_generation)
+    monkeypatch.setattr(persona_assembler, "image_generation_settings", lambda: {
+        "api_key": "managed-key", "base_url": "https://managed.test/v1",
+        "model": "managed-model", "timeout": 25.0, "max_attempts": 4,
+        "_manager_provider_id": "draw_main",
+    })
 
     config = SimpleNamespace(
         db_path=str(tmp_path / "persona.db"),
@@ -144,13 +153,14 @@ def test_assemble_persona_engine_degrades_when_neo4j_unavailable(tmp_path, monke
     assert engine.image_context_service is not None
     generator = engine.conversation_service.image_generator
     if generation_enabled:
-        assert generator.api_key == "generation-test-key"
-        assert generator.base_url == "https://generation.test/v1"
-        assert generator.model == "generation-test-model"
-        assert generator.timeout_seconds == 45.0
+        assert generator.api_key == ("managed-key" if managed_generation else "generation-test-key")
+        assert generator.base_url == ("https://managed.test/v1" if managed_generation else "https://generation.test/v1")
+        assert generator.model == ("managed-model" if managed_generation else "generation-test-model")
+        assert generator.timeout_seconds == (25.0 if managed_generation else 45.0)
         assert generator.endpoint_path == "/images/generations"
         assert generator.reference_endpoint_path == "/images/edits"
         assert generator.reference_image_paths == ("data/persona/references/character.png",)
-        assert generator.max_retries == 1
+        assert generator.max_retries == (3 if managed_generation else 1)
+        assert generator.manager_provider_name == ("draw_main" if managed_generation else None)
     else:
         assert generator is None
